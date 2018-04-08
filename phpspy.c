@@ -162,13 +162,31 @@ static int get_php_bin_path(pid_t pid, char *path) {
 }
 
 static int get_php_base_addr(pid_t pid, char *path, unsigned long long *raddr) {
+    /**
+     * This is very likely to be incorrect/incomplete. I thought the base
+     * address from `/proc/<pid>/maps` + the symbol address from `readelf` would
+     * lead to the actual memory address, but on at least one system I tested on
+     * this is not the case. On that system, working backwards from the address
+     * printed in `gdb`, it seems the missing piece was the 'virtual address' of
+     * the LOAD section in ELF headers. I suspect this may have to do with
+     * address relocation and/or a feature called 'prelinking', but not sure.
+     */
     char buf[128];
+    unsigned long long start_addr;
+    unsigned long long virt_addr;
     char *cmd_fmt = "grep ' %s$' /proc/%d/maps | head -n1";
     if (popen_read_line(buf, sizeof(buf), cmd_fmt, path, (int)pid) != 0) {
-        fprintf(stderr, "get_php_base_addr: Failed\n");
+        fprintf(stderr, "get_php_base_addr: Failed to get start_addr\n");
         return 1;
     }
-    *raddr = strtoull(buf, NULL, 16);
+    start_addr = strtoull(buf, NULL, 16);
+    cmd_fmt = "readelf -l %s | awk '/LOAD/{print $3; exit}'";
+    if (popen_read_line(buf, sizeof(buf), cmd_fmt, path) != 0) {
+        fprintf(stderr, "get_php_base_addr: Failed to get virt_addr\n");
+        return 1;
+    }
+    virt_addr = strtoull(buf, NULL, 16);
+    *raddr = start_addr - virt_addr;
     return 0;
 }
 
