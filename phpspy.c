@@ -1,10 +1,18 @@
 #define _GNU_SOURCE
+#include <stdlib.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <stddef.h>
 #include <string.h>
+#include <errno.h>
 #include <unistd.h>
 #include <sys/uio.h>
+
+#ifdef USE_ZEND
 #include <zend_API.h>
+#else
+#include <php_structs.h>
+#endif
 
 pid_t opt_pid = -1;
 int opt_sleep_us = 10000;
