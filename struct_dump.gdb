@@ -10,7 +10,11 @@ printf "\n"
 printf "zend_function size=%lu\n", sizeof(zend_function)
 printf "  .type +%lu\n", offsetof(zend_function, type)
 printf "  .common.function_name +%lu\n", offsetof(zend_function, common.function_name)
+printf "  .common.scope +%lu\n", offsetof(zend_function, common.scope)
 printf "  .op_array.filename +%lu\n", offsetof(zend_function, op_array.filename)
+printf "\n"
+printf "zend_class_entry size=%lu\n", sizeof(zend_class_entry)
+printf "  .name +%lu\n", offsetof(zend_class_entry, name)
 printf "\n"
 printf "zend_string size=%lu\n", sizeof(zend_string)
 printf "  .len +%lu\n", offsetof(zend_string, len)

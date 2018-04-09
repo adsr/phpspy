@@ -6,6 +6,7 @@
 typedef struct _zend_executor_globals zend_executor_globals;
 typedef struct _zend_execute_data zend_execute_data;
 typedef union  _zend_function zend_function;
+typedef struct _zend_class_entry zend_class_entry;
 typedef struct _zend_string zend_string;
 typedef struct _zend_op zend_op;
 
@@ -31,11 +32,17 @@ union __attribute__((__packed__)) _zend_function {
     struct {
         uint8_t pad0[8];                    // 0        8
         zend_string *function_name;         // 8        8
+        zend_class_entry *scope;            // 16       8
     } common;
     struct {
         uint8_t pad1[120];                  // 0        120
         zend_string *filename;              // 120      8
     } op_array;
+};
+
+struct __attribute__((__packed__)) _zend_class_entry {
+    uint8_t pad0[8];                        // 0        8
+    zend_function *name;                    // 8        8
 };
 
 struct __attribute__((__packed__)) _zend_op {

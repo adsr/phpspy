@@ -21,6 +21,8 @@ int opt_max_stack_depth = -1;
 char *opt_frame_delim = "\n";
 char *opt_trace_delim = "";
 
+size_t zend_string_val_offset;
+
 static void dump_trace(pid_t pid, unsigned long long executor_globals_addr);
 static int copy_proc_mem(pid_t pid, void *raddr, void *laddr, size_t size);
 static void parse_opts(int argc, char **argv);
@@ -44,6 +46,8 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    zend_string_val_offset = offsetof(zend_string, val);
+
     while (1) {
         dump_trace(opt_pid, executor_globals_addr);
         usleep(opt_sleep_us);
@@ -55,8 +59,10 @@ int main(int argc, char **argv) {
 static void dump_trace(pid_t pid, unsigned long long executor_globals_addr) {
     char func[1024];
     char file[1024];
+    char class[1024];
     int file_len;
     int func_len;
+    int class_len;
     int lineno;
     int depth;
     int wrote_trace;
@@ -64,6 +70,7 @@ static void dump_trace(pid_t pid, unsigned long long executor_globals_addr) {
     zend_executor_globals executor_globals;
     zend_execute_data execute_data;
     zend_op zop;
+    zend_class_entry zce;
     zend_function zfunc;
     zend_string zstring;
 
@@ -86,6 +93,7 @@ static void dump_trace(pid_t pid, unsigned long long executor_globals_addr) {
         memset(&execute_data, 0, sizeof(execute_data));
         memset(&zfunc, 0, sizeof(zfunc));
         memset(&zstring, 0, sizeof(zstring));
+        memset(&zce, 0, sizeof(zce));
         memset(&zop, 0, sizeof(zop));
 
         try_copy_proc_mem("execute_data", remote_execute_data, &execute_data, sizeof(execute_data));
@@ -93,21 +101,36 @@ static void dump_trace(pid_t pid, unsigned long long executor_globals_addr) {
         if (zfunc.common.function_name) {
             try_copy_proc_mem("function_name", zfunc.common.function_name, &zstring, sizeof(zstring));
             func_len = zstring.len;
-            try_copy_proc_mem("function_name.val", ((char*)zfunc.common.function_name) + offsetof(zend_string, val), func, func_len);
+            try_copy_proc_mem("function_name.val", ((char*)zfunc.common.function_name) + zend_string_val_offset, func, func_len);
         } else {
             func_len = snprintf(func, sizeof(func), "<main>");
+        }
+        if (zfunc.common.scope) {
+            try_copy_proc_mem("zce", zfunc.common.scope, &zce, sizeof(zce));
+            try_copy_proc_mem("class_name", zce.name, &zstring, sizeof(zstring));
+            class_len = zstring.len;
+            try_copy_proc_mem("class_name.val", ((char*)zce.name) + zend_string_val_offset, class, class_len);
+            if (class_len+2 <= 1023) {
+                class[class_len+0] = ':';
+                class[class_len+1] = ':';
+                class[class_len+2] = '\0';
+                class_len += 2;
+            }
+        } else {
+            class[0] = '\0';
+            class_len = 0;
         }
         if (zfunc.type == 2) {
             try_copy_proc_mem("zop", (void*)execute_data.opline, &zop, sizeof(zop));
             try_copy_proc_mem("filename", zfunc.op_array.filename, &zstring, sizeof(zstring));
             file_len = zstring.len;
-            try_copy_proc_mem("filename.val", ((char*)zfunc.op_array.filename) + offsetof(zend_string, val), file, file_len);
+            try_copy_proc_mem("filename.val", ((char*)zfunc.op_array.filename) + zend_string_val_offset, file, file_len);
             lineno = zop.lineno;
         } else {
             file_len = snprintf(file, sizeof(file), "<internal>");
             lineno = -1;
         }
-        printf("%d %.*s %.*s:%d%s", depth, func_len, func, file_len, file, lineno, opt_frame_delim);
+        printf("%d %.*s%.*s %.*s:%d%s", depth, class_len, class, func_len, func, file_len, file, lineno, opt_frame_delim);
         if (!wrote_trace) wrote_trace = 1;
         remote_execute_data = execute_data.prev_execute_data;
         depth += 1;
