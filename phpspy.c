@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <sys/uio.h>
+#include <time.h>
 
 #ifdef USE_ZEND
 #include <zend_API.h>
@@ -39,6 +40,12 @@ static void usage(FILE *fp, int exit_code) {
 
 int main(int argc, char **argv) {
     unsigned long long executor_globals_addr;
+    struct timespec start_time;
+    struct timespec end_time;
+    struct timespec sleep_time;
+    long start_time_high_resolution;
+    long end_time_high_resolution;
+    long opt_sleep_nano;
 
     parse_opts(argc, argv);
 
@@ -49,8 +56,22 @@ int main(int argc, char **argv) {
     zend_string_val_offset = offsetof(zend_string, val);
 
     while (1) {
+        if (clock_gettime(CLOCK_MONOTONIC, &start_time) == -1) {
+          perror("clock_gettime failed:");
+        }
+        start_time_high_resolution = (start_time.tv_sec * 1000000000ull) + start_time.tv_nsec;
+
         dump_trace(opt_pid, executor_globals_addr);
-        usleep(opt_sleep_us);
+
+        if (clock_gettime(CLOCK_MONOTONIC, &end_time) == -1) {
+          perror("clock_gettime failed:");
+        }
+        end_time_high_resolution = (end_time.tv_sec * 1000000000ull) + end_time.tv_nsec;
+
+        opt_sleep_nano = opt_sleep_us * 1000;
+        sleep_time.tv_nsec = opt_sleep_nano - (end_time_high_resolution - start_time_high_resolution);
+
+        nanosleep(&sleep_time, NULL);
     }
 
     return 0;
