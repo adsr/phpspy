@@ -36,7 +36,6 @@ For now, Linux x86_64 only, non-ZTS PHP 7 only.
 
 ### TODO
 
-* Fixed sample rate
 * FlameGraph trace format
 
 [0]: https://github.com/rbspy/rbspy
