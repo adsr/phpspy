@@ -16,7 +16,7 @@
 #endif
 
 pid_t opt_pid = -1;
-int opt_sleep_us = 10000;
+long opt_sleep_ns = 10000000; // 10ms
 unsigned long long opt_executor_globals_addr = 0;
 int opt_max_stack_depth = -1;
 char *opt_frame_delim = "\n";
@@ -32,20 +32,17 @@ static int get_php_base_addr(pid_t pid, char *path, unsigned long long *raddr);
 static int get_executor_globals_offset(char *path, unsigned long long *raddr);
 static int get_executor_globals_addr(unsigned long long *raddr);
 static int popen_read_line(char *buf, size_t buf_size, char *cmd_fmt, ...);
+static void try_clock_gettime(struct timespec *ts);
+static void calc_sleep_time(struct timespec *end, struct timespec *start, struct timespec *sleep);
 
 static void usage(FILE *fp, int exit_code) {
-    fprintf(fp, "Usage: phpspy -h(help) -p<pid> -s<sleep_us> -n<max_stack_depth> -x<executor_globals_addr>\n");
+    fprintf(fp, "Usage: phpspy -h(help) -p<pid> -s<sleep_ns> -n<max_stack_depth> -x<executor_globals_addr>\n");
     exit(exit_code);
 }
 
 int main(int argc, char **argv) {
     unsigned long long executor_globals_addr;
-    struct timespec start_time;
-    struct timespec end_time;
-    struct timespec sleep_time;
-    long start_time_high_resolution;
-    long end_time_high_resolution;
-    long opt_sleep_nano;
+    struct timespec start_time, end_time, sleep_time;
 
     parse_opts(argc, argv);
 
@@ -56,21 +53,11 @@ int main(int argc, char **argv) {
     zend_string_val_offset = offsetof(zend_string, val);
 
     while (1) {
-        if (clock_gettime(CLOCK_MONOTONIC, &start_time) == -1) {
-          perror("clock_gettime failed:");
-        }
-        start_time_high_resolution = (start_time.tv_sec * 1000000000ull) + start_time.tv_nsec;
-
+        try_clock_gettime(&start_time);
         dump_trace(opt_pid, executor_globals_addr);
+        try_clock_gettime(&end_time);
 
-        if (clock_gettime(CLOCK_MONOTONIC, &end_time) == -1) {
-          perror("clock_gettime failed:");
-        }
-        end_time_high_resolution = (end_time.tv_sec * 1000000000ull) + end_time.tv_nsec;
-
-        opt_sleep_nano = opt_sleep_us * 1000;
-        sleep_time.tv_nsec = opt_sleep_nano - (end_time_high_resolution - start_time_high_resolution);
-
+        calc_sleep_time(&end_time, &start_time, &sleep_time);
         nanosleep(&sleep_time, NULL);
     }
 
@@ -179,7 +166,7 @@ static void parse_opts(int argc, char **argv) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
             case 'p': opt_pid = atoi(optarg); break;
-            case 's': opt_sleep_us = atoi(optarg); break;
+            case 's': opt_sleep_ns = strtol(optarg, NULL, 10); break;
             case 'n': opt_max_stack_depth = atoi(optarg); break;
             case 'x': opt_executor_globals_addr = strtoull(optarg, NULL, 16); break;
         }
@@ -290,4 +277,34 @@ static int popen_read_line(char *buf, size_t buf_size, char *cmd_fmt, ...) {
     }
     buf[buf_len] = '\0';
     return 0;
+}
+
+static void try_clock_gettime(struct timespec *ts) {
+    if (clock_gettime(CLOCK_MONOTONIC_RAW, ts) == -1) {
+        perror("clock_gettime");
+        ts->tv_sec = 0;
+        ts->tv_nsec = 0;
+    }
+}
+
+static void calc_sleep_time(struct timespec *end, struct timespec *start, struct timespec *sleep) {
+    long long end_ns, start_ns, sleep_ns;
+    if (end->tv_sec == start->tv_sec) {
+        sleep_ns = opt_sleep_ns - (end->tv_nsec - start->tv_nsec);
+    } else {
+        end_ns = (end->tv_sec * 1000000000ULL) + (end->tv_nsec * 1ULL);
+        start_ns = (start->tv_sec * 1000000000ULL) + (start->tv_nsec * 1ULL);
+        sleep_ns = opt_sleep_ns - (end_ns - start_ns);
+    }
+    if (sleep_ns < 0) {
+        fprintf(stderr, "calc_sleep_time: Expected sleep_ns>0; decrease sample rate\n");
+        sleep_ns = 0;
+    }
+    if (sleep_ns < 1000000000L) {
+        sleep->tv_sec = 0;
+        sleep->tv_nsec = (long)sleep_ns;
+    } else {
+        sleep->tv_sec = (long)sleep_ns / 1000000000L;
+        sleep->tv_nsec = (long)sleep_ns - (sleep->tv_sec * 1000000000L);
+    }
 }
