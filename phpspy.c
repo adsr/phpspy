@@ -8,12 +8,20 @@
 #include <unistd.h>
 #include <sys/uio.h>
 #include <time.h>
+#include <elfutils/libdwfl.h>
 
 #ifdef USE_ZEND
 #include <zend_API.h>
 #else
 #include <php_structs.h>
 #endif
+
+static char *debuginfo_path = NULL;
+static const Dwfl_Callbacks proc_callbacks = {
+    .find_elf = dwfl_linux_proc_find_elf,
+    .find_debuginfo = dwfl_standard_find_debuginfo,
+    .debuginfo_path = &debuginfo_path,
+};
 
 pid_t opt_pid = -1;
 long opt_sleep_ns = 10000000; // 10ms
@@ -27,11 +35,8 @@ size_t zend_string_val_offset;
 static void dump_trace(pid_t pid, unsigned long long executor_globals_addr);
 static int copy_proc_mem(pid_t pid, void *raddr, void *laddr, size_t size);
 static void parse_opts(int argc, char **argv);
-static int get_php_bin_path(pid_t pid, char *path);
-static int get_php_base_addr(pid_t pid, char *path, unsigned long long *raddr);
-static int get_executor_globals_offset(char *path, unsigned long long *raddr);
+static int dwarf_module_callback(Dwfl_Module *mod, void **unused, const char *name, Dwarf_Addr start, void *arg);
 static int get_executor_globals_addr(unsigned long long *raddr);
-static int popen_read_line(char *buf, size_t buf_size, char *cmd_fmt, ...);
 static void try_clock_gettime(struct timespec *ts);
 static void calc_sleep_time(struct timespec *end, struct timespec *start, struct timespec *sleep);
 
@@ -181,102 +186,78 @@ static void parse_opts(int argc, char **argv) {
     }
 }
 
-static int get_php_bin_path(pid_t pid, char *path) {
-    char buf[128];
-    char *cmd_fmt = "awk 'NR==1{path=$NF} /libphp7/{path=$NF} END{print path}' /proc/%d/maps";
-    if (popen_read_line(buf, sizeof(buf), cmd_fmt, (int)pid) != 0) {
-        fprintf(stderr, "get_php_bin_path: Failed\n");
-        return 1;
-    }
-    strcpy(path, buf);
-    return 0;
-}
+static int dwarf_module_callback(Dwfl_Module *mod,
+        void **unused __attribute__((unused)),
+        const char *name __attribute__((unused)),
+        Dwarf_Addr start __attribute__((unused)),
+        void *arg) {
+    unsigned long long *raddr = (unsigned long long *) arg;
+    GElf_Sym sym;
+    GElf_Addr value = 0;
+    int i, n = dwfl_module_getsymtab(mod);
 
-static int get_php_base_addr(pid_t pid, char *path, unsigned long long *raddr) {
-    /**
-     * This is very likely to be incorrect/incomplete. I thought the base
-     * address from `/proc/<pid>/maps` + the symbol address from `readelf` would
-     * lead to the actual memory address, but on at least one system I tested on
-     * this is not the case. On that system, working backwards from the address
-     * printed in `gdb`, it seems the missing piece was the 'virtual address' of
-     * the LOAD section in ELF headers. I suspect this may have to do with
-     * address relocation and/or a feature called 'prelinking', but not sure.
-     */
-    char buf[128];
-    unsigned long long start_addr;
-    unsigned long long virt_addr;
-    char *cmd_fmt = "grep ' %s$' /proc/%d/maps | head -n1";
-    if (popen_read_line(buf, sizeof(buf), cmd_fmt, path, (int)pid) != 0) {
-        fprintf(stderr, "get_php_base_addr: Failed to get start_addr\n");
-        return 1;
+    for (i = 1; i < n; ++i) {
+        const char *symbol_name = dwfl_module_getsym_info(mod, i, &sym, &value, NULL, NULL, NULL);
+        if (symbol_name == NULL || symbol_name[0] == '\0') {
+            continue;
+        }
+        switch (GELF_ST_TYPE(sym.st_info)) {
+        case STT_SECTION:
+        case STT_FILE:
+        case STT_TLS:
+            break;
+        default:
+            if (!strcmp(symbol_name, "executor_globals") && value != 0) {
+                *raddr = value;
+                return DWARF_CB_ABORT;
+            }
+            break;
+        }
     }
-    start_addr = strtoull(buf, NULL, 16);
-    cmd_fmt = "readelf -l %s | awk '/LOAD/{print $3; exit}'";
-    if (popen_read_line(buf, sizeof(buf), cmd_fmt, path) != 0) {
-        fprintf(stderr, "get_php_base_addr: Failed to get virt_addr\n");
-        return 1;
-    }
-    virt_addr = strtoull(buf, NULL, 16);
-    *raddr = start_addr - virt_addr;
-    return 0;
-}
 
-static int get_executor_globals_offset(char *path, unsigned long long *raddr) {
-    char buf[128];
-    char *cmd_fmt = "readelf -s %s | grep ' executor_globals$' | awk 'NR==1{print $2}'";
-    if (popen_read_line(buf, sizeof(buf), cmd_fmt, path) != 0) {
-        fprintf(stderr, "get_php_executor_globals_offset: Failed\n");
-        return 1;
-    }
-    *raddr = strtoull(buf, NULL, 16);
-    return 0;
+    return DWARF_CB_OK;
 }
 
 static int get_executor_globals_addr(unsigned long long *raddr) {
-    char php_bin_path[128];
-    unsigned long long base_addr;
-    unsigned long long addr_offset;
-    if (opt_executor_globals_addr != 0) {
-        *raddr = opt_executor_globals_addr;
-        return 0;
-    }
-    if (get_php_bin_path(opt_pid, php_bin_path) != 0) {
-        return 1;
-    }
-    if (get_php_base_addr(opt_pid, php_bin_path, &base_addr) != 0) {
-        return 1;
-    }
-    if (get_executor_globals_offset(php_bin_path, &addr_offset) != 0) {
-        return 1;
-    }
-    *raddr = base_addr + addr_offset;
-    return 0;
-}
+    Dwfl *dwfl = NULL;
+    int ret = 0;
 
-static int popen_read_line(char *buf, size_t buf_size, char *cmd_fmt, ...) {
-    FILE *fp;
-    char cmd[128];
-    int buf_len;
-    va_list cmd_args;
-    va_start(cmd_args, cmd_fmt);
-    vsprintf(cmd, cmd_fmt, cmd_args);
-    va_end(cmd_args);
-    if (!(fp = popen(cmd, "r"))) {
-        perror("popen");
-        return 1;
-    }
-    fgets(buf, buf_size-1, fp);
-    pclose(fp);
-    buf_len = strlen(buf);
-    while (buf_len > 0 && buf[buf_len-1] == '\n') {
-        --buf_len;
-    }
-    if (buf_len < 1) {
-        fprintf(stderr, "popen_read_line: Expected strlen(buf)>0");
-        return 1;
-    }
-    buf[buf_len] = '\0';
-    return 0;
+    do {
+        int err = 0;
+        dwfl = dwfl_begin(&proc_callbacks);
+        if (dwfl == NULL) {
+            fprintf(stderr, "Error setting up DWARF reading. Details: %s\n", dwfl_errmsg(0));
+            ret = 1;
+            break;
+        }
+
+        err = dwfl_linux_proc_report(dwfl, opt_pid);
+        if (err != 0) {
+            fprintf(stderr, "Error reading from /proc. Details: %s\n", dwfl_errmsg(0));
+            ret = 1;
+            break;
+        }
+
+        if (dwfl_report_end(dwfl, NULL, NULL) != 0) {
+            fprintf(stderr, "Error reading from /proc. Details: %s\n", dwfl_errmsg(0));
+            ret = 1;
+            break;
+        }
+
+        *raddr = 0;
+        if (dwfl_getmodules(dwfl, dwarf_module_callback, raddr, 0) == -1) {
+            fprintf(stderr, "Error reading DWARF modules. Details: %s\n", dwfl_errmsg(0));
+            ret = 1;
+            break;
+        } else if (*raddr == 0) {
+            fprintf(stderr, "Unable to find address of executor_globals in the binary\n");
+            ret = 1;
+            break;
+        }
+    } while (0);
+
+    dwfl_end(dwfl);
+    return ret;
 }
 
 static void try_clock_gettime(struct timespec *ts) {
