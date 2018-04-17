@@ -35,7 +35,6 @@
 
 use strict;
 
-# might not need this config tbh
 use Getopt::Long qw(:config gnu_getopt no_ignore_case);
 
 # parameters
@@ -69,12 +68,9 @@ while (defined(my $line = <>)) {
     my ($depth, $func) = (split ' ', $line)[0,1];
 
     if (@frames && $depth == 0) {
-        # if we have frames
-        # Remember the current frames as a stack
-        # reset frames
         my $collapsed = join(';', reverse @frames);
-        @frames = ();
         remember_stack($collapsed, 1);
+        @frames = ();
         next;
     }
 
