@@ -56,11 +56,6 @@ usage() if $help;
 my %stacks;
 my @frames;
 
-sub remember_stack {
-    my ($stack, $count) = @_;
-    $stacks{$stack} += $count;
-}
-
 while (defined(my $line = <>)) {
     next unless $line =~ /^\d/;
     chomp;
@@ -68,15 +63,14 @@ while (defined(my $line = <>)) {
     my ($depth, $func) = (split ' ', $line)[0,1];
 
     if (@frames && $depth == 0) {
-        my $collapsed = join(';', reverse @frames);
-        remember_stack($collapsed, 1);
+        $stacks{join(';', reverse @frames)} += 1;
         @frames = ();
         next;
     }
 
     push @frames, $func;
 }
-remember_stack(join(';', reverse @frames), 1);
+$stacks{join(';', reverse @frames)} += 1 if @frames;
 
 while ( my ($k, $v) = each %stacks ) {
     print "$k $v\n";
