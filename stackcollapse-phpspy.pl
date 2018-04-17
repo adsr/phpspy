@@ -40,7 +40,6 @@ use Getopt::Long qw(:config gnu_getopt no_ignore_case);
 
 # parameters
 my $help = 0;
-my $do_foo = 0;
 
 sub usage {
     die <<USAGE_END;
@@ -57,25 +56,23 @@ usage() if $help;
 # internals
 my %stacks;
 my @frames;
-my $collapsed;
 
 sub remember_stack {
     my ($stack, $count) = @_;
     $stacks{$stack} += $count;
 }
 
-while (defined($_ = <>)) {
-    next if !m/^\d/;
+while (defined(my $line = <>)) {
+    next unless $line =~ /^\d/;
     chomp;
 
-    my @args = split ' ', $_;
-    my ($depth, $func) = @args[0,1];
+    my ($depth, $func) = (split ' ', $line)[0,1];
 
     if (@frames && $depth == 0) {
         # if we have frames
         # Remember the current frames as a stack
         # reset frames
-        $collapsed = join(';', reverse @frames);
+        my $collapsed = join(';', reverse @frames);
         @frames = ();
         remember_stack($collapsed, 1);
         next;
