@@ -16,6 +16,9 @@
 #include <php_structs.h>
 #endif
 
+#define STR_LEN 1024
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+
 static char *debuginfo_path = NULL;
 static const Dwfl_Callbacks proc_callbacks = {
     .find_elf = dwfl_linux_proc_find_elf,
@@ -70,9 +73,9 @@ int main(int argc, char **argv) {
 }
 
 static void dump_trace(pid_t pid, unsigned long long executor_globals_addr) {
-    char func[1024];
-    char file[1024];
-    char class[1024];
+    char func[STR_LEN+1];
+    char file[STR_LEN+1];
+    char class[STR_LEN+1];
     int file_len;
     int func_len;
     int class_len;
@@ -113,7 +116,7 @@ static void dump_trace(pid_t pid, unsigned long long executor_globals_addr) {
         try_copy_proc_mem("zfunc", execute_data.func, &zfunc, sizeof(zfunc));
         if (zfunc.common.function_name) {
             try_copy_proc_mem("function_name", zfunc.common.function_name, &zstring, sizeof(zstring));
-            func_len = zstring.len;
+            func_len = MIN(zstring.len, STR_LEN);
             try_copy_proc_mem("function_name.val", ((char*)zfunc.common.function_name) + zend_string_val_offset, func, func_len);
         } else {
             func_len = snprintf(func, sizeof(func), "<main>");
@@ -121,9 +124,9 @@ static void dump_trace(pid_t pid, unsigned long long executor_globals_addr) {
         if (zfunc.common.scope) {
             try_copy_proc_mem("zce", zfunc.common.scope, &zce, sizeof(zce));
             try_copy_proc_mem("class_name", zce.name, &zstring, sizeof(zstring));
-            class_len = zstring.len;
+            class_len = MIN(zstring.len, STR_LEN);
             try_copy_proc_mem("class_name.val", ((char*)zce.name) + zend_string_val_offset, class, class_len);
-            if (class_len+2 <= 1023) {
+            if (class_len+2 <= STR_LEN) {
                 class[class_len+0] = ':';
                 class[class_len+1] = ':';
                 class[class_len+2] = '\0';
@@ -136,7 +139,7 @@ static void dump_trace(pid_t pid, unsigned long long executor_globals_addr) {
         if (zfunc.type == 2) {
             try_copy_proc_mem("zop", (void*)execute_data.opline, &zop, sizeof(zop));
             try_copy_proc_mem("filename", zfunc.op_array.filename, &zstring, sizeof(zstring));
-            file_len = zstring.len;
+            file_len = MIN(zstring.len, STR_LEN);
             try_copy_proc_mem("filename.val", ((char*)zfunc.op_array.filename) + zend_string_val_offset, file, file_len);
             lineno = zop.lineno;
         } else {
