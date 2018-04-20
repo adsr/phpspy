@@ -19,13 +19,6 @@
 #define STR_LEN 1024
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
-static char *debuginfo_path = NULL;
-static const Dwfl_Callbacks proc_callbacks = {
-    .find_elf = dwfl_linux_proc_find_elf,
-    .find_debuginfo = dwfl_standard_find_debuginfo,
-    .debuginfo_path = &debuginfo_path,
-};
-
 pid_t opt_pid = -1;
 long opt_sleep_ns = 10000000; // 10ms
 unsigned long long opt_executor_globals_addr = 0;
@@ -38,7 +31,6 @@ size_t zend_string_val_offset;
 static void dump_trace(pid_t pid, unsigned long long executor_globals_addr);
 static int copy_proc_mem(pid_t pid, void *raddr, void *laddr, size_t size);
 static void parse_opts(int argc, char **argv);
-static int dwarf_module_callback(Dwfl_Module *mod, void **unused, const char *name, Dwarf_Addr start, void *arg);
 static int get_executor_globals_addr(unsigned long long *raddr);
 static void try_clock_gettime(struct timespec *ts);
 static void calc_sleep_time(struct timespec *end, struct timespec *start, struct timespec *sleep);
@@ -189,79 +181,11 @@ static void parse_opts(int argc, char **argv) {
     }
 }
 
-static int dwarf_module_callback(Dwfl_Module *mod,
-        void **unused __attribute__((unused)),
-        const char *name __attribute__((unused)),
-        Dwarf_Addr start __attribute__((unused)),
-        void *arg) {
-    unsigned long long *raddr = (unsigned long long *) arg;
-    GElf_Sym sym;
-    GElf_Addr value = 0;
-    int i, n = dwfl_module_getsymtab(mod);
-
-    for (i = 1; i < n; ++i) {
-        const char *symbol_name = dwfl_module_getsym_info(mod, i, &sym, &value, NULL, NULL, NULL);
-        if (symbol_name == NULL || symbol_name[0] == '\0') {
-            continue;
-        }
-        switch (GELF_ST_TYPE(sym.st_info)) {
-        case STT_SECTION:
-        case STT_FILE:
-        case STT_TLS:
-            break;
-        default:
-            if (!strcmp(symbol_name, "executor_globals") && value != 0) {
-                *raddr = value;
-                return DWARF_CB_ABORT;
-            }
-            break;
-        }
-    }
-
-    return DWARF_CB_OK;
-}
-
-static int get_executor_globals_addr(unsigned long long *raddr) {
-    Dwfl *dwfl = NULL;
-    int ret = 0;
-
-    do {
-        int err = 0;
-        dwfl = dwfl_begin(&proc_callbacks);
-        if (dwfl == NULL) {
-            fprintf(stderr, "Error setting up DWARF reading. Details: %s\n", dwfl_errmsg(0));
-            ret = 1;
-            break;
-        }
-
-        err = dwfl_linux_proc_report(dwfl, opt_pid);
-        if (err != 0) {
-            fprintf(stderr, "Error reading from /proc. Details: %s\n", dwfl_errmsg(0));
-            ret = 1;
-            break;
-        }
-
-        if (dwfl_report_end(dwfl, NULL, NULL) != 0) {
-            fprintf(stderr, "Error reading from /proc. Details: %s\n", dwfl_errmsg(0));
-            ret = 1;
-            break;
-        }
-
-        *raddr = 0;
-        if (dwfl_getmodules(dwfl, dwarf_module_callback, raddr, 0) == -1) {
-            fprintf(stderr, "Error reading DWARF modules. Details: %s\n", dwfl_errmsg(0));
-            ret = 1;
-            break;
-        } else if (*raddr == 0) {
-            fprintf(stderr, "Unable to find address of executor_globals in the binary\n");
-            ret = 1;
-            break;
-        }
-    } while (0);
-
-    dwfl_end(dwfl);
-    return ret;
-}
+#ifdef USE_LIBDW
+#include "addr_libdw.c"
+#else
+#include "addr_readelf.c"
+#endif
 
 static void try_clock_gettime(struct timespec *ts) {
     if (clock_gettime(CLOCK_MONOTONIC_RAW, ts) == -1) {
