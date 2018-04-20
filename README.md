@@ -4,19 +4,25 @@ Experimental sampling profiler for PHP 7 inspired by [rbspy][0].
 
 For now, Linux x86_64 only, non-ZTS PHP 7 only.
 
+### Build options
+
+    $ make phpspy_libdw    # Get addr via libdw (default) (requires libdw-dev or elfutils-devel)
+    $ make phpspy_readelf  # Get addr via readelf binary (requires elfutils)
+    $ USE_ZEND=1 make ...  # Use Zend structs instead of built-in structs (requires php-dev or php-devel)
+
 ### Synopsis
 
-    [user@host:~/phpspy] $ make
-    cc -Wall -Wextra -g -I. phpspy.c -o phpspy
-    [user@host:~/phpspy] $ ./phpspy -h
+    $ make
+    cc  -Wall -Wextra -g -I.  -DUSE_LIBDW=1 phpspy.c -o phpspy  -ldw
+    $ ./phpspy -h
     Usage: phpspy -h(help) -p<pid> -s<sleep_us> -n<max_stack_depth> -x<executor_globals_addr>
-    [user@host:~/phpspy] $ php -r 'sleep(120);' &
+    $ php -r 'sleep(120);' &
     [1] 28586
-    [user@host:~/phpspy] $ sudo ./phpspy -p 28586
+    $ sudo ./phpspy -p 28586
     0 sleep <internal>:-1
     1 <main> <internal>:-1
     ...
-    [user@host:~/phpspy] $ sudo ./phpspy -p $(pgrep httpd)
+    $ sudo ./phpspy -p $(pgrep httpd)
     0 Memcached::get <internal>:-1
     1 Cache_MemcachedToggleable::get /foo/bar/lib/Cache/MemcachedToggleable.php:26
     2 Cache_Memcached::get /foo/bar/lib/Cache/Memcached.php:251
@@ -36,6 +42,10 @@ For now, Linux x86_64 only, non-ZTS PHP 7 only.
 
 ### TODO
 
-* FlameGraph trace format
+* Add option to specify sample rate in hertz instead of micro-sec
+* Add option to grab `$_SERVER[...]` variables along with stack frame
+* Add option to exit when pid no longer exists
+* Add aggregate mode
+* Add `make install` rule
 
 [0]: https://github.com/rbspy/rbspy
