@@ -47,5 +47,6 @@ For now, Linux x86_64 only, non-ZTS PHP 7 only.
 * Add option to exit when pid no longer exists
 * Add aggregate mode
 * Add `make install` rule
+* Add tests
 
 [0]: https://github.com/rbspy/rbspy
