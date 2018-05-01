@@ -59,7 +59,6 @@ my @frames;
 
 while (defined(my $line = <>)) {
     next unless $line =~ /^\d/;
-    chomp $line;
 
     my ($depth, $func) = (split ' ', $line)[0,1];
 
