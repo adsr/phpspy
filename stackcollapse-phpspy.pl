@@ -34,6 +34,7 @@
 # ./stackcollapse-phpspy.pl infile | ./flamegraph/flamegraph.pl > svg.out
 
 use strict;
+use warnings;
 
 use Getopt::Long qw(:config gnu_getopt no_ignore_case);
 
