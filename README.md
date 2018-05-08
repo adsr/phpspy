@@ -4,6 +4,8 @@ Low-overhead sampling profiler for PHP 7 inspired by [rbspy][0].
 
 For now, Linux x86_64 only, non-ZTS PHP 7 only.
 
+![FlameGraph example](https://i.imgur.com/7DKdnmh.gif)
+
 ### Build options
 
     $ make phpspy_libdw    # Get addr via libdw (default) (requires libdw-dev or elfutils-devel)
