@@ -1,6 +1,6 @@
 # phpspy
 
-Experimental sampling profiler for PHP 7 inspired by [rbspy][0].
+Low-overhead sampling profiler for PHP 7 inspired by [rbspy][0].
 
 For now, Linux x86_64 only, non-ZTS PHP 7 only.
 
