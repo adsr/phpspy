@@ -2,7 +2,7 @@
 
 Low-overhead sampling profiler for PHP 7 inspired by [rbspy][0].
 
-For now, Linux x86_64 only, non-ZTS PHP 7 only.
+For now, works with Linux x86_64 non-ZTS PHP 7 with CLI and Apache SAPIs.
 
 ![FlameGraph example](https://i.imgur.com/7DKdnmh.gif)
 
