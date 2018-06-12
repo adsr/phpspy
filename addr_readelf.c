@@ -1,7 +1,28 @@
 static int get_php_bin_path(pid_t pid, char *path);
 static int get_php_base_addr(pid_t pid, char *path, unsigned long long *raddr);
-static int get_executor_globals_offset(char *path, unsigned long long *raddr);
+static int get_symbol_offset(char *path, const char *symbol, unsigned long long *raddr);
 static int popen_read_line(char *buf, size_t buf_size, char *cmd_fmt, ...);
+
+static int get_symbol_addr(const char *symbol, unsigned long long *raddr) {
+    char php_bin_path[128];
+    unsigned long long base_addr;
+    unsigned long long addr_offset;
+    if (opt_executor_globals_addr != 0) {
+        *raddr = opt_executor_globals_addr;
+        return 0;
+    }
+    if (get_php_bin_path(opt_pid, php_bin_path) != 0) {
+        return 1;
+    }
+    if (get_php_base_addr(opt_pid, php_bin_path, &base_addr) != 0) {
+        return 1;
+    }
+    if (get_symbol_offset(php_bin_path, symbol, &addr_offset) != 0) {
+        return 1;
+    }
+    *raddr = base_addr + addr_offset;
+    return 0;
+}
 
 static int get_php_bin_path(pid_t pid, char *path) {
     char buf[128];
@@ -43,35 +64,14 @@ static int get_php_base_addr(pid_t pid, char *path, unsigned long long *raddr) {
     return 0;
 }
 
-static int get_executor_globals_offset(char *path, unsigned long long *raddr) {
+static int get_symbol_offset(char *path, const char *symbol, unsigned long long *raddr) {
     char buf[128];
-    char *cmd_fmt = "readelf -s %s | grep ' executor_globals$' | awk 'NR==1{print $2}'";
-    if (popen_read_line(buf, sizeof(buf), cmd_fmt, path) != 0) {
-        fprintf(stderr, "get_php_executor_globals_offset: Failed\n");
+    char *cmd_fmt = "readelf -s %s | grep ' %s$' | awk 'NR==1{print $2}'";
+    if (popen_read_line(buf, sizeof(buf), cmd_fmt, path, symbol) != 0) {
+        fprintf(stderr, "get_symbol_offset: Failed\n");
         return 1;
     }
     *raddr = strtoull(buf, NULL, 16);
-    return 0;
-}
-
-static int get_executor_globals_addr(unsigned long long *raddr) {
-    char php_bin_path[128];
-    unsigned long long base_addr;
-    unsigned long long addr_offset;
-    if (opt_executor_globals_addr != 0) {
-        *raddr = opt_executor_globals_addr;
-        return 0;
-    }
-    if (get_php_bin_path(opt_pid, php_bin_path) != 0) {
-        return 1;
-    }
-    if (get_php_base_addr(opt_pid, php_bin_path, &base_addr) != 0) {
-        return 1;
-    }
-    if (get_executor_globals_offset(php_bin_path, &addr_offset) != 0) {
-        return 1;
-    }
-    *raddr = base_addr + addr_offset;
     return 0;
 }
 

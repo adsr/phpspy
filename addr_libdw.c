@@ -1,4 +1,5 @@
 static char *debuginfo_path = NULL;
+static const char *dwarf_lookup_symbol = NULL;
 static const Dwfl_Callbacks proc_callbacks = {
     .find_elf = dwfl_linux_proc_find_elf,
     .find_debuginfo = dwfl_standard_find_debuginfo,
@@ -28,7 +29,7 @@ static int dwarf_module_callback(
         case STT_TLS:
             break;
         default:
-            if (!strcmp(symbol_name, "executor_globals") && value != 0) {
+            if (!strcmp(symbol_name, dwarf_lookup_symbol) && value != 0) {
                 *raddr = value;
                 return DWARF_CB_ABORT;
             }
@@ -39,10 +40,11 @@ static int dwarf_module_callback(
     return DWARF_CB_OK;
 }
 
-static int get_executor_globals_addr(unsigned long long *raddr) {
+static int get_symbol_addr(const char *symbol, unsigned long long *raddr) {
     Dwfl *dwfl = NULL;
     int ret = 0;
 
+    dwarf_lookup_symbol = symbol;
     do {
         int err = 0;
         dwfl = dwfl_begin(&proc_callbacks);
@@ -71,11 +73,12 @@ static int get_executor_globals_addr(unsigned long long *raddr) {
             ret = 1;
             break;
         } else if (*raddr == 0) {
-            fprintf(stderr, "Unable to find address of executor_globals in the binary\n");
+            fprintf(stderr, "Unable to find address of %s in the binary\n", symbol);
             ret = 1;
             break;
         }
     } while (0);
+    dwarf_lookup_symbol = NULL;
 
     dwfl_end(dwfl);
     return ret;

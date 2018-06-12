@@ -14,14 +14,17 @@
 #   1 aaa /home/mlauter/profiling/sample.php:5
 #   2 bbb /home/mlauter/profiling/sample.php:10
 #   3 <main> /home/mlauter/profiling/sample.php:25
+#   # - - -
 #   0 sleep <internal>:-1
 #   1 aaa /home/mlauter/profiling/sample.php:5
 #   2 <main> /home/mlauter/profiling/sample.php:28
+#   # - - -
 #   0 sleep <internal>:-1
 #   1 aaa /home/mlauter/profiling/sample.php:5
 #   2 bbb /home/mlauter/profiling/sample.php:10
 #   3 ccc /home/mlauter/profiling/sample.php:15
 #   4 <main> /home/mlauter/profiling/sample.php:22
+#   # - - -
 #   ...
 #
 # Example Output:
@@ -56,21 +59,24 @@ usage() if $help;
 # internals
 my %stacks;
 my @frames;
+my $last_depth;
 
 while (defined(my $line = <>)) {
-    next unless $line =~ /^\d/;
+    next unless $line =~ /^\S \S/;
 
     my ($depth, $func) = (split ' ', $line)[0,1];
+    $last_depth = $depth;
 
-    if (@frames && $depth == 0) {
+    if (@frames && $depth eq '#') {
         $stacks{join(';', reverse @frames)} += 1;
-        @frames = ();
         next;
+    } elsif ($depth == 0) {
+        @frames = ();
     }
 
-    push @frames, $func;
+    push @frames, $func if $line =~ /^\d/;
 }
-$stacks{join(';', reverse @frames)} += 1 if @frames;
+$stacks{join(';', reverse @frames)} += 1 if @frames && $last_depth eq '#';
 
 while ( my ($k, $v) = each %stacks ) {
     print "$k $v\n";

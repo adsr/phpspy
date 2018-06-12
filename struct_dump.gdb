@@ -23,3 +23,12 @@ printf "\n"
 printf "zend_op size=%lu\n", sizeof(zend_op)
 printf "  .lineno +%lu\n", offsetof(zend_op, lineno)
 printf "\n"
+printf "sapi_globals_struct=%lu\n", sizeof(sapi_globals_struct)
+printf "  .request_info +%lu\n", offsetof(sapi_globals_struct, request_info)
+printf "  .global_request_time +%lu\n", offsetof(sapi_globals_struct, global_request_time)
+printf "\n"
+printf "sapi_request_info=%lu\n", sizeof(sapi_request_info)
+printf "  .path_translated +%lu\n", offsetof(sapi_request_info, path_translated)
+printf "  .request_uri +%lu\n", offsetof(sapi_request_info, request_uri)
+printf "\n"
+printf "\n"
