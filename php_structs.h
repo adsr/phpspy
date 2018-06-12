@@ -9,6 +9,8 @@ typedef union  _zend_function zend_function;
 typedef struct _zend_class_entry zend_class_entry;
 typedef struct _zend_string zend_string;
 typedef struct _zend_op zend_op;
+typedef struct _sapi_globals_struct sapi_globals_struct;
+typedef struct _sapi_request_info sapi_request_info;
 
 // Assumes 8-byte pointers
 
@@ -54,6 +56,19 @@ struct __attribute__((__packed__)) _zend_string {
     uint8_t pad0[16];                       // 0        16
     size_t len;                             // 16       8
     char *val;                              // 24       8
+};
+
+struct __attribute__((__packed__)) _sapi_request_info {
+    uint8_t pad0[32];                       // 0        32
+    char *path_translated;                  // 32       8
+    char *request_uri;                      // 40       8
+};
+
+struct __attribute__((__packed__)) _sapi_globals_struct {
+    uint8_t pad0[8];                        // 0        8
+    sapi_request_info request_info;         // 8        48
+    uint8_t pad1[384];                      // 56       384
+    double global_request_time;             // 440      8
 };
 
 #endif
