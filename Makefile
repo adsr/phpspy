@@ -1,4 +1,4 @@
-phpspy_cflags:=$(CFLAGS) -Wall -Wextra -g
+phpspy_cflags:=$(CFLAGS) -Wall -Wextra -g -Ofast
 phpspy_libs:=$(LDLIBS)
 phpspy_includes:=-I.
 phpspy_defines:=
