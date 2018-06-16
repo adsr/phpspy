@@ -22,50 +22,98 @@
 pid_t opt_pid = -1;
 long opt_sleep_ns = 10000000; // 10ms
 unsigned long long opt_executor_globals_addr = 0;
+unsigned long long opt_sapi_globals_addr = 0;
 int opt_capture_req = 0;
 int opt_max_stack_depth = -1;
 char *opt_frame_delim = "\n";
 char *opt_trace_delim = "\n\n";
 
 size_t zend_string_val_offset;
+unsigned long long executor_globals_addr;
+unsigned long long sapi_globals_addr;
 
+static void usage(FILE *fp, int exit_code);
+static void parse_opts(int argc, char **argv);
+static void fork_child();
+static void find_addresses();
 static void dump_trace(pid_t pid, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr);
 static int copy_proc_mem(pid_t pid, void *raddr, void *laddr, size_t size);
-static void parse_opts(int argc, char **argv);
-static int get_symbol_addr(const char *symbol, unsigned long long *raddr);
 static void try_clock_gettime(struct timespec *ts);
 static void calc_sleep_time(struct timespec *end, struct timespec *start, struct timespec *sleep);
+static int get_symbol_addr(const char *symbol, unsigned long long *raddr);
 
 static void usage(FILE *fp, int exit_code) {
-    fprintf(fp, "Usage: phpspy -h(help) -p<pid> -s<sleep_ns> -n<max_stack_depth> -x<executor_globals_addr> -r(capture_req)\n");
+    fprintf(fp, "Usage: phpspy [options] [--] <php_command>\n\n");
+    fprintf(fp, "-h         Show help\n");
+    fprintf(fp, "-p <pid>   Trace PHP process at pid\n");
+    fprintf(fp, "-s <ns>    Sleep this many nanoseconds between traces (default: 10000000, 10ms)\n");
+    fprintf(fp, "-n <max>   Set max stack trace depth to `max` (default: -1, unlimited\n");
+    fprintf(fp, "-x <hex>   Address of executor_globals in hex (default: 0, find dynamically)\n");
+    fprintf(fp, "-a <hex>   Address of sapi_globals in hex (default: 0, find dynamically)\n");
+    fprintf(fp, "-r         Capture request info as well\n");
     exit(exit_code);
 }
 
+static void parse_opts(int argc, char **argv) {
+    int c;
+    while ((c = getopt(argc, argv, "hp:s:n:x:a:r")) != -1) {
+        switch (c) {
+            case 'h': usage(stdout, 0); break;
+            case 'p': opt_pid = atoi(optarg); break;
+            case 's': opt_sleep_ns = strtol(optarg, NULL, 10); break;
+            case 'n': opt_max_stack_depth = atoi(optarg); break;
+            case 'x': opt_executor_globals_addr = strtoull(optarg, NULL, 16); break;
+            case 'a': opt_executor_globals_addr = strtoull(optarg, NULL, 16); break;
+            case 'r': opt_capture_req = 1; break;
+        }
+    }
+}
+
 int main(int argc, char **argv) {
-    unsigned long long executor_globals_addr, sapi_globals_addr;
     struct timespec start_time, end_time, sleep_time;
 
     parse_opts(argc, argv);
 
-    if (get_symbol_addr("executor_globals", &executor_globals_addr) != 0) {
-        return 1;
+    if (opt_pid == -1) {
+        fork_child(argc, argv);
     }
-    if (get_symbol_addr("sapi_globals", &sapi_globals_addr) != 0) {
-        return 1;
-    }
-
-    zend_string_val_offset = offsetof(zend_string, val);
+    find_addresses();
 
     while (1) {
         try_clock_gettime(&start_time);
-           dump_trace(opt_pid, executor_globals_addr, sapi_globals_addr);
+        dump_trace(opt_pid, executor_globals_addr, sapi_globals_addr);
         try_clock_gettime(&end_time);
-
         calc_sleep_time(&end_time, &start_time, &sleep_time);
         nanosleep(&sleep_time, NULL);
     }
 
     return 0;
+}
+
+static void fork_child(int argc, char **argv) {
+    if (optind >= argc) {
+        fprintf(stderr, "Expected pid (-p) or command\n\n");
+        usage(stderr, 1);
+    }
+    opt_pid = fork();
+    if (opt_pid == 0) {
+        execvp(argv[optind], argv + optind);
+        perror("execvp");
+        exit(1);
+    } else if (opt_pid < 0) {
+        perror("fork");
+        exit(1);
+    }
+}
+
+static void find_addresses() {
+    if (get_symbol_addr("executor_globals", &executor_globals_addr) != 0) {
+        exit(1);
+    }
+    if (get_symbol_addr("sapi_globals", &sapi_globals_addr) != 0) {
+        exit(1);
+    }
+    zend_string_val_offset = offsetof(zend_string, val);
 }
 
 static void dump_trace(pid_t pid, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr) {
@@ -181,32 +229,14 @@ static int copy_proc_mem(pid_t pid, void *raddr, void *laddr, size_t size) {
     remote[0].iov_base = raddr;
     remote[0].iov_len = size;
     if (process_vm_readv(pid, local, 1, remote, 1, 0) == -1) {
+        if (errno == ESRCH) { // No such process
+            perror("process_vm_readv");
+            exit(1);
+        }
         fprintf(stderr, "copy_proc_mem: %s; raddr=%p size=%lu\n", strerror(errno), raddr, size);
         return 1;
     }
     return 0;
-}
-
-static void parse_opts(int argc, char **argv) {
-    int c;
-    while ((c = getopt(argc, argv, "hp:s:n:x:r")) != -1) {
-        switch (c) {
-            case 'h': usage(stdout, 0); break;
-            case 'p': opt_pid = atoi(optarg); break;
-            case 's': opt_sleep_ns = strtol(optarg, NULL, 10); break;
-            case 'n': opt_max_stack_depth = atoi(optarg); break;
-            case 'x': opt_executor_globals_addr = strtoull(optarg, NULL, 16); break;
-            case 'r': opt_capture_req = 1; break;
-        }
-    }
-    if (opt_pid == -1) {
-        if (optind < argc) {
-            opt_pid = atoi(argv[optind]);
-        } else {
-            fprintf(stderr, "parse_opts: Expected pid\n\n");
-            usage(stderr, 1);
-        }
-    }
 }
 
 #ifdef USE_LIBDW
