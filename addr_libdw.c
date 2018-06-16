@@ -49,31 +49,31 @@ static int get_symbol_addr(const char *symbol, unsigned long long *raddr) {
         int err = 0;
         dwfl = dwfl_begin(&proc_callbacks);
         if (dwfl == NULL) {
-            fprintf(stderr, "Error setting up DWARF reading. Details: %s\n", dwfl_errmsg(0));
+            fprintf(stderr, "get_symbol_addr: Error setting up DWARF reading. Details: %s\n", dwfl_errmsg(0));
             ret = 1;
             break;
         }
 
         err = dwfl_linux_proc_report(dwfl, opt_pid);
         if (err != 0) {
-            fprintf(stderr, "Error reading from /proc. Details: %s\n", dwfl_errmsg(0));
+            fprintf(stderr, "get_symbol_addr: Error reading from /proc. Details: %s\n", dwfl_errmsg(0));
             ret = 1;
             break;
         }
 
         if (dwfl_report_end(dwfl, NULL, NULL) != 0) {
-            fprintf(stderr, "Error reading from /proc. Details: %s\n", dwfl_errmsg(0));
+            fprintf(stderr, "get_symbol_addr: Error reading from /proc. Details: %s\n", dwfl_errmsg(0));
             ret = 1;
             break;
         }
 
         *raddr = 0;
         if (dwfl_getmodules(dwfl, dwarf_module_callback, raddr, 0) == -1) {
-            fprintf(stderr, "Error reading DWARF modules. Details: %s\n", dwfl_errmsg(0));
+            fprintf(stderr, "get_symbol_addr: Error reading DWARF modules. Details: %s\n", dwfl_errmsg(0));
             ret = 1;
             break;
         } else if (*raddr == 0) {
-            fprintf(stderr, "Unable to find address of %s in the binary\n", symbol);
+            fprintf(stderr, "get_symbol_addr: Unable to find address of %s in the binary\n", symbol);
             ret = 1;
             break;
         }
