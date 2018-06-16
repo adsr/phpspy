@@ -229,6 +229,10 @@ static int copy_proc_mem(pid_t pid, void *raddr, void *laddr, size_t size) {
     remote[0].iov_base = raddr;
     remote[0].iov_len = size;
     if (process_vm_readv(pid, local, 1, remote, 1, 0) == -1) {
+        if (errno == ESRCH) { // No such process
+            perror("process_vm_readv");
+            exit(1);
+        }
         fprintf(stderr, "copy_proc_mem: %s; raddr=%p size=%lu\n", strerror(errno), raddr, size);
         return 1;
     }
