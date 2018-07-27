@@ -8,8 +8,10 @@ For now, works with Linux x86_64 non-ZTS PHP 7 with CLI and Apache SAPIs.
 
 ### Build options
 
-    $ make phpspy_libdw    # Get addr via libdw (default) (requires libdw-dev or elfutils-devel)
-    $ make phpspy_readelf  # Get addr via readelf binary (requires elfutils)
+    $ make phpspy_libdw    # Use libdw (default) (requires libdw-dev or elfutils-devel)
+    $ # or
+    $ make phpspy_readelf  # Use readelf binary (requires elfutils)
+    $ # also
     $ USE_ZEND=1 make ...  # Use Zend structs instead of built-in structs (requires php-dev or php-devel)
 
 ### Synopsis
