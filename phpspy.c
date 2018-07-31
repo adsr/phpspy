@@ -7,6 +7,8 @@
 #include <errno.h>
 #include <unistd.h>
 #include <sys/uio.h>
+#include <sys/types.h>
+#include <signal.h>
 #include <time.h>
 #include <elfutils/libdwfl.h>
 
@@ -34,6 +36,7 @@ static void parse_opts(int argc, char **argv);
 static int get_executor_globals_addr(unsigned long long *raddr);
 static void try_clock_gettime(struct timespec *ts);
 static void calc_sleep_time(struct timespec *end, struct timespec *start, struct timespec *sleep);
+static void check_pid_exists(pid_t pid);
 
 static void usage(FILE *fp, int exit_code) {
     fprintf(fp, "Usage: phpspy -h(help) -p<pid> -s<sleep_ns> -n<max_stack_depth> -x<executor_globals_addr>\n");
@@ -54,6 +57,7 @@ int main(int argc, char **argv) {
 
     while (1) {
         try_clock_gettime(&start_time);
+        check_pid_exists(opt_pid);
         dump_trace(opt_pid, executor_globals_addr);
         try_clock_gettime(&end_time);
 
@@ -214,5 +218,12 @@ static void calc_sleep_time(struct timespec *end, struct timespec *start, struct
     } else {
         sleep->tv_sec = (long)sleep_ns / 1000000000L;
         sleep->tv_nsec = (long)sleep_ns - (sleep->tv_sec * 1000000000L);
+    }
+}
+
+static void check_pid_exists(pid_t opt_pid) {
+    if(kill(opt_pid, 0) != 0) {
+        printf("Process with the pid(%ld) no longer exists, exiting\n", (long)opt_pid);
+        exit(1);
     }
 }
