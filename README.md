@@ -19,12 +19,13 @@ For now, works with Linux x86_64 non-ZTS PHP 7 with CLI and Apache SAPIs.
     $ make
     cc  -Wall -Wextra -g -I.  -DUSE_LIBDW=1 phpspy.c -o phpspy  -ldw
     $ ./phpspy -h
-    Usage: phpspy -h(help) -p<pid> -s<sleep_us> -n<max_stack_depth> -x<executor_globals_addr>
+    Usage: phpspy -h(help) -p<pid> -s<sleep_ns> -n<max_stack_depth> -x<executor_globals_addr> -r(capture_req)
     $ php -r 'sleep(120);' &
     [1] 28586
     $ sudo ./phpspy -p 28586
     0 sleep <internal>:-1
     1 <main> <internal>:-1
+    # - - -
     ...
     $ sudo ./phpspy -p $(pgrep httpd)
     0 Memcached::get <internal>:-1
@@ -42,6 +43,7 @@ For now, works with Linux x86_64 non-ZTS PHP 7 with CLI and Apache SAPIs.
     12 Security_Rule_Engine::evaluateActionRules /foo/bar/lib/Security/Rule/Engine.php:116
     13 <main> /foo/bar/lib/bootstrap/api.php:49
     14 <main> /foo/bar/htdocs/v3/public.php:5
+    # - - -
     ...
 
 ### TODO

@@ -16,37 +16,41 @@
 #include <php_structs.h>
 #endif
 
-#define STR_LEN 1024
+#define STR_LEN 256
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 pid_t opt_pid = -1;
 long opt_sleep_ns = 10000000; // 10ms
 unsigned long long opt_executor_globals_addr = 0;
+int opt_capture_req = 0;
 int opt_max_stack_depth = -1;
 char *opt_frame_delim = "\n";
-char *opt_trace_delim = "";
+char *opt_trace_delim = "\n\n";
 
 size_t zend_string_val_offset;
 
-static void dump_trace(pid_t pid, unsigned long long executor_globals_addr);
+static void dump_trace(pid_t pid, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr);
 static int copy_proc_mem(pid_t pid, void *raddr, void *laddr, size_t size);
 static void parse_opts(int argc, char **argv);
-static int get_executor_globals_addr(unsigned long long *raddr);
+static int get_symbol_addr(const char *symbol, unsigned long long *raddr);
 static void try_clock_gettime(struct timespec *ts);
 static void calc_sleep_time(struct timespec *end, struct timespec *start, struct timespec *sleep);
 
 static void usage(FILE *fp, int exit_code) {
-    fprintf(fp, "Usage: phpspy -h(help) -p<pid> -s<sleep_ns> -n<max_stack_depth> -x<executor_globals_addr>\n");
+    fprintf(fp, "Usage: phpspy -h(help) -p<pid> -s<sleep_ns> -n<max_stack_depth> -x<executor_globals_addr> -r(capture_req)\n");
     exit(exit_code);
 }
 
 int main(int argc, char **argv) {
-    unsigned long long executor_globals_addr;
+    unsigned long long executor_globals_addr, sapi_globals_addr;
     struct timespec start_time, end_time, sleep_time;
 
     parse_opts(argc, argv);
 
-    if (get_executor_globals_addr(&executor_globals_addr) != 0) {
+    if (get_symbol_addr("executor_globals", &executor_globals_addr) != 0) {
+        return 1;
+    }
+    if (get_symbol_addr("sapi_globals", &sapi_globals_addr) != 0) {
         return 1;
     }
 
@@ -54,7 +58,7 @@ int main(int argc, char **argv) {
 
     while (1) {
         try_clock_gettime(&start_time);
-        dump_trace(opt_pid, executor_globals_addr);
+           dump_trace(opt_pid, executor_globals_addr, sapi_globals_addr);
         try_clock_gettime(&end_time);
 
         calc_sleep_time(&end_time, &start_time, &sleep_time);
@@ -64,10 +68,12 @@ int main(int argc, char **argv) {
     return 0;
 }
 
-static void dump_trace(pid_t pid, unsigned long long executor_globals_addr) {
+static void dump_trace(pid_t pid, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr) {
     char func[STR_LEN+1];
     char file[STR_LEN+1];
     char class[STR_LEN+1];
+    char uri[STR_LEN+1];
+    char path[STR_LEN+1];
     int file_len;
     int func_len;
     int class_len;
@@ -81,6 +87,7 @@ static void dump_trace(pid_t pid, unsigned long long executor_globals_addr) {
     zend_class_entry zce;
     zend_function zfunc;
     zend_string zstring;
+    sapi_globals_struct sapi_globals;
 
     depth = 0;
     wrote_trace = 0;
@@ -103,6 +110,7 @@ static void dump_trace(pid_t pid, unsigned long long executor_globals_addr) {
         memset(&zstring, 0, sizeof(zstring));
         memset(&zce, 0, sizeof(zce));
         memset(&zop, 0, sizeof(zop));
+        memset(&sapi_globals, 0, sizeof(sapi_globals));
 
         try_copy_proc_mem("execute_data", remote_execute_data, &execute_data, sizeof(execute_data));
         try_copy_proc_mem("zfunc", execute_data.func, &zfunc, sizeof(zfunc));
@@ -143,7 +151,26 @@ static void dump_trace(pid_t pid, unsigned long long executor_globals_addr) {
         remote_execute_data = execute_data.prev_execute_data;
         depth += 1;
     }
-    if (wrote_trace) printf("%s", opt_trace_delim);
+    if (wrote_trace) {
+        if (opt_capture_req) {
+            try_copy_proc_mem("sapi_globals", (void*)sapi_globals_addr, &sapi_globals, sizeof(sapi_globals));
+            if (sapi_globals.request_info.request_uri) {
+                try_copy_proc_mem("uri", sapi_globals.request_info.request_uri, &uri, STR_LEN+1);
+            } else {
+                uri[0] = '-';
+                uri[1] = '\0';
+            }
+            if (sapi_globals.request_info.path_translated) {
+                try_copy_proc_mem("path", sapi_globals.request_info.path_translated, &path, STR_LEN+1);
+            } else {
+                path[0] = '-';
+                path[1] = '\0';
+            }
+            printf("# %f %s %s%s", sapi_globals.global_request_time, uri, path, opt_trace_delim);
+        } else {
+            printf("# - - -%s", opt_trace_delim);
+        }
+    }
 }
 
 static int copy_proc_mem(pid_t pid, void *raddr, void *laddr, size_t size) {
@@ -162,13 +189,14 @@ static int copy_proc_mem(pid_t pid, void *raddr, void *laddr, size_t size) {
 
 static void parse_opts(int argc, char **argv) {
     int c;
-    while ((c = getopt(argc, argv, "hp:s:n:x:")) != -1) {
+    while ((c = getopt(argc, argv, "hp:s:n:x:r")) != -1) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
             case 'p': opt_pid = atoi(optarg); break;
             case 's': opt_sleep_ns = strtol(optarg, NULL, 10); break;
             case 'n': opt_max_stack_depth = atoi(optarg); break;
             case 'x': opt_executor_globals_addr = strtoull(optarg, NULL, 16); break;
+            case 'r': opt_capture_req = 1; break;
         }
     }
     if (opt_pid == -1) {
