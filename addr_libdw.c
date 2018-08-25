@@ -1,3 +1,5 @@
+#include <elfutils/libdwfl.h>
+
 static char *debuginfo_path = NULL;
 static const char *dwarf_lookup_symbol = NULL;
 static const Dwfl_Callbacks proc_callbacks = {

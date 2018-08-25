@@ -8,7 +8,6 @@
 #include <unistd.h>
 #include <sys/uio.h>
 #include <time.h>
-#include <elfutils/libdwfl.h>
 
 #ifdef USE_ZEND
 #include <zend_API.h>
