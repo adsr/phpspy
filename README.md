@@ -8,9 +8,9 @@ For now, works with Linux x86_64 non-ZTS PHP 7 with CLI and Apache SAPIs.
 
 ### Build options
 
-    $ make phpspy_libdw    # Use libdw (default) (requires libdw-dev or elfutils-devel)
+    $ make phpspy_readelf  # Use readelf (default) binary (requires elfutils)
     $ # or
-    $ make phpspy_readelf  # Use readelf binary (requires elfutils)
+    $ make phpspy_libdw    # Use libdw (requires libdw-dev or elfutils-devel)
     $ # also
     $ USE_ZEND=1 make ...  # Use Zend structs instead of built-in structs (requires php-dev or php-devel)
 
@@ -50,7 +50,6 @@ For now, works with Linux x86_64 non-ZTS PHP 7 with CLI and Apache SAPIs.
 
 * Add option to specify sample rate in hertz instead of micro-sec
 * Add option to grab `$_SERVER[...]` variables along with stack frame
-* Add option to exit when pid no longer exists
 * Add aggregate mode
 * Add `make install` rule
 * Add tests
