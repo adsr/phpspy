@@ -3,9 +3,9 @@ phpspy_libs:=$(LDLIBS)
 phpspy_includes:=-I.
 phpspy_defines:=
 
-has_libdw   := $(shell $(LD) -ldw -o/dev/null >/dev/null 2>&1 && echo 1)
-has_readelf := $(shell command -v readelf     >/dev/null 2>&1 && echo 1)
-has_phpconf := $(shell command -v php-config  >/dev/null 2>&1 && echo 1)
+has_libdw   := $(shell $(LD) -ldw -o/dev/null >/dev/null 2>&1 && echo :)
+has_readelf := $(shell command -v readelf     >/dev/null 2>&1 && echo :)
+has_phpconf := $(shell command -v php-config  >/dev/null 2>&1 && echo :)
 
 ifdef USE_ZEND
   $(or $(has_phpconf), $(error Need php-config))
@@ -13,17 +13,18 @@ ifdef USE_ZEND
   phpspy_defines:=$(phpspy_defines) -DUSE_ZEND=1
 endif
 
-all: phpspy_libdw
+all: phpspy_readelf
 
-phpspy_libdw: check:=$(or $(has_libdw), $(error Need libdw))
+phpspy_libdw: check=$(or $(has_libdw), $(error Need libdw))
 phpspy_libdw: phpspy_defines:=$(phpspy_defines) -DUSE_LIBDW=1
 phpspy_libdw: phpspy_libs:=$(phpspy_libs) -ldw
 phpspy_libdw: phpspy
 
-phpspy_readelf: check:=$(or $(has_readelf), $(error Need readelf))
+phpspy_readelf: check=$(or $(has_readelf), $(error Need readelf))
 phpspy_readelf: phpspy
 
 phpspy: phpspy.c
+	@$(check)
 	$(CC) $(phpspy_cflags) $(phpspy_includes) $(phpspy_defines) phpspy.c -o phpspy $(phpspy_libs)
 
 clean:
