@@ -62,7 +62,7 @@ my @frames;
 my $last_depth;
 
 while (defined(my $line = <>)) {
-    next unless $line =~ /^\S \S/;
+    next unless $line =~ /^\S+ \S/;
 
     my ($depth, $func) = (split ' ', $line)[0,1];
     $last_depth = $depth;
