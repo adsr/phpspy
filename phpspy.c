@@ -7,6 +7,8 @@
 #include <errno.h>
 #include <unistd.h>
 #include <sys/uio.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 #include <time.h>
 
 #ifdef USE_ZEND
@@ -34,7 +36,7 @@ unsigned long long sapi_globals_addr;
 static void usage(FILE *fp, int exit_code);
 static void parse_opts(int argc, char **argv);
 static void fork_child();
-static void find_addresses();
+static int find_addresses();
 static void dump_trace(pid_t pid, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr);
 static int copy_proc_mem(pid_t pid, void *raddr, void *laddr, size_t size);
 static void try_clock_gettime(struct timespec *ts);
@@ -76,7 +78,10 @@ int main(int argc, char **argv) {
     if (opt_pid == -1) {
         fork_child(argc, argv);
     }
-    find_addresses();
+    if (find_addresses()) {
+        waitpid(opt_pid, NULL, 0);
+        exit(1);
+    }
 
     while (1) {
         try_clock_gettime(&start_time);
@@ -105,14 +110,15 @@ static void fork_child(int argc, char **argv) {
     }
 }
 
-static void find_addresses() {
+static int find_addresses() {
     if (get_symbol_addr("executor_globals", &executor_globals_addr) != 0) {
-        exit(1);
+        return 1;
     }
     if (get_symbol_addr("sapi_globals", &sapi_globals_addr) != 0) {
-        exit(1);
+        return 1;
     }
     zend_string_val_offset = offsetof(zend_string, val);
+    return 0;
 }
 
 static void dump_trace(pid_t pid, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr) {
