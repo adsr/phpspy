@@ -28,6 +28,7 @@ int opt_capture_req = 0;
 int opt_max_stack_depth = -1;
 char *opt_frame_delim = "\n";
 char *opt_trace_delim = "\n\n";
+unsigned long long opt_trace_limit = 0;
 
 size_t zend_string_val_offset;
 unsigned long long executor_globals_addr;
@@ -48,16 +49,17 @@ static void usage(FILE *fp, int exit_code) {
     fprintf(fp, "-h         Show help\n");
     fprintf(fp, "-p <pid>   Trace PHP process at pid\n");
     fprintf(fp, "-s <ns>    Sleep this many nanoseconds between traces (default: 10000000, 10ms)\n");
-    fprintf(fp, "-n <max>   Set max stack trace depth to `max` (default: -1, unlimited\n");
+    fprintf(fp, "-n <max>   Set max stack trace depth to `max` (default: -1, unlimited)\n");
     fprintf(fp, "-x <hex>   Address of executor_globals in hex (default: 0, find dynamically)\n");
     fprintf(fp, "-a <hex>   Address of sapi_globals in hex (default: 0, find dynamically)\n");
     fprintf(fp, "-r         Capture request info as well\n");
+    fprintf(fp, "-l <num>   Limit number of stack traces to capture (default: 0, unlimited)\n");
     exit(exit_code);
 }
 
 static void parse_opts(int argc, char **argv) {
     int c;
-    while ((c = getopt(argc, argv, "hp:s:n:x:a:r")) != -1) {
+    while ((c = getopt(argc, argv, "hp:s:n:x:a:rl:")) != -1) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
             case 'p': opt_pid = atoi(optarg); break;
@@ -66,11 +68,13 @@ static void parse_opts(int argc, char **argv) {
             case 'x': opt_executor_globals_addr = strtoull(optarg, NULL, 16); break;
             case 'a': opt_executor_globals_addr = strtoull(optarg, NULL, 16); break;
             case 'r': opt_capture_req = 1; break;
+            case 'l': opt_trace_limit = strtoull(optarg, NULL, 10); break;
         }
     }
 }
 
 int main(int argc, char **argv) {
+    unsigned long long n;
     struct timespec start_time, end_time, sleep_time;
 
     parse_opts(argc, argv);
@@ -83,12 +87,14 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
+    n = 0;
     while (1) {
         try_clock_gettime(&start_time);
         dump_trace(opt_pid, executor_globals_addr, sapi_globals_addr);
         try_clock_gettime(&end_time);
         calc_sleep_time(&end_time, &start_time, &sleep_time);
         nanosleep(&sleep_time, NULL);
+        if (++n == opt_trace_limit) break;
     }
 
     return 0;
