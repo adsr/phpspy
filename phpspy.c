@@ -29,14 +29,20 @@ int opt_max_stack_depth = -1;
 char *opt_frame_delim = "\n";
 char *opt_trace_delim = "\n\n";
 unsigned long long opt_trace_limit = 0;
+char *opt_path_output = "-";
+char *opt_path_child_out = "phpspy.%d.out";
+char *opt_path_child_err = "phpspy.%d.err";
 
 size_t zend_string_val_offset;
 unsigned long long executor_globals_addr;
 unsigned long long sapi_globals_addr;
+FILE *fout = NULL;
 
 static void usage(FILE *fp, int exit_code);
 static void parse_opts(int argc, char **argv);
-static void fork_child();
+static void fork_child(int argc, char **argv);
+static void redirect_child_stdio(int proc_fd, char *opt_path);
+static void open_fout();
 static int find_addresses();
 static void dump_trace(pid_t pid, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr);
 static int copy_proc_mem(pid_t pid, void *raddr, void *laddr, size_t size);
@@ -54,12 +60,15 @@ static void usage(FILE *fp, int exit_code) {
     fprintf(fp, "-a <hex>   Address of sapi_globals in hex (default: 0, find dynamically)\n");
     fprintf(fp, "-r         Capture request info as well\n");
     fprintf(fp, "-l <num>   Limit number of stack traces to capture (default: 0, unlimited)\n");
+    fprintf(fp, "-o <path>  Write phpspy output to path instead of stdout (default: -)\n");
+    fprintf(fp, "-O <path>  Write child stdout to path instead of stdout (default: phpspy.%%d.out)\n");
+    fprintf(fp, "-E <path>  Write child stderr to path instead of stderr (default: phpspy.%%d.err)\n");
     exit(exit_code);
 }
 
 static void parse_opts(int argc, char **argv) {
     int c;
-    while ((c = getopt(argc, argv, "hp:s:n:x:a:rl:")) != -1) {
+    while ((c = getopt(argc, argv, "hp:s:n:x:a:rl:o:O:E:")) != -1) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
             case 'p': opt_pid = atoi(optarg); break;
@@ -69,6 +78,9 @@ static void parse_opts(int argc, char **argv) {
             case 'a': opt_executor_globals_addr = strtoull(optarg, NULL, 16); break;
             case 'r': opt_capture_req = 1; break;
             case 'l': opt_trace_limit = strtoull(optarg, NULL, 10); break;
+            case 'o': opt_path_output = optarg; break;
+            case 'O': opt_path_child_out = optarg; break;
+            case 'E': opt_path_child_err = optarg; break;
         }
     }
 }
@@ -78,6 +90,8 @@ int main(int argc, char **argv) {
     struct timespec start_time, end_time, sleep_time;
 
     parse_opts(argc, argv);
+
+    open_fout();
 
     if (opt_pid == -1) {
         fork_child(argc, argv);
@@ -107,11 +121,52 @@ static void fork_child(int argc, char **argv) {
     }
     opt_pid = fork();
     if (opt_pid == 0) {
+        redirect_child_stdio(STDOUT_FILENO, opt_path_child_out);
+        redirect_child_stdio(STDERR_FILENO, opt_path_child_err);
         execvp(argv[optind], argv + optind);
         perror("execvp");
         exit(1);
     } else if (opt_pid < 0) {
         perror("fork");
+        exit(1);
+    }
+}
+
+static void redirect_child_stdio(int proc_fd, char *opt_path) {
+    char *redir_path;
+    FILE *redir_file;
+    if (strcmp(opt_path, "-") == 0) {
+        return;
+    } else if (strstr(opt_path, "%d") != NULL) {
+        if (asprintf(&redir_path, opt_path, getpid()) < 0) {
+            errno = ENOMEM;
+            perror("asprintf");
+            exit(1);
+        }
+    } else {
+        if ((redir_path = strdup(opt_path)) == NULL) {
+            perror("strdup");
+            exit(1);
+        }
+    }
+    if ((redir_file = fopen(redir_path, "w")) == NULL) {
+        perror("fopen");
+        free(redir_path);
+        exit(1);
+    }
+    dup2(fileno(redir_file), proc_fd);
+    fclose(redir_file);
+    free(redir_path);
+}
+
+static void open_fout() {
+    if (strcmp(opt_path_output, "-") == 0) {
+        fout = fdopen(STDOUT_FILENO, "w");
+    } else {
+        fout = fopen(opt_path_output, "w");
+    }
+    if (!fout) {
+        perror("fopen");
         exit(1);
     }
 }
@@ -205,7 +260,7 @@ static void dump_trace(pid_t pid, unsigned long long executor_globals_addr, unsi
             file_len = snprintf(file, sizeof(file), "<internal>");
             lineno = -1;
         }
-        printf("%d %.*s%.*s %.*s:%d%s", depth, class_len, class, func_len, func, file_len, file, lineno, opt_frame_delim);
+        fprintf(fout, "%d %.*s%.*s %.*s:%d%s", depth, class_len, class, func_len, func, file_len, file, lineno, opt_frame_delim);
         if (!wrote_trace) wrote_trace = 1;
         remote_execute_data = execute_data.prev_execute_data;
         depth += 1;
@@ -225,9 +280,9 @@ static void dump_trace(pid_t pid, unsigned long long executor_globals_addr, unsi
                 path[0] = '-';
                 path[1] = '\0';
             }
-            printf("# %f %s %s%s", sapi_globals.global_request_time, uri, path, opt_trace_delim);
+            fprintf(fout, "# %f %s %s%s", sapi_globals.global_request_time, uri, path, opt_trace_delim);
         } else {
-            printf("# - - -%s", opt_trace_delim);
+            fprintf(fout, "# - - -%s", opt_trace_delim);
         }
     }
 }
