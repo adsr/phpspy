@@ -110,10 +110,6 @@ You can use it to make flamegraphs like this:
 
 ### TODO
 
-* Add option to specify sample rate in hertz instead of micro-sec
-* Add option to grab `$_SERVER[...]` variables along with stack frame
-* Add aggregate mode
-* Add `make install` rule
-* Add tests
+* See https://github.com/adsr/phpspy/issues
 
 [0]: https://github.com/rbspy/rbspy
