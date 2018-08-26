@@ -25,8 +25,9 @@ You can use it to make flamegraphs like this:
     $ make
     cc  -Wall -Wextra -g -Ofast -I.  phpspy.c -o phpspy
     $ ./phpspy -h
-    Usage: phpspy [options] [--] <php_command>
     
+    Usage: phpspy [options] [--] <php_command>
+
     -h         Show help
     -p <pid>   Trace PHP process at pid
     -s <ns>    Sleep this many nanoseconds between traces (default: 10000000, 10ms)
@@ -35,6 +36,9 @@ You can use it to make flamegraphs like this:
     -a <hex>   Address of sapi_globals in hex (default: 0, find dynamically)
     -r         Capture request info as well
     -l <num>   Limit number of stack traces to capture (default: 0, unlimited)
+    -o <path>  Write phpspy output to path instead of stdout (default: -)
+    -O <path>  Write child stdout to path instead of stdout (default: phpspy.%d.out)
+    -E <path>  Write child stderr to path instead of stderr (default: phpspy.%d.err)
 
 ### Build options
 
