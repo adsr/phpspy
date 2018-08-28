@@ -9,6 +9,7 @@
 #include <sys/uio.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/ptrace.h>
 #include <time.h>
 
 #ifdef USE_ZEND
@@ -32,6 +33,7 @@ unsigned long long opt_trace_limit = 0;
 char *opt_path_output = "-";
 char *opt_path_child_out = "phpspy.%d.out";
 char *opt_path_child_err = "phpspy.%d.err";
+int opt_pause = 0;
 
 size_t zend_string_val_offset;
 unsigned long long executor_globals_addr;
@@ -40,6 +42,8 @@ FILE *fout = NULL;
 
 static void usage(FILE *fp, int exit_code);
 static void parse_opts(int argc, char **argv);
+static void maybe_pause_pid(pid_t pid);
+static void maybe_unpause_pid(pid_t pid);
 static void fork_child(int argc, char **argv);
 static void redirect_child_stdio(int proc_fd, char *opt_path);
 static void open_fout();
@@ -63,12 +67,13 @@ static void usage(FILE *fp, int exit_code) {
     fprintf(fp, "-o <path>  Write phpspy output to path instead of stdout (default: -)\n");
     fprintf(fp, "-O <path>  Write child stdout to path instead of stdout (default: phpspy.%%d.out)\n");
     fprintf(fp, "-E <path>  Write child stderr to path instead of stderr (default: phpspy.%%d.err)\n");
+    fprintf(fp, "-S         Pause process while reading stacktrace (not safe for production!)\n");
     exit(exit_code);
 }
 
 static void parse_opts(int argc, char **argv) {
     int c;
-    while ((c = getopt(argc, argv, "hp:s:n:x:a:rl:o:O:E:")) != -1) {
+    while ((c = getopt(argc, argv, "hp:s:n:x:a:rl:o:O:E:S")) != -1) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
             case 'p': opt_pid = atoi(optarg); break;
@@ -81,6 +86,7 @@ static void parse_opts(int argc, char **argv) {
             case 'o': opt_path_output = optarg; break;
             case 'O': opt_path_child_out = optarg; break;
             case 'E': opt_path_child_err = optarg; break;
+            case 'S': opt_pause = 1; break;
         }
     }
 }
@@ -104,7 +110,9 @@ int main(int argc, char **argv) {
     n = 0;
     while (1) {
         try_clock_gettime(&start_time);
+        maybe_pause_pid(opt_pid);
         dump_trace(opt_pid, executor_globals_addr, sapi_globals_addr);
+        maybe_unpause_pid(opt_pid);
         try_clock_gettime(&end_time);
         calc_sleep_time(&end_time, &start_time, &sleep_time);
         nanosleep(&sleep_time, NULL);
@@ -112,6 +120,26 @@ int main(int argc, char **argv) {
     }
 
     return 0;
+}
+
+static void maybe_pause_pid(pid_t pid) {
+    if (!opt_pause) return;
+    if (ptrace(PTRACE_ATTACH, pid, 0, 0) == -1) {
+        perror("ptrace");
+        exit(1);
+    }
+    if (waitpid(pid, NULL, 0) == -1) {
+        perror("waitpid");
+        exit(1);
+    }
+}
+
+static void maybe_unpause_pid(pid_t pid) {
+    if (!opt_pause) return;
+    if (ptrace(PTRACE_DETACH, pid, 0, 0) == -1) {
+        perror("ptrace");
+        exit(1);
+    }
 }
 
 static void fork_child(int argc, char **argv) {
