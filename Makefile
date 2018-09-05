@@ -2,7 +2,7 @@ phpspy_cflags:=-Wall -Wextra -g -Ofast $(CFLAGS)
 phpspy_libs:=$(LDLIBS)
 phpspy_includes:=-I.
 phpspy_defines:=
-DESTDIR?=/usr/local/bin/
+prefix?=/usr/local
 
 has_libdw   := $(shell $(LD) -ldw -o/dev/null >/dev/null 2>&1 && echo :)
 has_readelf := $(shell command -v readelf     >/dev/null 2>&1 && echo :)
@@ -30,7 +30,7 @@ phpspy: phpspy.c
 	$(CC) $(phpspy_cflags) $(phpspy_includes) $(phpspy_defines) phpspy.c -o phpspy $(phpspy_libs)
 
 install: phpspy
-	install -v -m 755 phpspy $(DESTDIR)
+	install -D -v -m 755 phpspy $(DESTDIR)$(prefix)/bin/phpspy
 
 clean:
 	rm -f phpspy
