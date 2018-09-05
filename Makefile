@@ -11,6 +11,7 @@ has_phpconf := $(shell command -v php-config  >/dev/null 2>&1 && echo :)
 ifdef USE_ZEND
   $(or $(has_phpconf), $(error Need php-config))
   phpspy_includes:=$(phpspy_includes) $$(php-config --includes)
+  phpspy_libs:=$(phpspy_libs) -L$$(php-config --prefix)/lib -lphp7
   phpspy_defines:=$(phpspy_defines) -DUSE_ZEND=1
 endif
 
