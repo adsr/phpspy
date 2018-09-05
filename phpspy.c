@@ -13,13 +13,16 @@
 #include <time.h>
 
 #ifdef USE_ZEND
-#include <zend_API.h>
+#include <main/SAPI.h>
 #else
-#include <php_structs.h>
+#include <php_structs_70.h>
+#include <php_structs_71.h>
+#include <php_structs_72.h>
+#include <php_structs_73.h>
 #endif
 
 #define STR_LEN 256
-#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define PHPSPY_MIN(a, b) ((a) < (b) ? (a) : (b))
 
 pid_t opt_pid = -1;
 long opt_sleep_ns = 10000000; // 10ms
@@ -33,12 +36,14 @@ unsigned long long opt_trace_limit = 0;
 char *opt_path_output = "-";
 char *opt_path_child_out = "phpspy.%d.out";
 char *opt_path_child_err = "phpspy.%d.err";
+char *opt_phpv = "72";
 int opt_pause = 0;
 
 size_t zend_string_val_offset;
 unsigned long long executor_globals_addr;
 unsigned long long sapi_globals_addr;
 FILE *fout = NULL;
+void (*dump_trace_ptr)(pid_t, unsigned long long, unsigned long long) = NULL;
 
 static void usage(FILE *fp, int exit_code);
 static void parse_opts(int argc, char **argv);
@@ -48,11 +53,18 @@ static void fork_child(int argc, char **argv);
 static void redirect_child_stdio(int proc_fd, char *opt_path);
 static void open_fout();
 static int find_addresses();
-static void dump_trace(pid_t pid, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr);
 static int copy_proc_mem(pid_t pid, void *raddr, void *laddr, size_t size);
 static void try_clock_gettime(struct timespec *ts);
 static void calc_sleep_time(struct timespec *end, struct timespec *start, struct timespec *sleep);
 static int get_symbol_addr(const char *symbol, unsigned long long *raddr);
+#ifdef USE_ZEND
+static void dump_trace(pid_t pid, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr);
+#else
+static void dump_trace_70(pid_t pid, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr);
+static void dump_trace_71(pid_t pid, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr);
+static void dump_trace_72(pid_t pid, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr);
+static void dump_trace_73(pid_t pid, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr);
+#endif
 
 static void usage(FILE *fp, int exit_code) {
     fprintf(fp, "Usage: phpspy [options] [--] <php_command>\n\n");
@@ -68,12 +80,13 @@ static void usage(FILE *fp, int exit_code) {
     fprintf(fp, "-O <path>  Write child stdout to path instead of stdout (default: phpspy.%%d.out)\n");
     fprintf(fp, "-E <path>  Write child stderr to path instead of stderr (default: phpspy.%%d.err)\n");
     fprintf(fp, "-S         Pause process while reading stacktrace (not safe for production!)\n");
+    fprintf(fp, "-V <ver>   Set PHP version (default: 72; supported: 70 71 72 73)\n");
     exit(exit_code);
 }
 
 static void parse_opts(int argc, char **argv) {
     int c;
-    while ((c = getopt(argc, argv, "hp:s:n:x:a:rl:o:O:E:S")) != -1) {
+    while ((c = getopt(argc, argv, "hp:s:n:x:a:rl:o:O:E:SV:")) != -1) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
             case 'p': opt_pid = atoi(optarg); break;
@@ -87,6 +100,7 @@ static void parse_opts(int argc, char **argv) {
             case 'O': opt_path_child_out = optarg; break;
             case 'E': opt_path_child_err = optarg; break;
             case 'S': opt_pause = 1; break;
+            case 'V': opt_phpv = optarg; break;
         }
     }
 }
@@ -107,11 +121,27 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
+    #ifdef USE_ZEND
+    dump_trace_ptr = dump_trace;
+    #else
+    if (strcmp("70", opt_phpv) == 0) {
+        dump_trace_ptr = dump_trace_70;
+    } else if (strcmp("71", opt_phpv) == 0) {
+        dump_trace_ptr = dump_trace_71;
+    } else if (strcmp("72", opt_phpv) == 0) {
+        dump_trace_ptr = dump_trace_72;
+    } else if (strcmp("73", opt_phpv) == 0) {
+        dump_trace_ptr = dump_trace_73;
+    } else {
+        dump_trace_ptr = dump_trace_72;
+    }
+    #endif
+
     n = 0;
     while (1) {
         try_clock_gettime(&start_time);
         maybe_pause_pid(opt_pid);
-        dump_trace(opt_pid, executor_globals_addr, sapi_globals_addr);
+        dump_trace_ptr(opt_pid, executor_globals_addr, sapi_globals_addr);
         maybe_unpause_pid(opt_pid);
         try_clock_gettime(&end_time);
         calc_sleep_time(&end_time, &start_time, &sleep_time);
@@ -206,113 +236,12 @@ static int find_addresses() {
     if (get_symbol_addr("sapi_globals", &sapi_globals_addr) != 0) {
         return 1;
     }
+    #ifdef USE_ZEND
     zend_string_val_offset = offsetof(zend_string, val);
+    #else
+    zend_string_val_offset = offsetof(zend_string_70, val);
+    #endif
     return 0;
-}
-
-static void dump_trace(pid_t pid, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr) {
-    char func[STR_LEN+1];
-    char file[STR_LEN+1];
-    char class[STR_LEN+1];
-    char uri[STR_LEN+1];
-    char path[STR_LEN+1];
-    int file_len;
-    int func_len;
-    int class_len;
-    int lineno;
-    int depth;
-    int wrote_trace;
-    zend_execute_data* remote_execute_data;
-    zend_executor_globals executor_globals;
-    zend_execute_data execute_data;
-    zend_op zop;
-    zend_class_entry zce;
-    zend_function zfunc;
-    zend_string zstring;
-    sapi_globals_struct sapi_globals;
-
-    depth = 0;
-    wrote_trace = 0;
-
-    #define try_copy_proc_mem(__what, __raddr, __laddr, __size) do {        \
-        if (copy_proc_mem(pid, (__raddr), (__laddr), (__size)) != 0) {      \
-            fprintf(stderr, "dump_trace: Failed to copy %s\n", (__what));   \
-            if (wrote_trace) printf("%s", opt_trace_delim);                 \
-            return;                                                         \
-        }                                                                   \
-    } while(0)
-
-    executor_globals.current_execute_data = NULL;
-    try_copy_proc_mem("executor_globals", (void*)executor_globals_addr, &executor_globals, sizeof(executor_globals));
-    remote_execute_data = executor_globals.current_execute_data;
-
-    while (remote_execute_data && depth != opt_max_stack_depth) {
-        memset(&execute_data, 0, sizeof(execute_data));
-        memset(&zfunc, 0, sizeof(zfunc));
-        memset(&zstring, 0, sizeof(zstring));
-        memset(&zce, 0, sizeof(zce));
-        memset(&zop, 0, sizeof(zop));
-        memset(&sapi_globals, 0, sizeof(sapi_globals));
-
-        try_copy_proc_mem("execute_data", remote_execute_data, &execute_data, sizeof(execute_data));
-        try_copy_proc_mem("zfunc", execute_data.func, &zfunc, sizeof(zfunc));
-        if (zfunc.common.function_name) {
-            try_copy_proc_mem("function_name", zfunc.common.function_name, &zstring, sizeof(zstring));
-            func_len = MIN(zstring.len, STR_LEN);
-            try_copy_proc_mem("function_name.val", ((char*)zfunc.common.function_name) + zend_string_val_offset, func, func_len);
-        } else {
-            func_len = snprintf(func, sizeof(func), "<main>");
-        }
-        if (zfunc.common.scope) {
-            try_copy_proc_mem("zce", zfunc.common.scope, &zce, sizeof(zce));
-            try_copy_proc_mem("class_name", zce.name, &zstring, sizeof(zstring));
-            class_len = MIN(zstring.len, STR_LEN);
-            try_copy_proc_mem("class_name.val", ((char*)zce.name) + zend_string_val_offset, class, class_len);
-            if (class_len+2 <= STR_LEN) {
-                class[class_len+0] = ':';
-                class[class_len+1] = ':';
-                class[class_len+2] = '\0';
-                class_len += 2;
-            }
-        } else {
-            class[0] = '\0';
-            class_len = 0;
-        }
-        if (zfunc.type == 2) {
-            try_copy_proc_mem("zop", (void*)execute_data.opline, &zop, sizeof(zop));
-            try_copy_proc_mem("filename", zfunc.op_array.filename, &zstring, sizeof(zstring));
-            file_len = MIN(zstring.len, STR_LEN);
-            try_copy_proc_mem("filename.val", ((char*)zfunc.op_array.filename) + zend_string_val_offset, file, file_len);
-            lineno = zop.lineno;
-        } else {
-            file_len = snprintf(file, sizeof(file), "<internal>");
-            lineno = -1;
-        }
-        fprintf(fout, "%d %.*s%.*s %.*s:%d%s", depth, class_len, class, func_len, func, file_len, file, lineno, opt_frame_delim);
-        if (!wrote_trace) wrote_trace = 1;
-        remote_execute_data = execute_data.prev_execute_data;
-        depth += 1;
-    }
-    if (wrote_trace) {
-        if (opt_capture_req) {
-            try_copy_proc_mem("sapi_globals", (void*)sapi_globals_addr, &sapi_globals, sizeof(sapi_globals));
-            if (sapi_globals.request_info.request_uri) {
-                try_copy_proc_mem("uri", sapi_globals.request_info.request_uri, &uri, STR_LEN+1);
-            } else {
-                uri[0] = '-';
-                uri[1] = '\0';
-            }
-            if (sapi_globals.request_info.path_translated) {
-                try_copy_proc_mem("path", sapi_globals.request_info.path_translated, &path, STR_LEN+1);
-            } else {
-                path[0] = '-';
-                path[1] = '\0';
-            }
-            fprintf(fout, "# %f %s %s%s", sapi_globals.global_request_time, uri, path, opt_trace_delim);
-        } else {
-            fprintf(fout, "# - - -%s", opt_trace_delim);
-        }
-    }
 }
 
 static int copy_proc_mem(pid_t pid, void *raddr, void *laddr, size_t size) {
@@ -332,12 +261,6 @@ static int copy_proc_mem(pid_t pid, void *raddr, void *laddr, size_t size) {
     }
     return 0;
 }
-
-#ifdef USE_LIBDW
-#include "addr_libdw.c"
-#else
-#include "addr_readelf.c"
-#endif
 
 static void try_clock_gettime(struct timespec *ts) {
     if (clock_gettime(CLOCK_MONOTONIC_RAW, ts) == -1) {
@@ -368,3 +291,26 @@ static void calc_sleep_time(struct timespec *end, struct timespec *start, struct
         sleep->tv_nsec = (long)sleep_ns - (sleep->tv_sec * 1000000000L);
     }
 }
+
+#ifdef USE_ZEND
+#include "phpspy_trace.c"
+#else
+#define phpv 70
+#include "phpspy_trace_tpl.c"
+#undef phpv
+#define phpv 71
+#include "phpspy_trace_tpl.c"
+#undef phpv
+#define phpv 72
+#include "phpspy_trace_tpl.c"
+#undef phpv
+#define phpv 73
+#include "phpspy_trace_tpl.c"
+#undef phpv
+#endif
+
+#ifdef USE_LIBDW
+#include "addr_libdw.c"
+#else
+#include "addr_readelf.c"
+#endif

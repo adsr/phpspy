@@ -39,6 +39,7 @@ You can use it to make flamegraphs like this:
     -o <path>  Write phpspy output to path instead of stdout (default: -)
     -O <path>  Write child stdout to path instead of stdout (default: phpspy.%d.out)
     -E <path>  Write child stderr to path instead of stderr (default: phpspy.%d.err)
+    -V <ver>   Set PHP version (default: 72; supported: 70 71 72 73)
 
 ### Build options
 
