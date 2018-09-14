@@ -4,6 +4,8 @@ static void dump_trace(pid_t pid, unsigned long long executor_globals_addr, unsi
     char class[STR_LEN+1];
     char uri[STR_LEN+1];
     char path[STR_LEN+1];
+    char qstring[STR_LEN+1];
+    char cookie[STR_LEN+1];
     int file_len;
     int func_len;
     int class_len;
@@ -96,7 +98,19 @@ static void dump_trace(pid_t pid, unsigned long long executor_globals_addr, unsi
                 path[0] = '-';
                 path[1] = '\0';
             }
-            fprintf(fout, "# %f %s %s%s", sapi_globals.global_request_time, uri, path, opt_trace_delim);
+            if (sapi_globals.request_info.query_string) {
+                try_copy_proc_mem("qstring", sapi_globals.request_info.query_string, &qstring, STR_LEN+1);
+            } else {
+                qstring[0] = '-';
+                qstring[1] = '\0';
+            }
+            if (sapi_globals.request_info.cookie_data) {
+                try_copy_proc_mem("cookie", sapi_globals.request_info.cookie_data, &cookie, STR_LEN+1);
+            } else {
+                cookie[0] = '-';
+                cookie[1] = '\0';
+            }
+            fprintf(fout, "# %f %s?%s %s %s%s", sapi_globals.global_request_time, uri, qstring, path, cookie, opt_trace_delim);
         } else {
             fprintf(fout, "# - - -%s", opt_trace_delim);
         }
