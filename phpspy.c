@@ -30,6 +30,10 @@ long opt_sleep_ns = 10000000; // 10ms
 unsigned long long opt_executor_globals_addr = 0;
 unsigned long long opt_sapi_globals_addr = 0;
 int opt_capture_req = 0;
+int opt_capture_req_qstring = 1;
+int opt_capture_req_cookie = 1;
+int opt_capture_req_uri = 1;
+int opt_capture_req_path = 1;
 int opt_max_stack_depth = -1;
 char *opt_frame_delim = "\n";
 char *opt_trace_delim = "\n\n";
@@ -76,6 +80,7 @@ static void usage(FILE *fp, int exit_code) {
     fprintf(fp, "-x <hex>   Address of executor_globals in hex (default: 0, find dynamically)\n");
     fprintf(fp, "-a <hex>   Address of sapi_globals in hex (default: 0, find dynamically)\n");
     fprintf(fp, "-r         Capture request info as well\n");
+    fprintf(fp, "-R <opts>  Capture request info parts (q=query c=cookie u=uri p=path) (capital=negation) (default: all)\n");
     fprintf(fp, "-l <num>   Limit number of stack traces to capture (default: 0, unlimited)\n");
     fprintf(fp, "-o <path>  Write phpspy output to path instead of stdout (default: -)\n");
     fprintf(fp, "-O <path>  Write child stdout to path instead of stdout (default: phpspy.%%d.out)\n");
@@ -88,7 +93,7 @@ static void usage(FILE *fp, int exit_code) {
 
 static void parse_opts(int argc, char **argv) {
     int c;
-    while ((c = getopt(argc, argv, "hp:s:n:x:a:rl:o:O:E:SV:1")) != -1) {
+    while ((c = getopt(argc, argv, "hp:s:n:x:a:rR:l:o:O:E:SV:1")) != -1) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
             case 'p': opt_pid = atoi(optarg); break;
@@ -97,6 +102,15 @@ static void parse_opts(int argc, char **argv) {
             case 'x': opt_executor_globals_addr = strtoull(optarg, NULL, 16); break;
             case 'a': opt_executor_globals_addr = strtoull(optarg, NULL, 16); break;
             case 'r': opt_capture_req = 1; break;
+            case 'R': strchr(optarg, 'q') ? opt_capture_req_qstring = 1 : (void)0;
+                      strchr(optarg, 'c') ? opt_capture_req_cookie  = 1 : (void)0;
+                      strchr(optarg, 'u') ? opt_capture_req_uri     = 1 : (void)0;
+                      strchr(optarg, 'p') ? opt_capture_req_path    = 1 : (void)0;
+                      strchr(optarg, 'Q') ? opt_capture_req_qstring = 0 : (void)0;
+                      strchr(optarg, 'C') ? opt_capture_req_cookie  = 0 : (void)0;
+                      strchr(optarg, 'U') ? opt_capture_req_uri     = 0 : (void)0;
+                      strchr(optarg, 'P') ? opt_capture_req_path    = 0 : (void)0;
+                      break;
             case 'l': opt_trace_limit = strtoull(optarg, NULL, 10); break;
             case 'o': opt_path_output = optarg; break;
             case 'O': opt_path_child_out = optarg; break;
