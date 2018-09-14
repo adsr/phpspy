@@ -24,6 +24,8 @@ printf "zend_op size=%lu\n", sizeof(zend_op)
 printf "  .lineno +%lu\n", offsetof(zend_op, lineno)
 printf "\n"
 printf "sapi_request_info=%lu\n", sizeof(sapi_request_info)
+printf "  .query_string +%lu\n", offsetof(sapi_request_info, query_string)
+printf "  .cookie_data +%lu\n", offsetof(sapi_request_info, cookie_data)
 printf "  .path_translated +%lu\n", offsetof(sapi_request_info, path_translated)
 printf "  .request_uri +%lu\n", offsetof(sapi_request_info, request_uri)
 printf "\n"
