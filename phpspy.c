@@ -88,12 +88,13 @@ static void usage(FILE *fp, int exit_code) {
     fprintf(fp, "-S         Pause process while reading stacktrace (not safe for production!)\n");
     fprintf(fp, "-V <ver>   Set PHP version (default: 72; supported: 70 71 72 73)\n");
     fprintf(fp, "-1         Output in single-line mode\n");
+    fprintf(fp, "-# <any>   Ignored; intended for self-documenting commands\n");
     exit(exit_code);
 }
 
 static void parse_opts(int argc, char **argv) {
     int c;
-    while ((c = getopt(argc, argv, "hp:s:n:x:a:rR:l:o:O:E:SV:1")) != -1) {
+    while ((c = getopt(argc, argv, "hp:s:n:x:a:rR:l:o:O:E:SV:1#:")) != -1) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
             case 'p': opt_pid = atoi(optarg); break;
