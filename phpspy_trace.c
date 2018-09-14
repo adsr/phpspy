@@ -87,7 +87,7 @@ static void dump_trace(pid_t pid, unsigned long long executor_globals_addr, unsi
         if (opt_capture_req) {
             try_copy_proc_mem("sapi_globals", (void*)sapi_globals_addr, &sapi_globals, sizeof(sapi_globals));
             #define try_copy_sapi_global_field(__field, __local) do {                                       \
-                if (sapi_globals.request_info.__field) {                                                    \
+                if ((opt_capture_req_ ## __local) && sapi_globals.request_info.__field) {                   \
                     try_copy_proc_mem(#__field, sapi_globals.request_info.__field, &__local, STR_LEN+1);    \
                 } else {                                                                                    \
                     __local[0] = '-';                                                                       \
