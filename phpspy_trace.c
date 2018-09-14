@@ -86,33 +86,22 @@ static void dump_trace(pid_t pid, unsigned long long executor_globals_addr, unsi
     if (wrote_trace) {
         if (opt_capture_req) {
             try_copy_proc_mem("sapi_globals", (void*)sapi_globals_addr, &sapi_globals, sizeof(sapi_globals));
-            if (sapi_globals.request_info.request_uri) {
-                try_copy_proc_mem("uri", sapi_globals.request_info.request_uri, &uri, STR_LEN+1);
-            } else {
-                uri[0] = '-';
-                uri[1] = '\0';
-            }
-            if (sapi_globals.request_info.path_translated) {
-                try_copy_proc_mem("path", sapi_globals.request_info.path_translated, &path, STR_LEN+1);
-            } else {
-                path[0] = '-';
-                path[1] = '\0';
-            }
-            if (sapi_globals.request_info.query_string) {
-                try_copy_proc_mem("qstring", sapi_globals.request_info.query_string, &qstring, STR_LEN+1);
-            } else {
-                qstring[0] = '-';
-                qstring[1] = '\0';
-            }
-            if (sapi_globals.request_info.cookie_data) {
-                try_copy_proc_mem("cookie", sapi_globals.request_info.cookie_data, &cookie, STR_LEN+1);
-            } else {
-                cookie[0] = '-';
-                cookie[1] = '\0';
-            }
-            fprintf(fout, "# %f %s?%s %s %s%s", sapi_globals.global_request_time, uri, qstring, path, cookie, opt_trace_delim);
+            #define try_copy_sapi_global_field(__field, __local) do {                                       \
+                if (sapi_globals.request_info.__field) {                                                    \
+                    try_copy_proc_mem(#__field, sapi_globals.request_info.__field, &__local, STR_LEN+1);    \
+                } else {                                                                                    \
+                    __local[0] = '-';                                                                       \
+                    __local[1] = '\0';                                                                      \
+                }                                                                                           \
+            } while (0)
+            try_copy_sapi_global_field(query_string, qstring);
+            try_copy_sapi_global_field(cookie_data, cookie);
+            try_copy_sapi_global_field(request_uri, uri);
+            try_copy_sapi_global_field(path_translated, path);
+            #undef try_copy_sapi_global_field
+            fprintf(fout, "# %f %s %s %s %s%s", sapi_globals.global_request_time, uri, qstring, path, cookie, opt_trace_delim);
         } else {
-            fprintf(fout, "# - - -%s", opt_trace_delim);
+            fprintf(fout, "# - - - - -%s", opt_trace_delim);
         }
     }
 
