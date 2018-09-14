@@ -6,6 +6,7 @@
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
+#include <limits.h>
 #include <sys/uio.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -225,6 +226,7 @@ static void open_fout() {
     } else {
         fout = fopen(opt_path_output, "w");
     }
+    setvbuf(fout, NULL, _IOLBF, PIPE_BUF);
     if (!fout) {
         perror("fopen");
         exit(1);
