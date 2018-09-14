@@ -59,7 +59,10 @@ struct __attribute__((__packed__)) _zend_op_70 {
 };
 
 struct __attribute__((__packed__)) _sapi_request_info_70 {
-    uint8_t pad0[32];                           // 0        +32
+    uint8_t pad0[8];                            // 0        +8
+    char *query_string;                         // 8        +8
+    char *cookie_data;                          // 16       +8
+    uint8_t pad1[8];                            // 24       +8
     char *path_translated;                      // 32       +8
     char *request_uri;                          // 40       +8
 };
