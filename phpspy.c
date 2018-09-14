@@ -81,12 +81,13 @@ static void usage(FILE *fp, int exit_code) {
     fprintf(fp, "-E <path>  Write child stderr to path instead of stderr (default: phpspy.%%d.err)\n");
     fprintf(fp, "-S         Pause process while reading stacktrace (not safe for production!)\n");
     fprintf(fp, "-V <ver>   Set PHP version (default: 72; supported: 70 71 72 73)\n");
+    fprintf(fp, "-1         Output in single-line mode\n");
     exit(exit_code);
 }
 
 static void parse_opts(int argc, char **argv) {
     int c;
-    while ((c = getopt(argc, argv, "hp:s:n:x:a:rl:o:O:E:SV:")) != -1) {
+    while ((c = getopt(argc, argv, "hp:s:n:x:a:rl:o:O:E:SV:1")) != -1) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
             case 'p': opt_pid = atoi(optarg); break;
@@ -101,6 +102,7 @@ static void parse_opts(int argc, char **argv) {
             case 'E': opt_path_child_err = optarg; break;
             case 'S': opt_pause = 1; break;
             case 'V': opt_phpv = optarg; break;
+            case '1': opt_frame_delim = "\t"; opt_trace_delim = "\n"; break;
         }
     }
 }
