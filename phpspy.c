@@ -27,6 +27,8 @@
 #define PHPSPY_MIN(a, b) ((a) < (b) ? (a) : (b))
 
 pid_t opt_pid = -1;
+char *opt_pgrep_args = NULL;
+int opt_num_workers = 16;
 long opt_sleep_ns = 10000000; // 10ms, 100Hz
 unsigned long long opt_executor_globals_addr = 0;
 unsigned long long opt_sapi_globals_addr = 0;
@@ -45,17 +47,19 @@ char *opt_path_child_err = "phpspy.%d.err";
 char *opt_phpv = "72";
 int opt_pause = 0;
 
-size_t zend_string_val_offset;
-unsigned long long executor_globals_addr;
-unsigned long long sapi_globals_addr;
+size_t zend_string_val_offset = 0;
+unsigned long long executor_globals_addr = 0;
+unsigned long long sapi_globals_addr = 0;
 FILE *fout = NULL;
 void (*dump_trace_ptr)(pid_t, unsigned long long, unsigned long long) = NULL;
 
 static void usage(FILE *fp, int exit_code);
 static void parse_opts(int argc, char **argv);
+extern int main_pid();
+extern int main_pgrep();
+static int main_fork(int argc, char **argv);
 static void maybe_pause_pid(pid_t pid);
 static void maybe_unpause_pid(pid_t pid);
-static void fork_child(int argc, char **argv);
 static void redirect_child_stdio(int proc_fd, char *opt_path);
 static void open_fout();
 static int find_addresses();
@@ -76,6 +80,8 @@ static void usage(FILE *fp, int exit_code) {
     fprintf(fp, "Usage: phpspy [options] [--] <php_command>\n\n");
     fprintf(fp, "-h         Show help\n");
     fprintf(fp, "-p <pid>   Trace PHP process at `pid`\n");
+    fprintf(fp, "-P <args>  Concurrently trace processes that match pgrep `args` (see also `-N`)\n");
+    fprintf(fp, "-N <num>   Set max concurrent workers to use with `-P` (default: 16)\n");
     fprintf(fp, "-s <ns>    Sleep `ns` nanoseconds between traces (see also `-H`) (default: 10000000, 10ms)\n");
     fprintf(fp, "-H <hz>    Trace `hz` times per second (see also `-s`) (default: 100hz)\n");
     fprintf(fp, "-n <max>   Set max stack trace depth to `max` (default: -1, unlimited)\n");
@@ -98,10 +104,12 @@ static void usage(FILE *fp, int exit_code) {
 static void parse_opts(int argc, char **argv) {
     int c;
     size_t i;
-    while ((c = getopt(argc, argv, "hp:s:H:n:x:a:rR:l:o:O:E:SV:1#:v")) != -1) {
+    while ((c = getopt(argc, argv, "hp:P:N:s:H:n:x:a:rR:l:o:O:E:SV:1#:v")) != -1) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
             case 'p': opt_pid = atoi(optarg); break;
+            case 'P': opt_pgrep_args = optarg; break;
+            case 'N': opt_num_workers = atoi(optarg); break;
             case 's': opt_sleep_ns = strtol(optarg, NULL, 10); break;
             case 'H': opt_sleep_ns = (1000000000ULL / strtol(optarg, NULL, 10)); break;
             case 'n': opt_max_stack_depth = atoi(optarg); break;
@@ -150,16 +158,26 @@ static void parse_opts(int argc, char **argv) {
 }
 
 int main(int argc, char **argv) {
+    parse_opts(argc, argv);
+    open_fout();
+
+    if (opt_pid != -1) {
+        return main_pid();
+    } else if (opt_pgrep_args != NULL) {
+        return main_pgrep();
+    } else if (optind < argc) {
+        return main_fork(argc, argv);
+    }
+
+    fprintf(stderr, "Expected pid (-p), pgrep (-P), or command\n\n");
+    usage(stderr, 1);
+    return 1;
+}
+
+int main_pid() {
     unsigned long long n;
     struct timespec start_time, end_time, sleep_time;
 
-    parse_opts(argc, argv);
-
-    open_fout();
-
-    if (opt_pid == -1) {
-        fork_child(argc, argv);
-    }
     if (find_addresses()) {
         waitpid(opt_pid, NULL, 0);
         exit(1);
@@ -196,6 +214,22 @@ int main(int argc, char **argv) {
     return 0;
 }
 
+static int main_fork(int argc, char **argv) {
+    (void)argc;
+    opt_pid = fork();
+    if (opt_pid == 0) {
+        redirect_child_stdio(STDOUT_FILENO, opt_path_child_out);
+        redirect_child_stdio(STDERR_FILENO, opt_path_child_err);
+        execvp(argv[optind], argv + optind);
+        perror("execvp");
+        exit(1);
+    } else if (opt_pid < 0) {
+        perror("fork");
+        exit(1);
+    }
+    return main_pid();
+}
+
 static void maybe_pause_pid(pid_t pid) {
     if (!opt_pause) return;
     if (ptrace(PTRACE_ATTACH, pid, 0, 0) == -1) {
@@ -212,24 +246,6 @@ static void maybe_unpause_pid(pid_t pid) {
     if (!opt_pause) return;
     if (ptrace(PTRACE_DETACH, pid, 0, 0) == -1) {
         perror("ptrace");
-        exit(1);
-    }
-}
-
-static void fork_child(int argc, char **argv) {
-    if (optind >= argc) {
-        fprintf(stderr, "Expected pid (-p) or command\n\n");
-        usage(stderr, 1);
-    }
-    opt_pid = fork();
-    if (opt_pid == 0) {
-        redirect_child_stdio(STDOUT_FILENO, opt_path_child_out);
-        redirect_child_stdio(STDERR_FILENO, opt_path_child_err);
-        execvp(argv[optind], argv + optind);
-        perror("execvp");
-        exit(1);
-    } else if (opt_pid < 0) {
-        perror("fork");
         exit(1);
     }
 }
@@ -272,6 +288,7 @@ static void open_fout() {
         perror("fopen");
         exit(1);
     }
+    // TODO fclose(fout)
 }
 
 static int find_addresses() {

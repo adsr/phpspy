@@ -15,7 +15,7 @@ You can use it to make flamegraphs like this:
     ...
     $ cd phpspy
     $ make
-    cc  -Wall -Wextra -g -Ofast -I.  phpspy.c -o phpspy
+    cc  -Wall -Wextra -g -Ofast -pthread -I.  phpspy.c -o phpspy
     $ sudo ./phpspy -l 1000 -p $(pgrep -n httpd) | ./stackcollapse-phpspy.pl | ./flamegraph.pl > flame.svg
     ...
     $ google-chrome flame.svg # view flame.svg in browser
@@ -25,11 +25,12 @@ You can use it to make flamegraphs like this:
     $ make
     cc  -Wall -Wextra -g -Ofast -I.  phpspy.c -o phpspy
     $ ./phpspy -h
-
     Usage: phpspy [options] [--] <php_command>
 
     -h         Show help
     -p <pid>   Trace PHP process at `pid`
+    -P <args>  Concurrently trace processes that match pgrep `args` (see also `-N`)
+    -N <num>   Set max concurrent workers to use with `-P` (default: 16)
     -s <ns>    Sleep `ns` nanoseconds between traces (see also `-H`) (default: 10000000, 10ms)
     -H <hz>    Trace `hz` times per second (see also `-s`) (default: 100hz)
     -n <max>   Set max stack trace depth to `max` (default: -1, unlimited)
