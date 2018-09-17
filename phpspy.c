@@ -22,6 +22,7 @@
 #include <php_structs_73.h>
 #endif
 
+#define PHPSPY_VERSION "0.1"
 #define STR_LEN 256
 #define PHPSPY_MIN(a, b) ((a) < (b) ? (a) : (b))
 
@@ -90,13 +91,14 @@ static void usage(FILE *fp, int exit_code) {
     fprintf(fp, "-V <ver>   Set PHP version (default: 72; supported: 70 71 72 73)\n");
     fprintf(fp, "-1         Output in single-line mode\n");
     fprintf(fp, "-# <any>   Ignored; intended for self-documenting commands\n");
+    fprintf(fp, "-v         Print phpspy version and exit\n");
     exit(exit_code);
 }
 
 static void parse_opts(int argc, char **argv) {
     int c;
     size_t i;
-    while ((c = getopt(argc, argv, "hp:s:H:n:x:a:rR:l:o:O:E:SV:1#:")) != -1) {
+    while ((c = getopt(argc, argv, "hp:s:H:n:x:a:rR:l:o:O:E:SV:1#:v")) != -1) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
             case 'p': opt_pid = atoi(optarg); break;
@@ -127,6 +129,22 @@ static void parse_opts(int argc, char **argv) {
             case 'S': opt_pause = 1; break;
             case 'V': opt_phpv = optarg; break;
             case '1': opt_frame_delim = "\t"; opt_trace_delim = "\n"; break;
+            case 'v':
+                printf(
+                    "phpspy v%s USE_ZEND=%s USE_LIBDW=%s\n",
+                    PHPSPY_VERSION,
+                    #ifdef USE_ZEND
+                    "y",
+                    #else
+                    "n",
+                    #endif
+                    #ifdef USE_LIBDW
+                    "y"
+                    #else
+                    "n"
+                    #endif
+                );
+                exit(0);
         }
     }
 }
