@@ -74,18 +74,18 @@ static void dump_trace_73(pid_t pid, unsigned long long executor_globals_addr, u
 static void usage(FILE *fp, int exit_code) {
     fprintf(fp, "Usage: phpspy [options] [--] <php_command>\n\n");
     fprintf(fp, "-h         Show help\n");
-    fprintf(fp, "-p <pid>   Trace PHP process at pid\n");
-    fprintf(fp, "-s <ns>    Sleep this many nanoseconds between traces (default: 10000000, 10ms)\n");
-    fprintf(fp, "-H <hz>    The rate at which frequency traces are recorded (default: 100hz)\n");
+    fprintf(fp, "-p <pid>   Trace PHP process at `pid`\n");
+    fprintf(fp, "-s <ns>    Sleep `ns` nanoseconds between traces (see also `-H`) (default: 10000000, 10ms)\n");
+    fprintf(fp, "-H <hz>    Trace `hz` times per second (see also `-s`) (default: 100hz)\n");
     fprintf(fp, "-n <max>   Set max stack trace depth to `max` (default: -1, unlimited)\n");
     fprintf(fp, "-x <hex>   Address of executor_globals in hex (default: 0, find dynamically)\n");
     fprintf(fp, "-a <hex>   Address of sapi_globals in hex (default: 0, find dynamically)\n");
     fprintf(fp, "-r         Capture request info as well\n");
     fprintf(fp, "-R <opts>  Capture request info parts (q=query c=cookie u=uri p=path) (capital=negation) (default: all)\n");
     fprintf(fp, "-l <num>   Limit number of stack traces to capture (default: 0, unlimited)\n");
-    fprintf(fp, "-o <path>  Write phpspy output to path instead of stdout (default: -)\n");
-    fprintf(fp, "-O <path>  Write child stdout to path instead of stdout (default: phpspy.%%d.out)\n");
-    fprintf(fp, "-E <path>  Write child stderr to path instead of stderr (default: phpspy.%%d.err)\n");
+    fprintf(fp, "-o <path>  Write phpspy output to `path` instead of stdout (default: -)\n");
+    fprintf(fp, "-O <path>  Write child stdout to `path` instead of stdout (default: phpspy.%%d.out)\n");
+    fprintf(fp, "-E <path>  Write child stderr to `path` instead of stderr (default: phpspy.%%d.err)\n");
     fprintf(fp, "-S         Pause process while reading stacktrace (not safe for production!)\n");
     fprintf(fp, "-V <ver>   Set PHP version (default: 72; supported: 70 71 72 73)\n");
     fprintf(fp, "-1         Output in single-line mode\n");
