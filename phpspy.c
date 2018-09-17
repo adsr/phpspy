@@ -95,6 +95,7 @@ static void usage(FILE *fp, int exit_code) {
 
 static void parse_opts(int argc, char **argv) {
     int c;
+    size_t i;
     while ((c = getopt(argc, argv, "hp:s:H:n:x:a:rR:l:o:O:E:SV:1#:")) != -1) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
@@ -105,15 +106,20 @@ static void parse_opts(int argc, char **argv) {
             case 'x': opt_executor_globals_addr = strtoull(optarg, NULL, 16); break;
             case 'a': opt_sapi_globals_addr = strtoull(optarg, NULL, 16); break;
             case 'r': opt_capture_req = 1; break;
-            case 'R': strchr(optarg, 'q') ? opt_capture_req_qstring = 1 : (void)0;
-                      strchr(optarg, 'c') ? opt_capture_req_cookie  = 1 : (void)0;
-                      strchr(optarg, 'u') ? opt_capture_req_uri     = 1 : (void)0;
-                      strchr(optarg, 'p') ? opt_capture_req_path    = 1 : (void)0;
-                      strchr(optarg, 'Q') ? opt_capture_req_qstring = 0 : (void)0;
-                      strchr(optarg, 'C') ? opt_capture_req_cookie  = 0 : (void)0;
-                      strchr(optarg, 'U') ? opt_capture_req_uri     = 0 : (void)0;
-                      strchr(optarg, 'P') ? opt_capture_req_path    = 0 : (void)0;
-                      break;
+            case 'R':
+                for (i = 0; i < strlen(optarg); i++) {
+                    switch (optarg[i]) {
+                        case 'q': opt_capture_req_qstring = 1; break;
+                        case 'c': opt_capture_req_cookie  = 1; break;
+                        case 'u': opt_capture_req_uri     = 1; break;
+                        case 'p': opt_capture_req_path    = 1; break;
+                        case 'Q': opt_capture_req_qstring = 0; break;
+                        case 'C': opt_capture_req_cookie  = 0; break;
+                        case 'U': opt_capture_req_uri     = 0; break;
+                        case 'P': opt_capture_req_path    = 0; break;
+                    }
+                }
+                break;
             case 'l': opt_trace_limit = strtoull(optarg, NULL, 10); break;
             case 'o': opt_path_output = optarg; break;
             case 'O': opt_path_child_out = optarg; break;
