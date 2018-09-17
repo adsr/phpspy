@@ -45,6 +45,7 @@ You can use it to make flamegraphs like this:
     -V <ver>   Set PHP version (default: 72; supported: 70 71 72 73)
     -1         Output in single-line mode
     -# <any>   Ignored; intended for self-documenting commands
+    -v         Print phpspy version and exit
 
 ### Build options
 
