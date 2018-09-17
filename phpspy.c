@@ -26,7 +26,7 @@
 #define PHPSPY_MIN(a, b) ((a) < (b) ? (a) : (b))
 
 pid_t opt_pid = -1;
-long opt_sleep_ns = 10000000; // 10ms
+long opt_sleep_ns = 10000000; // 10ms, 100Hz
 unsigned long long opt_executor_globals_addr = 0;
 unsigned long long opt_sapi_globals_addr = 0;
 int opt_capture_req = 0;
@@ -76,6 +76,7 @@ static void usage(FILE *fp, int exit_code) {
     fprintf(fp, "-h         Show help\n");
     fprintf(fp, "-p <pid>   Trace PHP process at pid\n");
     fprintf(fp, "-s <ns>    Sleep this many nanoseconds between traces (default: 10000000, 10ms)\n");
+    fprintf(fp, "-H <hz>    The rate at which frequency traces are recorded (default: 100hz)\n");
     fprintf(fp, "-n <max>   Set max stack trace depth to `max` (default: -1, unlimited)\n");
     fprintf(fp, "-x <hex>   Address of executor_globals in hex (default: 0, find dynamically)\n");
     fprintf(fp, "-a <hex>   Address of sapi_globals in hex (default: 0, find dynamically)\n");
@@ -94,11 +95,12 @@ static void usage(FILE *fp, int exit_code) {
 
 static void parse_opts(int argc, char **argv) {
     int c;
-    while ((c = getopt(argc, argv, "hp:s:n:x:a:rR:l:o:O:E:SV:1#:")) != -1) {
+    while ((c = getopt(argc, argv, "hp:s:H:n:x:a:rR:l:o:O:E:SV:1#:")) != -1) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
             case 'p': opt_pid = atoi(optarg); break;
             case 's': opt_sleep_ns = strtol(optarg, NULL, 10); break;
+            case 'H': opt_sleep_ns = (1000000000ULL / strtol(optarg, NULL, 10)); break;
             case 'n': opt_max_stack_depth = atoi(optarg); break;
             case 'x': opt_executor_globals_addr = strtoull(optarg, NULL, 16); break;
             case 'a': opt_executor_globals_addr = strtoull(optarg, NULL, 16); break;
