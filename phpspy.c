@@ -103,7 +103,7 @@ static void parse_opts(int argc, char **argv) {
             case 'H': opt_sleep_ns = (1000000000ULL / strtol(optarg, NULL, 10)); break;
             case 'n': opt_max_stack_depth = atoi(optarg); break;
             case 'x': opt_executor_globals_addr = strtoull(optarg, NULL, 16); break;
-            case 'a': opt_executor_globals_addr = strtoull(optarg, NULL, 16); break;
+            case 'a': opt_sapi_globals_addr = strtoull(optarg, NULL, 16); break;
             case 'r': opt_capture_req = 1; break;
             case 'R': strchr(optarg, 'q') ? opt_capture_req_qstring = 1 : (void)0;
                       strchr(optarg, 'c') ? opt_capture_req_cookie  = 1 : (void)0;
@@ -251,10 +251,14 @@ static void open_fout() {
 }
 
 static int find_addresses() {
-    if (get_symbol_addr("executor_globals", &executor_globals_addr) != 0) {
+    if (opt_executor_globals_addr != 0) {
+        executor_globals_addr = opt_executor_globals_addr;
+    } else if (get_symbol_addr("executor_globals", &executor_globals_addr) != 0) {
         return 1;
     }
-    if (get_symbol_addr("sapi_globals", &sapi_globals_addr) != 0) {
+    if (opt_sapi_globals_addr != 0) {
+        sapi_globals_addr = opt_sapi_globals_addr;
+    } else if (get_symbol_addr("sapi_globals", &sapi_globals_addr) != 0) {
         return 1;
     }
     #ifdef USE_ZEND
