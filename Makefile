@@ -1,12 +1,15 @@
-phpspy_cflags:=-Wall -Wextra -g -Ofast $(CFLAGS)
+phpspy_cflags:=-Wall -Wextra -g -Ofast -pthread $(CFLAGS)
 phpspy_libs:=$(LDLIBS)
 phpspy_includes:=-I.
 phpspy_defines:=
 prefix?=/usr/local
 
-has_libdw   := $(shell $(LD) -ldw -o/dev/null >/dev/null 2>&1 && echo :)
-has_readelf := $(shell command -v readelf     >/dev/null 2>&1 && echo :)
-has_phpconf := $(shell command -v php-config  >/dev/null 2>&1 && echo :)
+has_libdw   := $(shell $(LD) -ldw -o/dev/null 		>/dev/null 2>&1 && echo :)
+has_pthread := $(shell $(LD) -lpthread -o/dev/null	>/dev/null 2>&1 && echo :)
+has_readelf := $(shell command -v readelf     		>/dev/null 2>&1 && echo :)
+has_phpconf := $(shell command -v php-config  		>/dev/null 2>&1 && echo :)
+
+$(or $(has_pthread), $(error Need libpthread))
 
 ifdef USE_ZEND
   $(or $(has_phpconf), $(error Need php-config))
@@ -25,9 +28,9 @@ phpspy_libdw: phpspy
 phpspy_readelf: check=$(or $(has_readelf), $(error Need readelf))
 phpspy_readelf: phpspy
 
-phpspy: phpspy.c
+phpspy: phpspy.c pgrep.c
 	@$(check)
-	$(CC) $(phpspy_cflags) $(phpspy_includes) $(phpspy_defines) phpspy.c -o phpspy $(phpspy_libs)
+	$(CC) $(phpspy_cflags) $(phpspy_includes) $(phpspy_defines) $? -o phpspy $(phpspy_libs)
 
 install: phpspy
 	install -D -v -m 755 phpspy $(DESTDIR)$(prefix)/bin/phpspy
