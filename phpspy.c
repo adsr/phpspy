@@ -51,6 +51,7 @@ size_t zend_string_val_offset = 0;
 unsigned long long executor_globals_addr = 0;
 unsigned long long sapi_globals_addr = 0;
 FILE *fout = NULL;
+int done = 0;
 void (*dump_trace_ptr)(pid_t, unsigned long long, unsigned long long) = NULL;
 
 static void usage(FILE *fp, int exit_code);
@@ -200,7 +201,7 @@ int main_pid() {
     #endif
 
     n = 0;
-    while (1) {
+    while (!done) {
         try_clock_gettime(&start_time);
         maybe_pause_pid(opt_pid);
         dump_trace_ptr(opt_pid, executor_globals_addr, sapi_globals_addr);

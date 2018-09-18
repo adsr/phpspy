@@ -13,6 +13,7 @@ extern int main_pid();
 extern int opt_num_workers;
 extern char *opt_pgrep_args;
 extern int opt_pid;
+extern int done;
 
 static int wait_for_turn(char producer_or_consumer);
 static void pgrep_for_pids();
@@ -29,7 +30,6 @@ int avail_pids_count = 0;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t can_produce = PTHREAD_COND_INITIALIZER;
 pthread_cond_t can_consume = PTHREAD_COND_INITIALIZER;
-int done = 0;
 
 int main_pgrep() {
     long i;
