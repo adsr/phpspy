@@ -6,6 +6,7 @@
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
+#include <getopt.h>
 #include <limits.h>
 #include <sys/uio.h>
 #include <sys/types.h>
@@ -78,44 +79,87 @@ static void dump_trace_73(pid_t pid, unsigned long long executor_globals_addr, u
 #endif
 
 static void usage(FILE *fp, int exit_code) {
-    fprintf(fp, "Usage: phpspy [options] [--] <php_command>\n\n");
-    fprintf(fp, "-h         Show help\n");
-    fprintf(fp, "-p <pid>   Trace PHP process at `pid`\n");
-    fprintf(fp, "-P <args>  Concurrently trace processes that match pgrep `args` (see also `-N`)\n");
-    fprintf(fp, "-N <num>   Set max concurrent workers to use with `-P` (default: 16)\n");
-    fprintf(fp, "-s <ns>    Sleep `ns` nanoseconds between traces (see also `-H`) (default: 10000000, 10ms)\n");
-    fprintf(fp, "-H <hz>    Trace `hz` times per second (see also `-s`) (default: 100hz)\n");
-    fprintf(fp, "-n <max>   Set max stack trace depth to `max` (default: -1, unlimited)\n");
-    fprintf(fp, "-x <hex>   Address of executor_globals in hex (default: 0, find dynamically)\n");
-    fprintf(fp, "-a <hex>   Address of sapi_globals in hex (default: 0, find dynamically)\n");
-    fprintf(fp, "-r         Capture request info as well\n");
-    fprintf(fp, "-R <opts>  Capture request info parts (q=query c=cookie u=uri p=path) (capital=negation) (default: all)\n");
-    fprintf(fp, "-l <num>   Limit number of stack traces to capture (default: 0, unlimited)\n");
-    fprintf(fp, "-o <path>  Write phpspy output to `path` instead of stdout (default: -)\n");
-    fprintf(fp, "-O <path>  Write child stdout to `path` instead of stdout (default: phpspy.%%d.out)\n");
-    fprintf(fp, "-E <path>  Write child stderr to `path` instead of stderr (default: phpspy.%%d.err)\n");
-    fprintf(fp, "-S         Pause process while reading stacktrace (not safe for production!)\n");
-    fprintf(fp, "-V <ver>   Set PHP version (default: 72; supported: 70 71 72 73)\n");
-    fprintf(fp, "-1         Output in single-line mode\n");
-    fprintf(fp, "-# <any>   Ignored; intended for self-documenting commands\n");
-    fprintf(fp, "-v         Print phpspy version and exit\n");
+    fprintf(fp, "Usage:\n");
+    fprintf(fp, "  phpspy [options] -p <pid>\n");
+    fprintf(fp, "  phpspy [options] -P <pgrep-args>\n");
+    fprintf(fp, "  phpspy [options] -- <cmd>\n");
+    fprintf(fp, "\n");
+    fprintf(fp, "Options:\n");
+    fprintf(fp, "  -h, --help                         Show this help\n");
+    fprintf(fp, "  -p, --pid=<pid>                    Trace PHP process at `pid`\n");
+    fprintf(fp, "  -P, --pgrep=<args>                 Concurrently trace processes that match\n");
+    fprintf(fp, "                                       pgrep `args` (see also `-N`)\n");
+    fprintf(fp, "  -T, --threads=<num>                Set number of threads to use with `-P`\n");
+    fprintf(fp, "                                       (default: %d)\n", opt_num_workers);
+    fprintf(fp, "  -s, --sleep-ns=<ns>                Sleep `ns` nanoseconds between traces\n");
+    fprintf(fp, "                                       (see also `-H`) (default: %ld)\n", opt_sleep_ns);
+    fprintf(fp, "  -H, --rate-hz=<hz>                 Trace `hz` times per second\n");
+    fprintf(fp, "                                       (see also `-s`) (default: %llu)\n", 1000000000ULL/opt_sleep_ns);
+    fprintf(fp, "  -V, --php-version=<ver>            Set PHP version\n");
+    fprintf(fp, "                                       (default: %s; supported: 70 71 72 73)\n", opt_phpv);
+    fprintf(fp, "  -l, --limit=<num>                  Limit total number of traces to capture\n");
+    fprintf(fp, "                                       (default: %llu; 0=unlimited)\n", opt_trace_limit);
+    fprintf(fp, "  -n, --max-depth=<max>              Set max stack trace depth\n");
+    fprintf(fp, "                                       (default: %d; -1=unlimited)\n", opt_max_stack_depth);
+    fprintf(fp, "  -r, --request-info                 Capture request info as well as traces\n");
+    fprintf(fp, "  -R, --request-info-opts=<opts>     Set request info parts to capture (q=query\n");
+    fprintf(fp, "                                       c=cookie u=uri p=path) (capital=negation)\n");
+    fprintf(fp, "                                       (default: qcup, all)\n");
+    fprintf(fp, "  -o, --output=<path>                Write phpspy output to `path`\n");
+    fprintf(fp, "                                       (default: %s; -=stdout)\n", opt_path_output);
+    fprintf(fp, "  -O, --child-stdout=<path>          Write child stdout to `path`\n");
+    fprintf(fp, "                                       (default: %s)\n", opt_path_child_out);
+    fprintf(fp, "  -E, --child-stderr=<path>          Write child stderr to `path`\n");
+    fprintf(fp, "                                       (default: %s)\n", opt_path_child_err);
+    fprintf(fp, "  -x, --addr-executor-globals=<hex>  Set address of executor_globals in hex\n");
+    fprintf(fp, "                                       (default: %llu, 0=find dynamically)\n", opt_sapi_globals_addr);
+    fprintf(fp, "  -a, --addr-sapi-globals=<hex>      Set address of sapi_globals in hex\n");
+    fprintf(fp, "                                       (default: %llu; 0=find dynamically)\n", opt_executor_globals_addr);
+    fprintf(fp, "  -S, --pause-process                Pause process while reading stacktrace\n");
+    fprintf(fp, "                                       (unsafe for production!)\n");
+    fprintf(fp, "  -1, --single-line                  Output in single-line mode\n");
+    fprintf(fp, "  -#, --comment=<any>                Ignored; intended for self-documenting\n");
+    fprintf(fp, "                                       commands\n");
+    fprintf(fp, "  -v, --version                      Print phpspy version and exit\n");
     exit(exit_code);
 }
 
 static void parse_opts(int argc, char **argv) {
     int c;
     size_t i;
-    while ((c = getopt(argc, argv, "hp:P:N:s:H:n:x:a:rR:l:o:O:E:SV:1#:v")) != -1) {
+    struct option long_opts[] = {
+        { "help",                  no_argument,       NULL, 'h' },
+        { "pid",                   required_argument, NULL, 'p' },
+        { "pgrep",                 required_argument, NULL, 'P' },
+        { "threads",               required_argument, NULL, 'T' },
+        { "sleep-ns",              required_argument, NULL, 's' },
+        { "rate-hz",               required_argument, NULL, 'H' },
+        { "php-version",           required_argument, NULL, 'V' },
+        { "limit",                 required_argument, NULL, 'l' },
+        { "max-depth",             required_argument, NULL, 'n' },
+        { "request-info",          no_argument,       NULL, 'r' },
+        { "request-info-opts",     required_argument, NULL, 'R' },
+        { "output",                required_argument, NULL, 'o' },
+        { "child-stdout",          required_argument, NULL, 'O' },
+        { "child-stderr",          required_argument, NULL, 'E' },
+        { "addr-executor-globals", required_argument, NULL, 'x' },
+        { "addr-sapi-globals",     required_argument, NULL, 'a' },
+        { "single-line",           no_argument,       NULL, '1' },
+        { "comment",               optional_argument, NULL, '#' },
+        { "version",               no_argument,       NULL, 'v' },
+        { 0,                       0,                 0,    0   }
+    };
+    while ((c = getopt_long(argc, argv, "hp:P:T:s:H:V:l:n:rR:o:O:E:x:a:S1#:v", long_opts, NULL)) != -1) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
             case 'p': opt_pid = atoi(optarg); break;
             case 'P': opt_pgrep_args = optarg; break;
-            case 'N': opt_num_workers = atoi(optarg); break;
+            case 'T': opt_num_workers = atoi(optarg); break;
             case 's': opt_sleep_ns = strtol(optarg, NULL, 10); break;
             case 'H': opt_sleep_ns = (1000000000ULL / strtol(optarg, NULL, 10)); break;
+            case 'V': opt_phpv = optarg; break;
+            case 'l': opt_trace_limit = strtoull(optarg, NULL, 10); break;
             case 'n': opt_max_stack_depth = atoi(optarg); break;
-            case 'x': opt_executor_globals_addr = strtoull(optarg, NULL, 16); break;
-            case 'a': opt_sapi_globals_addr = strtoull(optarg, NULL, 16); break;
             case 'r': opt_capture_req = 1; break;
             case 'R':
                 for (i = 0; i < strlen(optarg); i++) {
@@ -131,13 +175,14 @@ static void parse_opts(int argc, char **argv) {
                     }
                 }
                 break;
-            case 'l': opt_trace_limit = strtoull(optarg, NULL, 10); break;
             case 'o': opt_path_output = optarg; break;
             case 'O': opt_path_child_out = optarg; break;
             case 'E': opt_path_child_err = optarg; break;
+            case 'x': opt_executor_globals_addr = strtoull(optarg, NULL, 16); break;
+            case 'a': opt_sapi_globals_addr = strtoull(optarg, NULL, 16); break;
             case 'S': opt_pause = 1; break;
-            case 'V': opt_phpv = optarg; break;
             case '1': opt_frame_delim = "\t"; opt_trace_delim = "\n"; break;
+            case '#': break;
             case 'v':
                 printf(
                     "phpspy v%s USE_ZEND=%s USE_LIBDW=%s\n",
