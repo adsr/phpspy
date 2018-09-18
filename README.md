@@ -25,28 +25,48 @@ You can use it to make flamegraphs like this:
     $ make
     cc  -Wall -Wextra -g -Ofast -I.  phpspy.c -o phpspy
     $ ./phpspy -h
-    Usage: phpspy [options] [--] <php_command>
+    Usage:
+      phpspy [options] -p <pid>
+      phpspy [options] -P <pgrep-args>
+      phpspy [options] -- <cmd>
 
-    -h         Show help
-    -p <pid>   Trace PHP process at `pid`
-    -P <args>  Concurrently trace processes that match pgrep `args` (see also `-N`)
-    -N <num>   Set max concurrent workers to use with `-P` (default: 16)
-    -s <ns>    Sleep `ns` nanoseconds between traces (see also `-H`) (default: 10000000, 10ms)
-    -H <hz>    Trace `hz` times per second (see also `-s`) (default: 100hz)
-    -n <max>   Set max stack trace depth to `max` (default: -1, unlimited)
-    -x <hex>   Address of executor_globals in hex (default: 0, find dynamically)
-    -a <hex>   Address of sapi_globals in hex (default: 0, find dynamically)
-    -r         Capture request info as well
-    -R <opts>  Capture request info parts (q=query c=cookie u=uri p=path) (capital=negation) (default: all)
-    -l <num>   Limit number of stack traces to capture (default: 0, unlimited)
-    -o <path>  Write phpspy output to `path` instead of stdout (default: -)
-    -O <path>  Write child stdout to `path` instead of stdout (default: phpspy.%d.out)
-    -E <path>  Write child stderr to `path` instead of stderr (default: phpspy.%d.err)
-    -S         Pause process while reading stacktrace (not safe for production!)
-    -V <ver>   Set PHP version (default: 72; supported: 70 71 72 73)
-    -1         Output in single-line mode
-    -# <any>   Ignored; intended for self-documenting commands
-    -v         Print phpspy version and exit
+    Options:
+      -h, --help                         Show this help
+      -p, --pid=<pid>                    Trace PHP process at `pid`
+      -P, --pgrep=<args>                 Concurrently trace processes that match
+                                           pgrep `args` (see also `-N`)
+      -T, --threads=<num>                Set number of threads to use with `-P`
+                                           (default: 16)
+      -s, --sleep-ns=<ns>                Sleep `ns` nanoseconds between traces
+                                           (see also `-H`) (default: 10000000)
+      -H, --rate-hz=<hz>                 Trace `hz` times per second
+                                           (see also `-s`) (default: 100)
+      -V, --php-version=<ver>            Set PHP version
+                                           (default: 72; supported: 70 71 72 73)
+      -l, --limit=<num>                  Limit total number of traces to capture
+                                           (default: 0; 0=unlimited)
+      -n, --max-depth=<max>              Set max stack trace depth
+                                           (default: -1; -1=unlimited)
+      -r, --request-info                 Capture request info as well as traces
+      -R, --request-info-opts=<opts>     Set request info parts to capture (q=query
+                                           c=cookie u=uri p=path) (capital=negation)
+                                           (default: qcup, all)
+      -o, --output=<path>                Write phpspy output to `path`
+                                           (default: -; -=stdout)
+      -O, --child-stdout=<path>          Write child stdout to `path`
+                                           (default: phpspy.%d.out)
+      -E, --child-stderr=<path>          Write child stderr to `path`
+                                           (default: phpspy.%d.err)
+      -x, --addr-executor-globals=<hex>  Set address of executor_globals in hex
+                                           (default: 0, 0=find dynamically)
+      -a, --addr-sapi-globals=<hex>      Set address of sapi_globals in hex
+                                           (default: 0; 0=find dynamically)
+      -S, --pause-process                Pause process while reading stacktrace
+                                           (unsafe for production!)
+      -1, --single-line                  Output in single-line mode
+      -#, --comment=<any>                Ignored; intended for self-documenting
+                                           commands
+      -v, --version                      Print phpspy version and exit
 
 ### Build options
 
