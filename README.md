@@ -34,7 +34,7 @@ You can use it to make flamegraphs like this:
       -h, --help                         Show this help
       -p, --pid=<pid>                    Trace PHP process at `pid`
       -P, --pgrep=<args>                 Concurrently trace processes that match
-                                           pgrep `args` (see also `-N`)
+                                           pgrep `args` (see also `-T`)
       -T, --threads=<num>                Set number of threads to use with `-P`
                                            (default: 16)
       -s, --sleep-ns=<ns>                Sleep `ns` nanoseconds between traces
