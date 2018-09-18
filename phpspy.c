@@ -22,7 +22,7 @@
 #include <php_structs_73.h>
 #endif
 
-#define PHPSPY_VERSION "0.1"
+#define PHPSPY_VERSION "0.2"
 #define STR_LEN 256
 #define PHPSPY_MIN(a, b) ((a) < (b) ? (a) : (b))
 
