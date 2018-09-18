@@ -133,7 +133,13 @@ static void *work(void *arg) {
             perror("fork");
             exit(1);
         }
-        waitpid(fork_pid, NULL, 0);
+        while (waitpid(fork_pid, NULL, WNOHANG) != fork_pid) {
+            sleep(2);
+            if (done) {
+                kill(fork_pid, SIGTERM);
+                break;
+            }
+        }
         attached_pids[worker_num] = 0;
     }
     return NULL;
@@ -166,6 +172,7 @@ static void init_threads() {
 }
 
 static void init_signal_handler() {
+    // TODO Tighten up signal handling
     struct sigaction sa = {0};
 
     sa.sa_handler = handle_signal;
@@ -177,9 +184,8 @@ static void init_signal_handler() {
 }
 
 static void handle_signal(int signum) {
-    int w;
+    //int w;
     (void)signum;
-    w = write(STDERR_FILENO, "\nmain_pgrep caught signal\n", sizeof("\nmain_pgrep caught signal\n"));
-    (void)w;
+    //w = write(STDERR_FILENO, "\nmain_pgrep caught signal\n", sizeof("\nmain_pgrep caught signal\n"));
     done = 1;
 }
