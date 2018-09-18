@@ -88,7 +88,7 @@ static void usage(FILE *fp, int exit_code) {
     fprintf(fp, "  -h, --help                         Show this help\n");
     fprintf(fp, "  -p, --pid=<pid>                    Trace PHP process at `pid`\n");
     fprintf(fp, "  -P, --pgrep=<args>                 Concurrently trace processes that match\n");
-    fprintf(fp, "                                       pgrep `args` (see also `-N`)\n");
+    fprintf(fp, "                                       pgrep `args` (see also `-T`)\n");
     fprintf(fp, "  -T, --threads=<num>                Set number of threads to use with `-P`\n");
     fprintf(fp, "                                       (default: %d)\n", opt_num_workers);
     fprintf(fp, "  -s, --sleep-ns=<ns>                Sleep `ns` nanoseconds between traces\n");
