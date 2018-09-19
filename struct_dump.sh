@@ -3,6 +3,7 @@ this_dir=$(cd $(dirname "${BASH_SOURCE[0]}") >/dev/null && pwd)
 phpsrc_dir=~/php-src
 
 pushd $phpsrc_dir
+git fetch --tags
 for phpv in php-7.0.29 php-7.1.21 php-7.2.9 php-7.3.0beta3; do
     git reset --hard HEAD \
         && git clean -fdx \

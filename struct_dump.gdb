@@ -33,4 +33,26 @@ printf "sapi_globals_struct=%lu\n", sizeof(sapi_globals_struct)
 printf "  .request_info +%lu\n", offsetof(sapi_globals_struct, request_info)
 printf "  .global_request_time +%lu\n", offsetof(sapi_globals_struct, global_request_time)
 printf "\n"
+printf "php_core_globals=%lu\n", sizeof(php_core_globals)
+printf "  .http_globals +%lu\n", offsetof(php_core_globals, http_globals)
+printf "\n"
+printf "zval=%lu\n", sizeof(zval)
+printf "  .value +%lu\n", offsetof(zval, value)
+printf "  .u1 +%lu\n", offsetof(zval, u1)
+printf "\n"
+printf "zend_value=%lu\n", sizeof(zend_value)
+printf "  .str +%lu\n", offsetof(zend_value, str)
+printf "  .arr +%lu\n", offsetof(zend_value, arr)
+printf "\n"
+printf "zend_array=%lu\n", sizeof(zend_array)
+printf "  .arData +%lu\n", offsetof(zend_array, arData)
+printf "  .nNumUsed +%lu\n", offsetof(zend_array, nNumUsed)
+printf "  .nNumOfElements +%lu\n", offsetof(zend_array, nNumOfElements)
+printf "  .nTableSize +%lu\n", offsetof(zend_array, nTableSize)
+printf "\n"
+printf "Bucket=%lu\n", sizeof(Bucket)
+printf "  .val +%lu\n", offsetof(Bucket, val)
+printf "  .h +%lu\n", offsetof(Bucket, h)
+printf "  .key +%lu\n", offsetof(Bucket,key)
+printf "\n"
 printf "\n"
