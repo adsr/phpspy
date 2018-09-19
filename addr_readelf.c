@@ -1,12 +1,12 @@
 static int get_php_bin_path(pid_t pid, char *path);
-static int get_php_base_addr(pid_t pid, char *path, unsigned long long *raddr);
-static int get_symbol_offset(char *path, const char *symbol, unsigned long long *raddr);
+static int get_php_base_addr(pid_t pid, char *path, uint64_t *raddr);
+static int get_symbol_offset(char *path, const char *symbol, uint64_t *raddr);
 static int popen_read_line(char *buf, size_t buf_size, char *cmd_fmt, ...);
 
-static int get_symbol_addr(pid_t pid, const char *symbol, unsigned long long *raddr) {
+static int get_symbol_addr(pid_t pid, const char *symbol, uint64_t *raddr) {
     char php_bin_path[128];
-    unsigned long long base_addr;
-    unsigned long long addr_offset;
+    uint64_t base_addr;
+    uint64_t addr_offset;
     if (get_php_bin_path(pid, php_bin_path) != 0) {
         return 1;
     } else if (get_php_base_addr(pid, php_bin_path, &base_addr) != 0) {
@@ -29,7 +29,7 @@ static int get_php_bin_path(pid_t pid, char *path) {
     return 0;
 }
 
-static int get_php_base_addr(pid_t pid, char *path, unsigned long long *raddr) {
+static int get_php_base_addr(pid_t pid, char *path, uint64_t *raddr) {
     /**
      * This is very likely to be incorrect/incomplete. I thought the base
      * address from `/proc/<pid>/maps` + the symbol address from `readelf` would
@@ -40,8 +40,8 @@ static int get_php_base_addr(pid_t pid, char *path, unsigned long long *raddr) {
      * address relocation and/or a feature called 'prelinking', but not sure.
      */
     char buf[128];
-    unsigned long long start_addr;
-    unsigned long long virt_addr;
+    uint64_t start_addr;
+    uint64_t virt_addr;
     char *cmd_fmt = "grep ' %s$' /proc/%d/maps | head -n1";
     if (popen_read_line(buf, sizeof(buf), cmd_fmt, path, (int)pid) != 0) {
         fprintf(stderr, "get_php_base_addr: Failed to get start_addr\n");
@@ -58,7 +58,7 @@ static int get_php_base_addr(pid_t pid, char *path, unsigned long long *raddr) {
     return 0;
 }
 
-static int get_symbol_offset(char *path, const char *symbol, unsigned long long *raddr) {
+static int get_symbol_offset(char *path, const char *symbol, uint64_t *raddr) {
     char buf[128];
     char *cmd_fmt = "readelf -s %s | grep ' %s$' | awk 'NR==1{print $2}'";
     if (popen_read_line(buf, sizeof(buf), cmd_fmt, path, symbol) != 0) {

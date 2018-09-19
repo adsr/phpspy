@@ -109,7 +109,7 @@ static void pgrep_for_pids() {
         pclose(pcmd);
         if (found > 0) pthread_cond_broadcast(&can_consume);
         pthread_mutex_unlock(&mutex);
-        if (found < 1) sleep(2);
+        if (found < 1) sleep(2); // TODO select/cond_wait instead of blind sleep
     }
     free(pgrep_cmd);
 }

@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <errno.h>
 #include <getopt.h>
@@ -23,7 +24,7 @@
 #include <php_structs_73.h>
 #endif
 
-#define try(__rv, __stmt) do { if (((__rv) = (__stmt) != 0)) return __rv; } while(0)
+#define try(__rv, __stmt) do { if (((__rv) = (__stmt) != 0)) return __rv; } while(0) // TODO use more or ditch
 #define PHPSPY_VERSION "0.3"
 #define STR_LEN 256
 #define PHPSPY_MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -33,8 +34,8 @@ char *opt_pgrep_args = NULL;
 int opt_num_workers = 16;
 int opt_top_mode = 0;
 long opt_sleep_ns = 10101010; // ~99Hz
-unsigned long long opt_executor_globals_addr = 0;
-unsigned long long opt_sapi_globals_addr = 0;
+uint64_t opt_executor_globals_addr = 0;
+uint64_t opt_sapi_globals_addr = 0;
 int opt_capture_req = 0;
 int opt_capture_req_qstring = 1;
 int opt_capture_req_cookie = 1;
@@ -43,7 +44,7 @@ int opt_capture_req_path = 1;
 int opt_max_stack_depth = -1;
 char *opt_frame_delim = "\n";
 char *opt_trace_delim = "\n\n";
-unsigned long long opt_trace_limit = 0;
+uint64_t opt_trace_limit = 0;
 char *opt_path_output = "-";
 char *opt_path_child_out = "phpspy.%d.out";
 char *opt_path_child_err = "phpspy.%d.err";
@@ -51,8 +52,9 @@ char *opt_phpv = "72";
 int opt_pause = 0;
 
 size_t zend_string_val_offset = 0;
+FILE *fout = NULL;
 int done = 0;
-int (*dump_trace_ptr)(pid_t, FILE *, unsigned long long, unsigned long long) = NULL;
+int (*dump_trace_ptr)(pid_t, FILE *, uint64_t, uint64_t, uint64_t) = NULL;
 
 extern void usage(FILE *fp, int exit_code);
 static void parse_opts(int argc, char **argv);
@@ -66,18 +68,30 @@ static int maybe_pause_pid(pid_t pid);
 static int maybe_unpause_pid(pid_t pid);
 static void redirect_child_stdio(int proc_fd, char *opt_path);
 static int open_fout(FILE **fout);
-static int find_addresses(pid_t pid, unsigned long long *executor_globals_addr, unsigned long long *sapi_globals_addr);
+static int find_addresses(pid_t pid, uint64_t *executor_globals_addr, uint64_t *sapi_globals_addr, uint64_t *core_globals_addr);
 static int copy_proc_mem(pid_t pid, void *raddr, void *laddr, size_t size);
 static void try_clock_gettime(struct timespec *ts);
 static void calc_sleep_time(struct timespec *end, struct timespec *start, struct timespec *sleep);
-static int get_symbol_addr(pid_t pid, const char *symbol, unsigned long long *raddr);
+static int get_symbol_addr(pid_t pid, const char *symbol, uint64_t *raddr);
+
+// TODO figure out a way to make this cleaner
 #ifdef USE_ZEND
-static int dump_trace(pid_t pid, FILE *fout, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr);
+static int dump_trace(pid_t pid, FILE *fout, uint64_t executor_globals_addr, uint64_t sapi_globals_addr, uint64_t core_globals_addr);
+static int print_array_recursive(pid_t pid, FILE *fout, zend_array *array_ptr);
+static int copy_zend_string(pid_t pid, zend_string *string_ptr, char** retval);
 #else
-static int dump_trace_70(pid_t pid, FILE *fout, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr);
-static int dump_trace_71(pid_t pid, FILE *fout, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr);
-static int dump_trace_72(pid_t pid, FILE *fout, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr);
-static int dump_trace_73(pid_t pid, FILE *fout, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr);
+static int dump_trace_70(pid_t pid, FILE *fout, uint64_t executor_globals_addr, uint64_t sapi_globals_addr, uint64_t core_globals_addr);
+static int dump_trace_71(pid_t pid, FILE *fout, uint64_t executor_globals_addr, uint64_t sapi_globals_addr, uint64_t core_globals_addr);
+static int dump_trace_72(pid_t pid, FILE *fout, uint64_t executor_globals_addr, uint64_t sapi_globals_addr, uint64_t core_globals_addr);
+static int dump_trace_73(pid_t pid, FILE *fout, uint64_t executor_globals_addr, uint64_t sapi_globals_addr, uint64_t core_globals_addr);
+static int print_array_recursive_70(pid_t pid, FILE *fout, zend_array_70 *array_ptr);
+static int print_array_recursive_71(pid_t pid, FILE *fout, zend_array_71 *array_ptr);
+static int print_array_recursive_72(pid_t pid, FILE *fout, zend_array_72 *array_ptr);
+static int print_array_recursive_73(pid_t pid, FILE *fout, zend_array_73 *array_ptr);
+static int copy_zend_string_70(pid_t pid, zend_string_70 *string_ptr, char **retval);
+static int copy_zend_string_71(pid_t pid, zend_string_71 *string_ptr, char **retval);
+static int copy_zend_string_72(pid_t pid, zend_string_72 *string_ptr, char **retval);
+static int copy_zend_string_73(pid_t pid, zend_string_73 *string_ptr, char **retval);
 #endif
 
 void usage(FILE *fp, int exit_code) {
@@ -97,11 +111,11 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "  -s, --sleep-ns=<ns>                Sleep `ns` nanoseconds between traces\n");
     fprintf(fp, "                                       (see also `-H`) (default: %ld)\n", opt_sleep_ns);
     fprintf(fp, "  -H, --rate-hz=<hz>                 Trace `hz` times per second\n");
-    fprintf(fp, "                                       (see also `-s`) (default: %llu)\n", 1000000000ULL/opt_sleep_ns);
+    fprintf(fp, "                                       (see also `-s`) (default: %lu)\n", 1000000000UL/opt_sleep_ns);
     fprintf(fp, "  -V, --php-version=<ver>            Set PHP version\n");
     fprintf(fp, "                                       (default: %s; supported: 70 71 72 73)\n", opt_phpv);
     fprintf(fp, "  -l, --limit=<num>                  Limit total number of traces to capture\n");
-    fprintf(fp, "                                       (default: %llu; 0=unlimited)\n", opt_trace_limit);
+    fprintf(fp, "                                       (default: %lu; 0=unlimited)\n", opt_trace_limit);
     fprintf(fp, "  -n, --max-depth=<max>              Set max stack trace depth\n");
     fprintf(fp, "                                       (default: %d; -1=unlimited)\n", opt_max_stack_depth);
     fprintf(fp, "  -r, --request-info                 Capture request info as well as traces\n");
@@ -115,9 +129,9 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "  -E, --child-stderr=<path>          Write child stderr to `path`\n");
     fprintf(fp, "                                       (default: %s)\n", opt_path_child_err);
     fprintf(fp, "  -x, --addr-executor-globals=<hex>  Set address of executor_globals in hex\n");
-    fprintf(fp, "                                       (default: %llu, 0=find dynamically)\n", opt_sapi_globals_addr);
+    fprintf(fp, "                                       (default: %lu, 0=find dynamically)\n", opt_sapi_globals_addr);
     fprintf(fp, "  -a, --addr-sapi-globals=<hex>      Set address of sapi_globals in hex\n");
-    fprintf(fp, "                                       (default: %llu; 0=find dynamically)\n", opt_executor_globals_addr);
+    fprintf(fp, "                                       (default: %lu; 0=find dynamically)\n", opt_executor_globals_addr);
     fprintf(fp, "  -S, --pause-process                Pause process while reading stacktrace\n");
     fprintf(fp, "                                       (unsafe for production!)\n");
     fprintf(fp, "  -1, --single-line                  Output in single-line mode\n");
@@ -193,8 +207,13 @@ static void parse_opts(int argc, char **argv) {
             case '@': break;
             case 'v':
                 printf(
-                    "phpspy v%s USE_ZEND=%s USE_LIBDW=%s\n",
+                    "phpspy v%s USE_TERMBOX=%s USE_ZEND=%s USE_LIBDW=%s\n",
                     PHPSPY_VERSION,
+                    #ifdef USE_TERMBOX
+                    "y",
+                    #else
+                    "n",
+                    #endif
                     #ifdef USE_ZEND
                     "y",
                     #else
@@ -236,13 +255,14 @@ int main(int argc, char **argv) {
 
 int main_pid(pid_t pid) {
     int rv;
-    unsigned long long n;
-    unsigned long long executor_globals_addr;
-    unsigned long long sapi_globals_addr;
+    uint64_t n;
+    uint64_t executor_globals_addr;
+    uint64_t sapi_globals_addr;
+    uint64_t core_globals_addr;
     struct timespec start_time, end_time, sleep_time;
     FILE *fout = NULL;
 
-    try(rv, find_addresses(pid, &executor_globals_addr, &sapi_globals_addr));
+    try(rv, find_addresses(pid, &executor_globals_addr, &sapi_globals_addr, &core_globals_addr));
     try(rv, open_fout(&fout));
 
     #ifdef USE_ZEND
@@ -265,7 +285,7 @@ int main_pid(pid_t pid) {
     while (!done) {
         try_clock_gettime(&start_time);
         rv |= maybe_pause_pid(pid);
-        rv |= dump_trace_ptr(pid, fout, executor_globals_addr, sapi_globals_addr);
+        rv |= dump_trace_ptr(pid, fout, executor_globals_addr, sapi_globals_addr, core_globals_addr);
         rv |= maybe_unpause_pid(pid);
         if (++n == opt_trace_limit || (rv & 2) != 0) break;
         try_clock_gettime(&end_time);
@@ -369,7 +389,7 @@ static int open_fout(FILE **fout) {
     return 0;
 }
 
-static int find_addresses(pid_t pid, unsigned long long *executor_globals_addr, unsigned long long *sapi_globals_addr) {
+static int find_addresses(pid_t pid, uint64_t *executor_globals_addr, uint64_t *sapi_globals_addr, uint64_t *core_globals_addr) {
     if (opt_executor_globals_addr != 0) {
         *executor_globals_addr = opt_executor_globals_addr;
     } else if (get_symbol_addr(pid, "executor_globals", executor_globals_addr) != 0) {
@@ -378,6 +398,9 @@ static int find_addresses(pid_t pid, unsigned long long *executor_globals_addr, 
     if (opt_sapi_globals_addr != 0) {
         *sapi_globals_addr = opt_sapi_globals_addr;
     } else if (get_symbol_addr(pid, "sapi_globals", sapi_globals_addr) != 0) {
+        return 1;
+    }
+    if (get_symbol_addr(pid, "core_globals", core_globals_addr) != 0) {
         return 1;
     }
     #ifdef USE_ZEND
@@ -436,6 +459,7 @@ static void calc_sleep_time(struct timespec *end, struct timespec *start, struct
     }
 }
 
+// TODO figure out a way to make this cleaner
 #ifdef USE_ZEND
 #include "phpspy_trace.c"
 #else

@@ -20,11 +20,13 @@ extern int done;
 extern pid_t opt_pid;
 extern char *opt_pgrep_args;
 
+// TODO common header
 #define PHPSPY_MAX(a, b) ((a) > (b) ? (a) : (b))
 #define FUNC_SIZE 256
 #define BUF_SIZE 512
 
 struct func_t {
+    // TODO rename struct?
     char func[FUNC_SIZE];
     unsigned long long count_excl;
     unsigned long long count_incl;
@@ -73,6 +75,7 @@ int main_top(int argc, char **argv) {
         return 1;
     }
 
+    // TODO refactor this function
     filter_child_args(argc, argv);
     snprintf(phpspy_args, BUF_SIZE, "phpspy ");
     for (i = 1; i < argc; i++) {
@@ -91,7 +94,7 @@ int main_top(int argc, char **argv) {
     last_display.tv_sec = 0;
     last_display.tv_nsec = 0;
 
-    tb_init();
+    tb_init(); // TODO support for ncurses for portability sake?
     while (!done) {
         clock_gettime(CLOCK_MONOTONIC, &ts);
         if (last_display.tv_sec == 0 || ts.tv_sec - last_display.tv_sec >= 1) {
@@ -211,6 +214,7 @@ static void read_child_out(int fd) {
 }
 
 static void read_child_err(int fd) {
+    // TODO DRY with read_child_out
     char buf[BUF_SIZE];
     char *nl;
     size_t buf_pos;
@@ -271,7 +275,7 @@ static void handle_event(struct tb_event *event) {
     } else if (event->ch == 'q') {
         done = 1;
     } else if (event->ch == 'c') {
-        // todo
+        // TODO top mode handle_event
     }
 }
 
