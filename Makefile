@@ -1,4 +1,4 @@
-phpspy_cflags:=-Wall -Wextra -g -Ofast -pthread $(CFLAGS)
+phpspy_cflags:=-Wall -Wextra -pedantic -g -Ofast -pthread $(CFLAGS)
 phpspy_libs:=$(LDLIBS)
 phpspy_includes:=-I.
 phpspy_defines:=
@@ -38,4 +38,4 @@ install: phpspy
 clean:
 	rm -f phpspy
 
-.PHONY: all phpspy_libdw phpspy_readelf clean
+.PHONY: all phpspy_libdw phpspy_readelf install clean

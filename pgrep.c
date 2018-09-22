@@ -12,7 +12,6 @@
 extern int main_pid();
 extern int opt_num_workers;
 extern char *opt_pgrep_args;
-extern int opt_pid;
 extern int done;
 
 static int wait_for_turn(char producer_or_consumer);
@@ -108,7 +107,7 @@ static void pgrep_for_pids() {
             found += 1;
         }
         pclose(pcmd);
-        if (found > 0) pthread_cond_signal(&can_consume);
+        if (found > 0) pthread_cond_broadcast(&can_consume);
         pthread_mutex_unlock(&mutex);
         if (found < 1) sleep(2);
     }
@@ -117,29 +116,15 @@ static void pgrep_for_pids() {
 
 static void *work(void *arg) {
     int worker_num;
-    int fork_pid;
     worker_num = (long)arg;
     while (!done) {
         if (wait_for_turn('c')) break;
         attached_pids[worker_num] = avail_pids[--avail_pids_count];
         pthread_cond_signal(&can_produce);
         pthread_mutex_unlock(&mutex);
-        fork_pid = fork();
-        if (fork_pid == 0) {
-            opt_pid = attached_pids[worker_num];
-            main_pid();
-            exit(1);
-        } else if (fork_pid < 0) {
-            perror("fork");
-            exit(1);
-        }
-        while (waitpid(fork_pid, NULL, WNOHANG) != fork_pid) {
-            sleep(2);
-            if (done) {
-                kill(fork_pid, SIGTERM);
-                break;
-            }
-        }
+        printf("worker_num %d in\n", worker_num);
+        main_pid(attached_pids[worker_num]);
+        printf("worker_num %d out\n", worker_num);
         attached_pids[worker_num] = 0;
     }
     return NULL;

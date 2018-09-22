@@ -1,4 +1,4 @@
-static void dump_trace(pid_t pid, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr) {
+static int dump_trace(pid_t pid, FILE *fout, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr) {
     char func[STR_LEN+1];
     char file[STR_LEN+1];
     char class[STR_LEN+1];
@@ -12,6 +12,7 @@ static void dump_trace(pid_t pid, unsigned long long executor_globals_addr, unsi
     int lineno;
     int depth;
     int wrote_trace;
+    int rv;
     zend_execute_data *remote_execute_data;
     zend_executor_globals executor_globals;
     zend_execute_data execute_data;
@@ -24,12 +25,12 @@ static void dump_trace(pid_t pid, unsigned long long executor_globals_addr, unsi
     depth = 0;
     wrote_trace = 0;
 
-    #define try_copy_proc_mem(__what, __raddr, __laddr, __size) do {      \
-        if (copy_proc_mem(pid, (__raddr), (__laddr), (__size)) != 0) {    \
-            fprintf(stderr, "dump_trace: Failed to copy %s\n", (__what)); \
-            if (wrote_trace) printf("%s", opt_trace_delim);               \
-            return;                                                       \
-        }                                                                 \
+    #define try_copy_proc_mem(__what, __raddr, __laddr, __size) do {          \
+        if ((rv = copy_proc_mem(pid, (__raddr), (__laddr), (__size))) != 0) { \
+            fprintf(stderr, "dump_trace: Failed to copy %s\n", (__what));     \
+            if (wrote_trace) printf("%s", opt_trace_delim);                   \
+            return rv;                                                        \
+        }                                                                     \
     } while(0)
 
     executor_globals.current_execute_data = NULL;
@@ -106,4 +107,5 @@ static void dump_trace(pid_t pid, unsigned long long executor_globals_addr, unsi
     }
 
     #undef try_copy_proc_mem
+    return 0;
 }
