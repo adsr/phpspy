@@ -23,6 +23,7 @@
 #include <php_structs_73.h>
 #endif
 
+#define try(__rv, __stmt) do { if (((__rv) = (__stmt) != 0)) return __rv; } while(0)
 #define PHPSPY_VERSION "0.2"
 #define STR_LEN 256
 #define PHPSPY_MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -49,33 +50,30 @@ char *opt_phpv = "72";
 int opt_pause = 0;
 
 size_t zend_string_val_offset = 0;
-unsigned long long executor_globals_addr = 0;
-unsigned long long sapi_globals_addr = 0;
-FILE *fout = NULL;
 int done = 0;
-void (*dump_trace_ptr)(pid_t, unsigned long long, unsigned long long) = NULL;
+int (*dump_trace_ptr)(pid_t, FILE *, unsigned long long, unsigned long long) = NULL;
 
 static void usage(FILE *fp, int exit_code);
 static void parse_opts(int argc, char **argv);
-extern int main_pid();
+extern int main_pid(pid_t pid);
 extern int main_pgrep();
 static int main_fork(int argc, char **argv);
-static void maybe_pause_pid(pid_t pid);
-static void maybe_unpause_pid(pid_t pid);
+static int maybe_pause_pid(pid_t pid);
+static int maybe_unpause_pid(pid_t pid);
 static void redirect_child_stdio(int proc_fd, char *opt_path);
-static void open_fout();
-static int find_addresses();
+static int open_fout(FILE **fout);
+static int find_addresses(pid_t pid, unsigned long long *executor_globals_addr, unsigned long long *sapi_globals_addr);
 static int copy_proc_mem(pid_t pid, void *raddr, void *laddr, size_t size);
 static void try_clock_gettime(struct timespec *ts);
 static void calc_sleep_time(struct timespec *end, struct timespec *start, struct timespec *sleep);
-static int get_symbol_addr(const char *symbol, unsigned long long *raddr);
+static int get_symbol_addr(pid_t pid, const char *symbol, unsigned long long *raddr);
 #ifdef USE_ZEND
-static void dump_trace(pid_t pid, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr);
+static int dump_trace(pid_t pid, FILE *fout, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr);
 #else
-static void dump_trace_70(pid_t pid, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr);
-static void dump_trace_71(pid_t pid, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr);
-static void dump_trace_72(pid_t pid, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr);
-static void dump_trace_73(pid_t pid, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr);
+static int dump_trace_70(pid_t pid, FILE *fout, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr);
+static int dump_trace_71(pid_t pid, FILE *fout, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr);
+static int dump_trace_72(pid_t pid, FILE *fout, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr);
+static int dump_trace_73(pid_t pid, FILE *fout, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr);
 #endif
 
 static void usage(FILE *fp, int exit_code) {
@@ -205,10 +203,9 @@ static void parse_opts(int argc, char **argv) {
 
 int main(int argc, char **argv) {
     parse_opts(argc, argv);
-    open_fout();
 
     if (opt_pid != -1) {
-        return main_pid();
+        return main_pid(opt_pid);
     } else if (opt_pgrep_args != NULL) {
         return main_pgrep();
     } else if (optind < argc) {
@@ -220,14 +217,16 @@ int main(int argc, char **argv) {
     return 1;
 }
 
-int main_pid() {
+int main_pid(pid_t pid) {
+    int rv;
     unsigned long long n;
+    unsigned long long executor_globals_addr;
+    unsigned long long sapi_globals_addr;
     struct timespec start_time, end_time, sleep_time;
+    FILE *fout = NULL;
 
-    if (find_addresses()) {
-        waitpid(opt_pid, NULL, 0);
-        exit(1);
-    }
+    try(rv, find_addresses(pid, &executor_globals_addr, &sapi_globals_addr));
+    try(rv, open_fout(&fout));
 
     #ifdef USE_ZEND
     dump_trace_ptr = dump_trace;
@@ -248,52 +247,64 @@ int main_pid() {
     n = 0;
     while (!done) {
         try_clock_gettime(&start_time);
-        maybe_pause_pid(opt_pid);
-        dump_trace_ptr(opt_pid, executor_globals_addr, sapi_globals_addr);
-        maybe_unpause_pid(opt_pid);
+        rv |= maybe_pause_pid(pid);
+        rv |= dump_trace_ptr(pid, fout, executor_globals_addr, sapi_globals_addr);
+        rv |= maybe_unpause_pid(pid);
+        if (++n == opt_trace_limit || rv == 2) break;
         try_clock_gettime(&end_time);
         calc_sleep_time(&end_time, &start_time, &sleep_time);
         nanosleep(&sleep_time, NULL);
-        if (++n == opt_trace_limit) break;
     }
+
+    fclose(fout);
 
     return 0;
 }
 
 static int main_fork(int argc, char **argv) {
+    int rv;
+    pid_t fork_pid;
     (void)argc;
-    opt_pid = fork();
-    if (opt_pid == 0) {
+    fork_pid = fork();
+    if (fork_pid == 0) {
         redirect_child_stdio(STDOUT_FILENO, opt_path_child_out);
         redirect_child_stdio(STDERR_FILENO, opt_path_child_err);
         execvp(argv[optind], argv + optind);
         perror("execvp");
         exit(1);
-    } else if (opt_pid < 0) {
+    } else if (fork_pid < 0) {
         perror("fork");
         exit(1);
     }
-    return main_pid();
+    rv = main_pid(fork_pid);
+    waitpid(fork_pid, NULL, 0);
+    return rv;
 }
 
-static void maybe_pause_pid(pid_t pid) {
-    if (!opt_pause) return;
+static int maybe_pause_pid(pid_t pid) {
+    int rv;
+    if (!opt_pause) return 0;
     if (ptrace(PTRACE_ATTACH, pid, 0, 0) == -1) {
+        rv = errno;
         perror("ptrace");
-        exit(1);
+        return rv == ESRCH ? 2 : 1;
     }
     if (waitpid(pid, NULL, 0) == -1) {
         perror("waitpid");
-        exit(1);
+        return 1;
     }
+    return 0;
 }
 
-static void maybe_unpause_pid(pid_t pid) {
-    if (!opt_pause) return;
+static int maybe_unpause_pid(pid_t pid) {
+    int rv;
+    if (!opt_pause) return 0;
     if (ptrace(PTRACE_DETACH, pid, 0, 0) == -1) {
+        rv = errno;
         perror("ptrace");
-        exit(1);
+        return rv == ESRCH ? 2 : 1;
     }
+    return 0;
 }
 
 static void redirect_child_stdio(int proc_fd, char *opt_path) {
@@ -323,29 +334,33 @@ static void redirect_child_stdio(int proc_fd, char *opt_path) {
     free(redir_path);
 }
 
-static void open_fout() {
+static int open_fout(FILE **fout) {
+    int tfd;
+    tfd = -1;
     if (strcmp(opt_path_output, "-") == 0) {
-        fout = fdopen(STDOUT_FILENO, "w");
+        tfd = dup(STDOUT_FILENO);
+        *fout = fdopen(tfd, "w");
     } else {
-        fout = fopen(opt_path_output, "w");
+        *fout = fopen(opt_path_output, "w");
     }
-    setvbuf(fout, NULL, _IOLBF, PIPE_BUF);
-    if (!fout) {
+    if (!*fout) {
         perror("fopen");
-        exit(1);
+        if (tfd != -1) close(tfd);
+        return 1;
     }
-    // TODO fclose(fout)
+    setvbuf(*fout, NULL, _IOLBF, PIPE_BUF);
+    return 0;
 }
 
-static int find_addresses() {
+static int find_addresses(pid_t pid, unsigned long long *executor_globals_addr, unsigned long long *sapi_globals_addr) {
     if (opt_executor_globals_addr != 0) {
-        executor_globals_addr = opt_executor_globals_addr;
-    } else if (get_symbol_addr("executor_globals", &executor_globals_addr) != 0) {
+        *executor_globals_addr = opt_executor_globals_addr;
+    } else if (get_symbol_addr(pid, "executor_globals", executor_globals_addr) != 0) {
         return 1;
     }
     if (opt_sapi_globals_addr != 0) {
-        sapi_globals_addr = opt_sapi_globals_addr;
-    } else if (get_symbol_addr("sapi_globals", &sapi_globals_addr) != 0) {
+        *sapi_globals_addr = opt_sapi_globals_addr;
+    } else if (get_symbol_addr(pid, "sapi_globals", sapi_globals_addr) != 0) {
         return 1;
     }
     #ifdef USE_ZEND
@@ -366,7 +381,7 @@ static int copy_proc_mem(pid_t pid, void *raddr, void *laddr, size_t size) {
     if (process_vm_readv(pid, local, 1, remote, 1, 0) == -1) {
         if (errno == ESRCH) { // No such process
             perror("process_vm_readv");
-            exit(1);
+            return 2;
         }
         fprintf(stderr, "copy_proc_mem: %s; raddr=%p size=%lu\n", strerror(errno), raddr, size);
         return 1;

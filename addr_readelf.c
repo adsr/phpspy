@@ -3,13 +3,13 @@ static int get_php_base_addr(pid_t pid, char *path, unsigned long long *raddr);
 static int get_symbol_offset(char *path, const char *symbol, unsigned long long *raddr);
 static int popen_read_line(char *buf, size_t buf_size, char *cmd_fmt, ...);
 
-static int get_symbol_addr(const char *symbol, unsigned long long *raddr) {
+static int get_symbol_addr(pid_t pid, const char *symbol, unsigned long long *raddr) {
     char php_bin_path[128];
     unsigned long long base_addr;
     unsigned long long addr_offset;
-    if (get_php_bin_path(opt_pid, php_bin_path) != 0) {
+    if (get_php_bin_path(pid, php_bin_path) != 0) {
         return 1;
-    } else if (get_php_base_addr(opt_pid, php_bin_path, &base_addr) != 0) {
+    } else if (get_php_base_addr(pid, php_bin_path, &base_addr) != 0) {
         return 1;
     } else if (get_symbol_offset(php_bin_path, symbol, &addr_offset) != 0) {
         return 1;

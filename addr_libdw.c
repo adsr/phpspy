@@ -42,7 +42,7 @@ static int dwarf_module_callback(
     return DWARF_CB_OK;
 }
 
-static int get_symbol_addr(const char *symbol, unsigned long long *raddr) {
+static int get_symbol_addr(pid_t pid, const char *symbol, unsigned long long *raddr) {
     Dwfl *dwfl = NULL;
     int ret = 0;
 
@@ -56,7 +56,7 @@ static int get_symbol_addr(const char *symbol, unsigned long long *raddr) {
             break;
         }
 
-        err = dwfl_linux_proc_report(dwfl, opt_pid);
+        err = dwfl_linux_proc_report(dwfl, pid);
         if (err != 0) {
             fprintf(stderr, "get_symbol_addr: Error reading from /proc. Details: %s\n", dwfl_errmsg(0));
             ret = 1;
