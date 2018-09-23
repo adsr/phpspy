@@ -25,10 +25,12 @@ extern char *opt_pgrep_args;
 
 struct func_t {
     char func[FUNC_SIZE];
-    unsigned long long count_own;
-    unsigned long long count_total;
-    // TODO figure out rate using sample rate from child + refresh rate
-    size_t index;
+    unsigned long long count_excl;
+    unsigned long long count_incl;
+    unsigned long long total_count_excl;
+    unsigned long long total_count_incl;
+    float percent_incl;
+    float percent_excl;
     UT_hash_handle hh;
 };
 
@@ -48,8 +50,9 @@ size_t func_list_len = 0;
 size_t func_list_size = 0;
 char buf[BUF_SIZE];
 size_t buf_len = 0;
+unsigned long long total_samp_count = 0;
 unsigned long long samp_count = 0;
-unsigned long long err_count = 0;
+unsigned long long total_err_count = 0;
 char phpspy_args[BUF_SIZE];
 
 int main_top(int argc, char **argv) {
@@ -64,6 +67,7 @@ int main_top(int argc, char **argv) {
     outfd = errfd = ttyfd = pid = -1;
 
     if (opt_pid == -1 && opt_pgrep_args == NULL && optind >= argc) {
+        // TODO DRY with main()
         fprintf(stderr, "Expected pid (-p), pgrep (-P), or command\n\n");
         usage(stderr, 1);
         return 1;
@@ -220,7 +224,7 @@ static void read_child_err(int fd) {
     }
     buf_pos = 0;
     while (read_rv > 0 && (nl = memchr(buf+buf_pos, '\n', read_rv)) != NULL) {
-        err_count += 1;
+        total_err_count += 1;
         buf_pos += nl-buf+1;
         read_rv -= nl-buf+1;
     }
@@ -231,9 +235,6 @@ static void handle_line(char *line, int line_len) {
     char *func;
     size_t func_len;
     struct func_t *func_el;
-    size_t i, j, k;
-
-    //printf("line=[%.*s]\n", line_len, line);
 
     if (line_len < 3) return;
     if (line[0] == '#') return;
@@ -255,80 +256,87 @@ static void handle_line(char *line, int line_len) {
             func_list_size += 1024;
         }
         func_list[func_list_len-1] = func_el;
-        func_el->index = func_list_len-1;
     }
 
     if (frame_num == 0) {
         samp_count += 1;
-        func_el->count_own += 1;
+        func_el->count_excl += 1;
     }
-    func_el->count_total += 1;
-
-    i = func_el->index;
-    while (i > 0 && func_el->count_own > func_list[i-1]->count_own) {
-        i -= 1;
-    }
-    if (i < func_el->index) {
-        memmove(
-            func_list + i + 1,
-            func_list + i,
-            sizeof(struct func_t*) * (func_el->index-i)
-        );
-        func_list[i] = func_el;
-        k = func_el->index;
-        for (j = i; j <= k; j++) {
-            func_list[j]->index = j;
-        }
-    }
+    func_el->count_incl += 1;
 }
 
 static void handle_event(struct tb_event *event) {
-    size_t i;
     if (event->type != TB_EVENT_KEY) {
         return;
     } else if (event->ch == 'q') {
         done = 1;
     } else if (event->ch == 'c') {
-        for (i = 0; i < func_list_len; i++) {
-            func_list[i]->count_own = 0;
-            func_list[i]->count_total = 0;
-        }
-        samp_count = 0;
-        err_count = 0;
+        // todo
     }
+}
+
+static int func_list_compare(const void *a, const void *b) {
+    struct func_t *fa, *fb;
+    fa = *((struct func_t**)a);
+    fb = *((struct func_t**)b);
+    if (fb->count_excl == fa->count_excl) {
+        return 0;
+    }
+    return fb->count_excl > fa->count_excl ? 1 : -1;
 }
 
 static void display() {
     int y, w, h;
     struct func_t *el;
-    float percent_own, percent_total;
     size_t i;
+
+    if (func_list_len > 0) {
+        qsort(func_list, func_list_len, sizeof(struct func_t*), func_list_compare);
+        for (i = 0; i < func_list_len; i++) {
+            func_list[i]->total_count_excl += func_list[i]->count_excl;
+            func_list[i]->total_count_incl += func_list[i]->count_incl;
+            func_list[i]->percent_incl = samp_count < 1 ? 0.f : (100.f * func_list[i]->count_incl / samp_count);
+            func_list[i]->percent_excl = samp_count < 1 ? 0.f : (100.f * func_list[i]->count_excl / samp_count);
+        }
+    }
+    total_samp_count += samp_count;
+    samp_count = 0;
+
     tb_clear();
     w = tb_width();
     h = tb_height();
     y = 0;
     tb_printf(0,  y++, TB_BOLD, 0, "%s", phpspy_args);
-    tb_printf(0,  y++, 0, 0, "samp_count=%llu  err_count=%llu  func_count=%llu", samp_count, err_count, func_list_len);
+    tb_printf(0,  y++, 0, 0, "samp_count=%llu  total_err_count=%llu  func_count=%llu", total_samp_count, total_err_count, func_list_len);
     y++;
-    tb_printf(0,  y,   TB_BOLD | TB_REVERSE, 0, "%-10s %-7s %-10s %-7s ", "NTOTAL", "TOTAL%", "NOWN", "OWN%");
-    tb_printf(38, y++, TB_BOLD | TB_REVERSE, 0, "%-*s", w-38, "FUNC");
+    tb_printf(
+        0, y, TB_BOLD | TB_REVERSE, 0,
+        "%-10s %-10s %-10s %-10s %-7s %-7s ",
+        "tincl", "texcl", "incl", "excl", "incl%", "excl%"
+    );
+    tb_printf(60, y++, TB_BOLD | TB_REVERSE, 0, "%-*s", w-60, "func");
     i = 0;
     while (y < h && i < func_list_len) {
         el = func_list[i++];
-        percent_own   = samp_count < 1 ? 0.f : (100.f * el->count_own   / samp_count);
-        percent_total = samp_count < 1 ? 0.f : (100.f * el->count_total / samp_count);
         tb_printf(0, y++, 0, 0,
-            "%-9llu  %-6.2f  %-9llu  %-6.2f  %s",
-            el->count_total,
-            percent_total,
-            el->count_own,
-            percent_own,
+            "%-9llu  %-9llu  %-9llu  %-9llu  %-6.2f  %-6.2f  %s",
+            el->total_count_incl,
+            el->total_count_excl,
+            el->count_incl,
+            el->count_excl,
+            el->percent_incl,
+            el->percent_excl,
             el->func
         );
     }
+
+    for (i = 0; i < func_list_len; i++) {
+        func_list[i]->count_excl = 0;
+        func_list[i]->count_incl = 0;
+    }
+
     tb_present();
 }
-
 
 static void tb_print(const char *str, int x, int y, uint16_t fg, uint16_t bg) {
     uint32_t uni;
