@@ -1,18 +1,19 @@
 #define _GNU_SOURCE
-#include <stdlib.h>
-#include <stdio.h>
 #include <stdarg.h>
 #include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
-#include <unistd.h>
 #include <getopt.h>
 #include <limits.h>
-#include <sys/uio.h>
-#include <sys/types.h>
-#include <sys/wait.h>
 #include <sys/ptrace.h>
+#include <sys/types.h>
+#include <sys/uio.h>
+#include <sys/wait.h>
+#include <termbox.h>
 #include <time.h>
+#include <unistd.h>
 
 #ifdef USE_ZEND
 #include <main/SAPI.h>
@@ -31,6 +32,7 @@
 pid_t opt_pid = -1;
 char *opt_pgrep_args = NULL;
 int opt_num_workers = 16;
+int opt_top_mode = 0;
 long opt_sleep_ns = 10000000; // 10ms, 100Hz
 unsigned long long opt_executor_globals_addr = 0;
 unsigned long long opt_sapi_globals_addr = 0;
@@ -53,10 +55,11 @@ size_t zend_string_val_offset = 0;
 int done = 0;
 int (*dump_trace_ptr)(pid_t, FILE *, unsigned long long, unsigned long long) = NULL;
 
-static void usage(FILE *fp, int exit_code);
+extern void usage(FILE *fp, int exit_code);
 static void parse_opts(int argc, char **argv);
 extern int main_pid(pid_t pid);
 extern int main_pgrep();
+extern int main_top(int argc, char **argv);
 static int main_fork(int argc, char **argv);
 static int maybe_pause_pid(pid_t pid);
 static int maybe_unpause_pid(pid_t pid);
@@ -76,7 +79,7 @@ static int dump_trace_72(pid_t pid, FILE *fout, unsigned long long executor_glob
 static int dump_trace_73(pid_t pid, FILE *fout, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr);
 #endif
 
-static void usage(FILE *fp, int exit_code) {
+void usage(FILE *fp, int exit_code) {
     fprintf(fp, "Usage:\n");
     fprintf(fp, "  phpspy [options] -p <pid>\n");
     fprintf(fp, "  phpspy [options] -P <pgrep-args>\n");
@@ -89,6 +92,7 @@ static void usage(FILE *fp, int exit_code) {
     fprintf(fp, "                                       pgrep `args` (see also `-T`)\n");
     fprintf(fp, "  -T, --threads=<num>                Set number of threads to use with `-P`\n");
     fprintf(fp, "                                       (default: %d)\n", opt_num_workers);
+    fprintf(fp, "  -t, --top                          Show dynamic top-like output\n");
     fprintf(fp, "  -s, --sleep-ns=<ns>                Sleep `ns` nanoseconds between traces\n");
     fprintf(fp, "                                       (see also `-H`) (default: %ld)\n", opt_sleep_ns);
     fprintf(fp, "  -H, --rate-hz=<hz>                 Trace `hz` times per second\n");
@@ -118,6 +122,7 @@ static void usage(FILE *fp, int exit_code) {
     fprintf(fp, "  -1, --single-line                  Output in single-line mode\n");
     fprintf(fp, "  -#, --comment=<any>                Ignored; intended for self-documenting\n");
     fprintf(fp, "                                       commands\n");
+    fprintf(fp, "  -@, --nothing                      Ignored\n");
     fprintf(fp, "  -v, --version                      Print phpspy version and exit\n");
     exit(exit_code);
 }
@@ -130,6 +135,7 @@ static void parse_opts(int argc, char **argv) {
         { "pid",                   required_argument, NULL, 'p' },
         { "pgrep",                 required_argument, NULL, 'P' },
         { "threads",               required_argument, NULL, 'T' },
+        { "top",                   no_argument,       NULL, 't' },
         { "sleep-ns",              required_argument, NULL, 's' },
         { "rate-hz",               required_argument, NULL, 'H' },
         { "php-version",           required_argument, NULL, 'V' },
@@ -143,16 +149,18 @@ static void parse_opts(int argc, char **argv) {
         { "addr-executor-globals", required_argument, NULL, 'x' },
         { "addr-sapi-globals",     required_argument, NULL, 'a' },
         { "single-line",           no_argument,       NULL, '1' },
-        { "comment",               optional_argument, NULL, '#' },
+        { "comment",               required_argument, NULL, '#' },
+        { "nothing",               no_argument,       NULL, '@' },
         { "version",               no_argument,       NULL, 'v' },
         { 0,                       0,                 0,    0   }
     };
-    while ((c = getopt_long(argc, argv, "hp:P:T:s:H:V:l:n:rR:o:O:E:x:a:S1#:v", long_opts, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "hp:P:T:ts:H:V:l:n:rR:o:O:E:x:a:S1#:@v", long_opts, NULL)) != -1) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
             case 'p': opt_pid = atoi(optarg); break;
             case 'P': opt_pgrep_args = optarg; break;
             case 'T': opt_num_workers = atoi(optarg); break;
+            case 't': opt_top_mode = 1; break;
             case 's': opt_sleep_ns = strtol(optarg, NULL, 10); break;
             case 'H': opt_sleep_ns = (1000000000ULL / strtol(optarg, NULL, 10)); break;
             case 'V': opt_phpv = optarg; break;
@@ -181,6 +189,7 @@ static void parse_opts(int argc, char **argv) {
             case 'S': opt_pause = 1; break;
             case '1': opt_frame_delim = "\t"; opt_trace_delim = "\n"; break;
             case '#': break;
+            case '@': break;
             case 'v':
                 printf(
                     "phpspy v%s USE_ZEND=%s USE_LIBDW=%s\n",
@@ -204,7 +213,9 @@ static void parse_opts(int argc, char **argv) {
 int main(int argc, char **argv) {
     parse_opts(argc, argv);
 
-    if (opt_pid != -1) {
+    if (opt_top_mode != 0) {
+        return main_top(argc, argv);
+    } else if (opt_pid != -1) {
         return main_pid(opt_pid);
     } else if (opt_pgrep_args != NULL) {
         return main_pgrep();
@@ -250,7 +261,7 @@ int main_pid(pid_t pid) {
         rv |= maybe_pause_pid(pid);
         rv |= dump_trace_ptr(pid, fout, executor_globals_addr, sapi_globals_addr);
         rv |= maybe_unpause_pid(pid);
-        if (++n == opt_trace_limit || rv == 2) break;
+        if (++n == opt_trace_limit || (rv & 2) != 0) break;
         try_clock_gettime(&end_time);
         calc_sleep_time(&end_time, &start_time, &sleep_time);
         nanosleep(&sleep_time, NULL);

@@ -1,13 +1,13 @@
 #define _GNU_SOURCE
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
-#include <unistd.h>
+#include <pthread.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <time.h>
-#include <pthread.h>
+#include <unistd.h>
 
 extern int main_pid();
 extern int opt_num_workers;
