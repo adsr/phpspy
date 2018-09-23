@@ -11,7 +11,6 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <sys/wait.h>
-#include <termbox.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -25,7 +24,7 @@
 #endif
 
 #define try(__rv, __stmt) do { if (((__rv) = (__stmt) != 0)) return __rv; } while(0)
-#define PHPSPY_VERSION "0.2"
+#define PHPSPY_VERSION "0.3"
 #define STR_LEN 256
 #define PHPSPY_MIN(a, b) ((a) < (b) ? (a) : (b))
 
@@ -59,7 +58,9 @@ extern void usage(FILE *fp, int exit_code);
 static void parse_opts(int argc, char **argv);
 extern int main_pid(pid_t pid);
 extern int main_pgrep();
+#ifdef USE_TERMBOX
 extern int main_top(int argc, char **argv);
+#endif
 static int main_fork(int argc, char **argv);
 static int maybe_pause_pid(pid_t pid);
 static int maybe_unpause_pid(pid_t pid);
@@ -214,7 +215,12 @@ int main(int argc, char **argv) {
     parse_opts(argc, argv);
 
     if (opt_top_mode != 0) {
+        #ifdef USE_TERMBOX
         return main_top(argc, argv);
+        #else
+        fprintf(stderr, "Please recompile phpspy with USE_TERMBOX=1 for top mode support.\n");
+        return 1;
+        #endif
     } else if (opt_pid != -1) {
         return main_pid(opt_pid);
     } else if (opt_pgrep_args != NULL) {

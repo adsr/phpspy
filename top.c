@@ -1,3 +1,4 @@
+#ifdef USE_TERMBOX
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdarg.h>
@@ -355,3 +356,7 @@ static void tb_printf(int x, int y, uint16_t fg, uint16_t bg, const char *fmt, .
     va_end(vl);
     tb_print(buf, x, y, fg, bg);
 }
+
+#else
+typedef int hi_mom;
+#endif
