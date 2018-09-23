@@ -30,7 +30,6 @@ struct func_t {
     unsigned long long count_incl;
     unsigned long long total_count_excl;
     unsigned long long total_count_incl;
-    float percent_incl;
     float percent_excl;
     UT_hash_handle hh;
 };
@@ -296,36 +295,33 @@ static void display() {
         for (i = 0; i < func_list_len; i++) {
             func_list[i]->total_count_excl += func_list[i]->count_excl;
             func_list[i]->total_count_incl += func_list[i]->count_incl;
-            func_list[i]->percent_incl = samp_count < 1 ? 0.f : (100.f * func_list[i]->count_incl / samp_count);
             func_list[i]->percent_excl = samp_count < 1 ? 0.f : (100.f * func_list[i]->count_excl / samp_count);
         }
     }
     total_samp_count += samp_count;
-    samp_count = 0;
 
     tb_clear();
     w = tb_width();
     h = tb_height();
     y = 0;
     tb_printf(0,  y++, TB_BOLD, 0, "%s", phpspy_args);
-    tb_printf(0,  y++, 0, 0, "samp_count=%llu  total_err_count=%llu  func_count=%llu", total_samp_count, total_err_count, func_list_len);
+    tb_printf(0,  y++, 0, 0, "samp_count=%llu  err_count=%llu  func_count=%llu", total_samp_count, total_err_count, func_list_len);
     y++;
     tb_printf(
         0, y, TB_BOLD | TB_REVERSE, 0,
-        "%-10s %-10s %-10s %-10s %-7s %-7s ",
-        "tincl", "texcl", "incl", "excl", "incl%", "excl%"
+        "%-10s %-10s %-10s %-10s %-7s ",
+        "tincl", "texcl", "incl", "excl", "excl%"
     );
-    tb_printf(60, y++, TB_BOLD | TB_REVERSE, 0, "%-*s", w-60, "func");
+    tb_printf(52, y++, TB_BOLD | TB_REVERSE, 0, "%-*s", w-52, "func");
     i = 0;
     while (y < h && i < func_list_len) {
         el = func_list[i++];
         tb_printf(0, y++, 0, 0,
-            "%-9llu  %-9llu  %-9llu  %-9llu  %-6.2f  %-6.2f  %s",
+            "%-9llu  %-9llu  %-9llu  %-9llu  %-6.2f  %s",
             el->total_count_incl,
             el->total_count_excl,
             el->count_incl,
             el->count_excl,
-            el->percent_incl,
             el->percent_excl,
             el->func
         );
@@ -335,6 +331,7 @@ static void display() {
         func_list[i]->count_excl = 0;
         func_list[i]->count_incl = 0;
     }
+    samp_count = 0;
 
     tb_present();
 }
