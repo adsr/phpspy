@@ -4,7 +4,11 @@ Low-overhead sampling profiler for PHP 7 inspired by [rbspy][0].
 
 For now, works with Linux x86_64 non-ZTS PHP 7 with CLI and Apache SAPIs.
 
-You can use it to make flamegraphs like this:
+It has a top-mode:
+
+![top mode](https://i.imgur.com/VzgTGD0.gif)
+
+You can also use it to make flamegraphs like this:
 
 ![FlameGraph example](https://i.imgur.com/7DKdnmh.gif)
 
@@ -15,7 +19,7 @@ You can use it to make flamegraphs like this:
     ...
     $ cd phpspy
     $ make
-    cc  -Wall -Wextra -g -Ofast -pthread -I.  phpspy.c -o phpspy
+    cc -Wall -Wextra -pedantic -g -Ofast -pthread  -I.  phpspy.c pgrep.c top.c -o phpspy
     $ sudo ./phpspy -l 1000 -p $(pgrep -n httpd) | ./stackcollapse-phpspy.pl | ./flamegraph.pl > flame.svg
     ...
     $ google-chrome flame.svg # view flame.svg in browser
@@ -23,7 +27,7 @@ You can use it to make flamegraphs like this:
 ### Build
 
     $ make
-    cc  -Wall -Wextra -g -Ofast -I.  phpspy.c -o phpspy
+    cc -Wall -Wextra -pedantic -g -Ofast -pthread  -I.  phpspy.c pgrep.c top.c -o phpspy
     $ ./phpspy -h
     Usage:
       phpspy [options] -p <pid>
@@ -37,6 +41,7 @@ You can use it to make flamegraphs like this:
                                            pgrep `args` (see also `-T`)
       -T, --threads=<num>                Set number of threads to use with `-P`
                                            (default: 16)
+      -t, --top                          Show dynamic top-like output
       -s, --sleep-ns=<ns>                Sleep `ns` nanoseconds between traces
                                            (see also `-H`) (default: 10000000)
       -H, --rate-hz=<hz>                 Trace `hz` times per second
@@ -66,15 +71,30 @@ You can use it to make flamegraphs like this:
       -1, --single-line                  Output in single-line mode
       -#, --comment=<any>                Ignored; intended for self-documenting
                                            commands
+      -@, --nothing                      Ignored
       -v, --version                      Print phpspy version and exit
 
 ### Build options
 
-    $ make phpspy_readelf  # Use readelf (default) binary (requires elfutils)
+    $ make phpspy_readelf    # Use readelf (default) binary (requires elfutils)
     $ # or
-    $ make phpspy_libdw    # Use libdw (requires libdw-dev or elfutils-devel)
+    $ make phpspy_libdw      # Use libdw (requires libdw-dev or elfutils-devel)
     $ # also
-    $ USE_ZEND=1 make ...  # Use Zend structs instead of built-in structs (requires php-dev or php-devel)
+    $ USE_ZEND=1 make ...    # Use Zend structs instead of built-in structs (requires php-dev or php-devel)
+    $ USE_TERMBOX=1 make ... # Enable top mode support via termbox (requires libtermbox)
+
+### Example (pgrep daemon mode)
+
+    $ sudo ./phpspy -V73 -H1 -T4 -P '-x php'
+    0 proc_open <internal>:-1
+    1 system_with_timeout /home/adam/php-src/run-tests.php:1137
+    2 run_test /home/adam/php-src/run-tests.php:1937
+    3 run_all_tests /home/adam/php-src/run-tests.php:1215
+    4 <main> /home/adam/php-src/run-tests.php:986
+    # - - - - -
+    ...
+    ^C
+    main_pgrep finished gracefully
 
 ### Example (httpd)
 
@@ -94,7 +114,7 @@ You can use it to make flamegraphs like this:
     12 Security_Rule_Engine::evaluateActionRules /foo/bar/lib/Security/Rule/Engine.php:116
     13 <main> /foo/bar/lib/bootstrap/api.php:49
     14 <main> /foo/bar/htdocs/v3/public.php:5
-    # - - -
+    # - - - - -
     ...
 
 ### Example (cli child)
@@ -102,27 +122,27 @@ You can use it to make flamegraphs like this:
     $ sudo ./phpspy -r -- php -r 'usleep(100000);'
     0 usleep <internal>:-1
     1 <main> <internal>:-1
-    # 1535179291.009094 - Standard input code
+    # 1535179291.009094 - - Standard input code -
     
     0 usleep <internal>:-1
     1 <main> <internal>:-1
-    # 1535179291.009094 - Standard input code
+    # 1535179291.009094 - - Standard input code -
     
     0 usleep <internal>:-1
     1 <main> <internal>:-1
-    # 1535179291.009094 - Standard input code
+    # 1535179291.009094 - - Standard input code -
     
     0 usleep <internal>:-1
     1 <main> <internal>:-1
-    # 1535179291.009094 - Standard input code
+    # 1535179291.009094 - - Standard input code -
     
     0 usleep <internal>:-1
     1 <main> <internal>:-1
-    # 1535179291.009094 - Standard input code
+    # 1535179291.009094 - - Standard input code -
     
     0 usleep <internal>:-1
     1 <main> <internal>:-1
-    # 1535179291.009094 - Standard input code
+    # 1535179291.009094 - - Standard input code -
     
     process_vm_readv: No such process
 
@@ -133,7 +153,7 @@ You can use it to make flamegraphs like this:
     $ sudo ./phpspy -p 28586
     0 sleep <internal>:-1
     1 <main> <internal>:-1
-    # - - -
+    # - - - - -
     ...
 
 ### TODO
