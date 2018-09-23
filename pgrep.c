@@ -122,9 +122,7 @@ static void *work(void *arg) {
         attached_pids[worker_num] = avail_pids[--avail_pids_count];
         pthread_cond_signal(&can_produce);
         pthread_mutex_unlock(&mutex);
-        printf("worker_num %d in\n", worker_num);
         main_pid(attached_pids[worker_num]);
-        printf("worker_num %d out\n", worker_num);
         attached_pids[worker_num] = 0;
     }
     return NULL;
