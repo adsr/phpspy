@@ -1,33 +1,4 @@
-#define _GNU_SOURCE
-#include <stdarg.h>
-#include <stddef.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <string.h>
-#include <errno.h>
-#include <getopt.h>
-#include <limits.h>
-#include <sys/ptrace.h>
-#include <sys/types.h>
-#include <sys/uio.h>
-#include <sys/wait.h>
-#include <time.h>
-#include <unistd.h>
-
-#ifdef USE_ZEND
-#include <main/SAPI.h>
-#else
-#include <php_structs_70.h>
-#include <php_structs_71.h>
-#include <php_structs_72.h>
-#include <php_structs_73.h>
-#endif
-
-#define try(__rv, __stmt) do { if (((__rv) = (__stmt) != 0)) return __rv; } while(0) // TODO use more or ditch
-#define PHPSPY_VERSION "0.3"
-#define STR_LEN 256
-#define PHPSPY_MIN(a, b) ((a) < (b) ? (a) : (b))
+#include "phpspy.h"
 
 pid_t opt_pid = -1;
 char *opt_pgrep_args = NULL;
@@ -56,13 +27,7 @@ FILE *fout = NULL;
 int done = 0;
 int (*dump_trace_ptr)(pid_t, FILE *, uint64_t, uint64_t, uint64_t) = NULL;
 
-extern void usage(FILE *fp, int exit_code);
 static void parse_opts(int argc, char **argv);
-extern int main_pid(pid_t pid);
-extern int main_pgrep();
-#ifdef USE_TERMBOX
-extern int main_top(int argc, char **argv);
-#endif
 static int main_fork(int argc, char **argv);
 static int maybe_pause_pid(pid_t pid);
 static int maybe_unpause_pid(pid_t pid);

@@ -38,6 +38,7 @@ phpspy_libdw: phpspy_libs:=$(phpspy_libs) -ldw
 phpspy_libdw: phpspy
 
 phpspy_readelf: check=$(or $(has_readelf), $(error Need readelf))
+phpspy_readelf: phpspy_defines:=$(phpspy_defines) -DUSE_READELF=1
 phpspy_readelf: phpspy
 
 phpspy: phpspy.c pgrep.c top.c

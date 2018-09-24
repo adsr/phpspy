@@ -1,9 +1,3 @@
-#ifdef USE_ZEND
-    #ifdef snprintf
-        #undef snprintf
-    #endif
-#endif
-
 #define try_copy_proc_mem(__what, __raddr, __laddr, __size) do {          \
     if ((rv = copy_proc_mem(pid, (__raddr), (__laddr), (__size))) != 0) { \
         fprintf(stderr, "dump_trace: Failed to copy %s\n", (__what));     \
