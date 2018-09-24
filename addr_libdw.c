@@ -1,4 +1,14 @@
-#include <elfutils/libdwfl.h>
+#include "phpspy.h"
+#ifdef USE_LIBDW
+
+static int get_symbol_addr(pid_t pid, const char *symbol, unsigned long long *raddr);
+static int dwarf_module_callback(
+    Dwfl_Module *mod,
+    void **unused __attribute__((unused)),
+    const char *name __attribute__((unused)),
+    Dwarf_Addr start __attribute__((unused)),
+    void *arg
+);
 
 static char *debuginfo_path = NULL;
 static const char *dwarf_lookup_symbol = NULL;
@@ -85,3 +95,7 @@ static int get_symbol_addr(pid_t pid, const char *symbol, unsigned long long *ra
     dwfl_end(dwfl);
     return ret;
 }
+
+#else
+typedef int __no_libdw;
+#endif

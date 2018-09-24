@@ -1,18 +1,4 @@
-#define _GNU_SOURCE
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <errno.h>
-#include <pthread.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <time.h>
-#include <unistd.h>
-
-extern int main_pid();
-extern int opt_num_workers;
-extern char *opt_pgrep_args;
-extern int done;
+#include "phpspy.h"
 
 static int wait_for_turn(char producer_or_consumer);
 static void pgrep_for_pids();
@@ -22,13 +8,13 @@ static void init_threads();
 static void init_signal_handler();
 static void handle_signal(int signum);
 
-int *avail_pids = NULL;
-int *attached_pids = NULL;
-pthread_t *work_thread = NULL;
-int avail_pids_count = 0;
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t can_produce = PTHREAD_COND_INITIALIZER;
-pthread_cond_t can_consume = PTHREAD_COND_INITIALIZER;
+static int *avail_pids = NULL;
+static int *attached_pids = NULL;
+static pthread_t *work_thread = NULL;
+static int avail_pids_count = 0;
+static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t can_produce = PTHREAD_COND_INITIALIZER;
+static pthread_cond_t can_consume = PTHREAD_COND_INITIALIZER;
 
 int main_pgrep() {
     long i;

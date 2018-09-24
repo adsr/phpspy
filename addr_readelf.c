@@ -1,3 +1,6 @@
+#include "phpspy.h"
+#ifdef USE_READELF
+
 static int get_php_bin_path(pid_t pid, char *path);
 static int get_php_base_addr(pid_t pid, char *path, uint64_t *raddr);
 static int get_symbol_offset(char *path, const char *symbol, uint64_t *raddr);
@@ -97,3 +100,7 @@ static int popen_read_line(char *buf, size_t buf_size, char *cmd_fmt, ...) {
     buf[buf_len] = '\0';
     return 0;
 }
+
+#else
+typedef int __no_readelf;
+#endif

@@ -1,32 +1,10 @@
+#include "phpspy.h"
 #ifdef USE_TERMBOX
-#define _GNU_SOURCE
-#include <stdio.h>
-#include <stdarg.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <signal.h>
-#include <sys/select.h>
-#include <sys/stat.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <termbox.h>
-#include <time.h>
-#include <unistd.h>
-#include "uthash.h"
 
-extern void usage(FILE *fp, int exit_code);
-extern int done;
-extern pid_t opt_pid;
-extern char *opt_pgrep_args;
-
-// TODO common header
-#define PHPSPY_MAX(a, b) ((a) > (b) ? (a) : (b))
 #define FUNC_SIZE 256
 #define BUF_SIZE 512
 
-struct func_t {
-    // TODO rename struct?
+typedef struct func_entry_s {
     char func[FUNC_SIZE];
     unsigned long long count_excl;
     unsigned long long count_incl;
@@ -34,7 +12,7 @@ struct func_t {
     unsigned long long total_count_incl;
     float percent_excl;
     UT_hash_handle hh;
-};
+} func_entry_t;
 
 static int fork_child(int argc, char **argv, pid_t *pid, int *outfd, int *errfd);
 static void filter_child_args(int argc, char **argv);
@@ -46,16 +24,16 @@ static void display();
 static void tb_print(const char *str, int x, int y, uint16_t fg, uint16_t bg);
 static void tb_printf(int x, int y, uint16_t fg, uint16_t bg, const char *fmt, ...);
 
-struct func_t *func_map = NULL;
-struct func_t **func_list = NULL;
-size_t func_list_len = 0;
-size_t func_list_size = 0;
-char buf[BUF_SIZE];
-size_t buf_len = 0;
-unsigned long long total_samp_count = 0;
-unsigned long long samp_count = 0;
-unsigned long long total_err_count = 0;
-char phpspy_args[BUF_SIZE];
+static func_entry_t *func_map = NULL;
+static func_entry_t **func_list = NULL;
+static size_t func_list_len = 0;
+static size_t func_list_size = 0;
+static char buf[BUF_SIZE];
+static size_t buf_len = 0;
+static unsigned long long total_samp_count = 0;
+static unsigned long long samp_count = 0;
+static unsigned long long total_err_count = 0;
+static char phpspy_args[BUF_SIZE];
 
 int main_top(int argc, char **argv) {
     fd_set readfds;
@@ -238,7 +216,7 @@ static void handle_line(char *line, int line_len) {
     unsigned long long frame_num;
     char *func;
     size_t func_len;
-    struct func_t *func_el;
+    func_entry_t *func_el;
 
     if (line_len < 3) return;
     if (line[0] == '#') return;
@@ -251,12 +229,12 @@ static void handle_line(char *line, int line_len) {
 
     HASH_FIND(hh, func_map, func, func_len, func_el);
     if (!func_el) {
-        func_el = calloc(1, sizeof(struct func_t));
+        func_el = calloc(1, sizeof(func_entry_t));
         snprintf(func_el->func, FUNC_SIZE, "%.*s", (int)func_len, func);
         HASH_ADD_STR(func_map, func, func_el);
         func_list_len += 1;
         if (func_list_len > func_list_size) {
-            func_list = realloc(func_list, sizeof(struct func_t*) * (func_list_size + 1024));
+            func_list = realloc(func_list, sizeof(func_entry_t*) * (func_list_size + 1024));
             func_list_size += 1024;
         }
         func_list[func_list_len-1] = func_el;
@@ -280,9 +258,9 @@ static void handle_event(struct tb_event *event) {
 }
 
 static int func_list_compare(const void *a, const void *b) {
-    struct func_t *fa, *fb;
-    fa = *((struct func_t**)a);
-    fb = *((struct func_t**)b);
+    func_entry_t *fa, *fb;
+    fa = *((func_entry_t**)a);
+    fb = *((func_entry_t**)b);
     if (fb->count_excl == fa->count_excl) {
         return 0;
     }
@@ -291,11 +269,11 @@ static int func_list_compare(const void *a, const void *b) {
 
 static void display() {
     int y, w, h;
-    struct func_t *el;
+    func_entry_t *el;
     size_t i;
 
     if (func_list_len > 0) {
-        qsort(func_list, func_list_len, sizeof(struct func_t*), func_list_compare);
+        qsort(func_list, func_list_len, sizeof(func_entry_t*), func_list_compare);
         for (i = 0; i < func_list_len; i++) {
             func_list[i]->total_count_excl += func_list[i]->count_excl;
             func_list[i]->total_count_incl += func_list[i]->count_incl;
@@ -359,5 +337,5 @@ static void tb_printf(int x, int y, uint16_t fg, uint16_t bg, const char *fmt, .
 }
 
 #else
-typedef int hi_mom;
+typedef int __no_termbox;
 #endif
