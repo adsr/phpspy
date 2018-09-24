@@ -10,8 +10,8 @@ sinclude config.mk
 has_libdw   := $(shell $(LD) $(phpspy_ldflags) -ldw      -o/dev/null >/dev/null 2>&1 && echo :)
 has_pthread := $(shell $(LD) $(phpspy_ldflags) -lpthread -o/dev/null >/dev/null 2>&1 && echo :)
 has_termbox := $(shell $(LD) $(phpspy_ldflags) -ltermbox -o/dev/null >/dev/null 2>&1 && echo :)
-has_readelf := $(shell command -v readelf          >/dev/null 2>&1 && echo :)
-has_phpconf := $(shell command -v php-config       >/dev/null 2>&1 && echo :)
+has_readelf := $(shell command -v readelf                            >/dev/null 2>&1 && echo :)
+has_phpconf := $(shell command -v php-config                         >/dev/null 2>&1 && echo :)
 
 $(or $(has_pthread), $(error Need libpthread))
 
