@@ -3,6 +3,7 @@ phpspy_libs:=$(LDLIBS)
 phpspy_ldflags:=$(LDFLAGS)
 phpspy_includes:=-I.
 phpspy_defines:=
+phpspy_sources:=phpspy.c pgrep.c top.c addr_libdw.c addr_readelf.c
 prefix?=/usr/local
 
 sinclude config.mk
@@ -41,9 +42,9 @@ phpspy_readelf: check=$(or $(has_readelf), $(error Need readelf))
 phpspy_readelf: phpspy_defines:=$(phpspy_defines) -DUSE_READELF=1
 phpspy_readelf: phpspy
 
-phpspy: phpspy.c pgrep.c top.c addr_libdw.c addr_readelf.c
+phpspy: $(wildcard *.c *.h)
 	@$(check)
-	$(CC) $(phpspy_cflags) $(phpspy_includes) $(phpspy_defines) $? -o phpspy $(phpspy_ldflags) $(phpspy_libs)
+	$(CC) $(phpspy_cflags) $(phpspy_includes) $(phpspy_defines) $(phpspy_sources) -o phpspy $(phpspy_ldflags) $(phpspy_libs)
 
 install: phpspy
 	install -D -v -m 755 phpspy $(DESTDIR)$(prefix)/bin/phpspy
