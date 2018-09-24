@@ -6,7 +6,7 @@ static int get_php_base_addr(pid_t pid, char *path, uint64_t *raddr);
 static int get_symbol_offset(char *path, const char *symbol, uint64_t *raddr);
 static int popen_read_line(char *buf, size_t buf_size, char *cmd_fmt, ...);
 
-static int get_symbol_addr(pid_t pid, const char *symbol, uint64_t *raddr) {
+int get_symbol_addr(pid_t pid, const char *symbol, uint64_t *raddr) {
     char php_bin_path[128];
     uint64_t base_addr;
     uint64_t addr_offset;
