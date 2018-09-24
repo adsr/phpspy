@@ -93,6 +93,11 @@ int main_top(int argc, char **argv) {
 
     tb_init();
     while (!done) {
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        if (last_display.tv_sec == 0 || ts.tv_sec - last_display.tv_sec >= 1) {
+            display();
+            last_display = ts;
+        }
         FD_ZERO(&readfds);
         FD_SET(ttyfd, &readfds);
         FD_SET(outfd, &readfds);
@@ -114,11 +119,6 @@ int main_top(int argc, char **argv) {
             event.type = 0;
             tb_peek_event(&event, 0);
             handle_event(&event);
-        }
-        clock_gettime(CLOCK_MONOTONIC, &ts);
-        if (ts.tv_sec - last_display.tv_sec >= 1) {
-            display();
-            last_display = ts;
         }
     }
     tb_shutdown();
