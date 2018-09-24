@@ -1,3 +1,9 @@
+#ifdef USE_ZEND
+#ifdef snprintf
+#undef snprintf
+#endif
+#endif
+
 static int dump_trace(pid_t pid, FILE *fout, unsigned long long executor_globals_addr, unsigned long long sapi_globals_addr) {
     char func[STR_LEN+1];
     char file[STR_LEN+1];
