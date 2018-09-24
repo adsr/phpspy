@@ -37,7 +37,6 @@ static int find_addresses(pid_t pid, uint64_t *executor_globals_addr, uint64_t *
 static int copy_proc_mem(pid_t pid, void *raddr, void *laddr, size_t size);
 static void try_clock_gettime(struct timespec *ts);
 static void calc_sleep_time(struct timespec *end, struct timespec *start, struct timespec *sleep);
-static int get_symbol_addr(pid_t pid, const char *symbol, uint64_t *raddr);
 
 // TODO figure out a way to make this cleaner
 #ifdef USE_ZEND
@@ -440,10 +439,4 @@ static void calc_sleep_time(struct timespec *end, struct timespec *start, struct
 #define phpv 73
 #include "phpspy_trace_tpl.c"
 #undef phpv
-#endif
-
-#ifdef USE_LIBDW
-#include "addr_libdw.c"
-#else
-#include "addr_readelf.c"
 #endif

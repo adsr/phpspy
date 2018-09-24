@@ -60,6 +60,7 @@ extern pid_t opt_pid;
 extern int main_pgrep();
 extern int main_pid(pid_t pid);
 extern void usage(FILE *fp, int exit_code);
+extern int get_symbol_addr(pid_t pid, const char *symbol, uint64_t *raddr);
 #ifdef USE_TERMBOX
 extern int main_top(int argc, char **argv);
 #endif

@@ -1,7 +1,6 @@
 #include "phpspy.h"
 #ifdef USE_LIBDW
 
-static int get_symbol_addr(pid_t pid, const char *symbol, unsigned long long *raddr);
 static int dwarf_module_callback(
     Dwfl_Module *mod,
     void **unused __attribute__((unused)),
@@ -18,41 +17,7 @@ static const Dwfl_Callbacks proc_callbacks = {
     .debuginfo_path = &debuginfo_path,
 };
 
-static int dwarf_module_callback(
-    Dwfl_Module *mod,
-    void **unused __attribute__((unused)),
-    const char *name __attribute__((unused)),
-    Dwarf_Addr start __attribute__((unused)),
-    void *arg
-) {
-    unsigned long long *raddr = (unsigned long long *) arg;
-    GElf_Sym sym;
-    GElf_Addr value = 0;
-    int i, n = dwfl_module_getsymtab(mod);
-
-    for (i = 1; i < n; ++i) {
-        const char *symbol_name = dwfl_module_getsym_info(mod, i, &sym, &value, NULL, NULL, NULL);
-        if (symbol_name == NULL || symbol_name[0] == '\0') {
-            continue;
-        }
-        switch (GELF_ST_TYPE(sym.st_info)) {
-        case STT_SECTION:
-        case STT_FILE:
-        case STT_TLS:
-            break;
-        default:
-            if (!strcmp(symbol_name, dwarf_lookup_symbol) && value != 0) {
-                *raddr = value;
-                return DWARF_CB_ABORT;
-            }
-            break;
-        }
-    }
-
-    return DWARF_CB_OK;
-}
-
-static int get_symbol_addr(pid_t pid, const char *symbol, unsigned long long *raddr) {
+int get_symbol_addr(pid_t pid, const char *symbol, uint64_t *raddr) {
     Dwfl *dwfl = NULL;
     int ret = 0;
 
@@ -94,6 +59,40 @@ static int get_symbol_addr(pid_t pid, const char *symbol, unsigned long long *ra
 
     dwfl_end(dwfl);
     return ret;
+}
+
+static int dwarf_module_callback(
+    Dwfl_Module *mod,
+    void **unused __attribute__((unused)),
+    const char *name __attribute__((unused)),
+    Dwarf_Addr start __attribute__((unused)),
+    void *arg
+) {
+    unsigned long long *raddr = (unsigned long long *) arg;
+    GElf_Sym sym;
+    GElf_Addr value = 0;
+    int i, n = dwfl_module_getsymtab(mod);
+
+    for (i = 1; i < n; ++i) {
+        const char *symbol_name = dwfl_module_getsym_info(mod, i, &sym, &value, NULL, NULL, NULL);
+        if (symbol_name == NULL || symbol_name[0] == '\0') {
+            continue;
+        }
+        switch (GELF_ST_TYPE(sym.st_info)) {
+        case STT_SECTION:
+        case STT_FILE:
+        case STT_TLS:
+            break;
+        default:
+            if (!strcmp(symbol_name, dwarf_lookup_symbol) && value != 0) {
+                *raddr = value;
+                return DWARF_CB_ABORT;
+            }
+            break;
+        }
+    }
+
+    return DWARF_CB_OK;
 }
 
 #else

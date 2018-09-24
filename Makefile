@@ -41,7 +41,7 @@ phpspy_readelf: check=$(or $(has_readelf), $(error Need readelf))
 phpspy_readelf: phpspy_defines:=$(phpspy_defines) -DUSE_READELF=1
 phpspy_readelf: phpspy
 
-phpspy: phpspy.c pgrep.c top.c
+phpspy: phpspy.c pgrep.c top.c addr_libdw.c addr_readelf.c
 	@$(check)
 	$(CC) $(phpspy_cflags) $(phpspy_includes) $(phpspy_defines) $? -o phpspy $(phpspy_ldflags) $(phpspy_libs)
 
