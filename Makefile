@@ -1,8 +1,8 @@
 phpspy_cflags:=-Wall -Wextra -pedantic -g -Ofast -pthread $(CFLAGS)
 phpspy_libs:=$(LDLIBS)
+phpspy_ldflags:=$(LDFLAGS)
 phpspy_includes:=-I.
 phpspy_defines:=
-phpspy_ldflags:=
 prefix?=/usr/local
 
 sinclude config.mk
