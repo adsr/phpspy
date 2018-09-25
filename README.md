@@ -1,16 +1,21 @@
 # phpspy
 
-Low-overhead sampling profiler for PHP 7 inspired by [rbspy][0].
+phpspy is a low-overhead sampling profiler for PHP 7. For now, it works with
+Linux x86_64 non-ZTS PHP 7 with CLI and Apache SAPIs.
 
-For now, works with Linux x86_64 non-ZTS PHP 7 with CLI and Apache SAPIs.
+It has a top-like mode:
 
-It has a top-mode:
+![top mode](https://i.imgur.com/E8QTUfE.gif)
 
-![top mode](https://i.imgur.com/VzgTGD0.gif)
+You can peek at variables at runtime:
 
-You can also use it to make flamegraphs like this:
+![varpeek](https://i.imgur.com/HlpPd0x.gif)
+
+You can also use it make flamegraphs like this:
 
 ![FlameGraph example](https://i.imgur.com/7DKdnmh.gif)
+
+All with no changes to your application and minimal overhead.
 
 ### Synopsis
 
@@ -42,10 +47,14 @@ You can also use it to make flamegraphs like this:
       -T, --threads=<num>                Set number of threads to use with `-P`
                                            (default: 16)
       -t, --top                          Show dynamic top-like output
+      -e, --peek-var=<varspec>           Peek at the contents of the variable located
+                                           at `varspec`, which has the format:
+                                           <varname>@<path>:<lineno>
+                                           e.g., xyz@/path/to.php:1234
       -s, --sleep-ns=<ns>                Sleep `ns` nanoseconds between traces
-                                           (see also `-H`) (default: 10000000)
+                                           (see also `-H`) (default: 10101010)
       -H, --rate-hz=<hz>                 Trace `hz` times per second
-                                           (see also `-s`) (default: 100)
+                                           (see also `-s`) (default: 99)
       -V, --php-version=<ver>            Set PHP version
                                            (default: 72; supported: 70 71 72 73)
       -l, --limit=<num>                  Limit total number of traces to capture
@@ -55,7 +64,7 @@ You can also use it to make flamegraphs like this:
       -r, --request-info                 Capture request info as well as traces
       -R, --request-info-opts=<opts>     Set request info parts to capture (q=query
                                            c=cookie u=uri p=path) (capital=negation)
-                                           (default: qcup, all)
+                                           (default: qcup; all)
       -o, --output=<path>                Write phpspy output to `path`
                                            (default: -; -=stdout)
       -O, --child-stdout=<path>          Write child stdout to `path`
@@ -63,7 +72,7 @@ You can also use it to make flamegraphs like this:
       -E, --child-stderr=<path>          Write child stderr to `path`
                                            (default: phpspy.%d.err)
       -x, --addr-executor-globals=<hex>  Set address of executor_globals in hex
-                                           (default: 0, 0=find dynamically)
+                                           (default: 0; 0=find dynamically)
       -a, --addr-sapi-globals=<hex>      Set address of sapi_globals in hex
                                            (default: 0; 0=find dynamically)
       -S, --pause-process                Pause process while reading stacktrace
@@ -82,6 +91,15 @@ You can also use it to make flamegraphs like this:
     $ # also
     $ USE_ZEND=1 make ...    # Use Zend structs instead of built-in structs (requires php-dev or php-devel)
     $ USE_TERMBOX=1 make ... # Enable top mode support via termbox (requires libtermbox)
+
+### Example (variable peek)
+
+    $ sudo ./phpspy -V73 -e 'i@/var/www/test/lib/test.php:12' -p $(pgrep -n httpd) | grep varpeek
+    # varpeek i@/var/www/test/lib/test.php:12 = 42
+    # varpeek i@/var/www/test/lib/test.php:12 = 42
+    # varpeek i@/var/www/test/lib/test.php:12 = 43
+    # varpeek i@/var/www/test/lib/test.php:12 = 44
+    ...
 
 ### Example (pgrep daemon mode)
 
@@ -156,8 +174,19 @@ You can also use it to make flamegraphs like this:
     # - - - - -
     ...
 
+### Credits
+
+* phpspy is inspired by [rbspy][0].
+
+### See also
+
+* [rbspy][0]
+* [py-spy][1]
+
 ### TODO
 
+* See `grep -ri todo`
 * See https://github.com/adsr/phpspy/issues
 
 [0]: https://github.com/rbspy/rbspy
+[1]: https://github.com/benfred/py-spy
