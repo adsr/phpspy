@@ -23,39 +23,30 @@ char *opt_phpv = "72";
 int opt_pause = 0;
 
 size_t zend_string_val_offset = 0;
-FILE *fout = NULL;
 int done = 0;
-int (*dump_trace_ptr)(pid_t, FILE *, uint64_t, uint64_t, uint64_t) = NULL;
+int (*dump_trace_ptr)(trace_context_t *context) = NULL;
+varpeek_entry_t *varpeek_map = NULL;
 
 static void parse_opts(int argc, char **argv);
 static int main_fork(int argc, char **argv);
-static int maybe_pause_pid(pid_t pid);
-static int maybe_unpause_pid(pid_t pid);
+static int pause_pid(pid_t pid);
+static int unpause_pid(pid_t pid);
 static void redirect_child_stdio(int proc_fd, char *opt_path);
 static int open_fout(FILE **fout);
-static int find_addresses(pid_t pid, uint64_t *executor_globals_addr, uint64_t *sapi_globals_addr, uint64_t *core_globals_addr);
-static int copy_proc_mem(pid_t pid, void *raddr, void *laddr, size_t size);
-static void try_clock_gettime(struct timespec *ts);
+static int find_addresses(trace_context_t *context);
+static void get_clock_time(struct timespec *ts);
 static void calc_sleep_time(struct timespec *end, struct timespec *start, struct timespec *sleep);
+static int copy_proc_mem(trace_context_t *context, const char *what, void *raddr, void *laddr, size_t size);
+static void varpeek_add(char *varspec);
 
 // TODO figure out a way to make this cleaner
 #ifdef USE_ZEND
-static int dump_trace(pid_t pid, FILE *fout, uint64_t executor_globals_addr, uint64_t sapi_globals_addr, uint64_t core_globals_addr);
-static int print_array_recursive(pid_t pid, FILE *fout, zend_array *array_ptr);
-static int copy_zend_string(pid_t pid, zend_string *string_ptr, char** retval);
+static int dump_trace(trace_context_t *context);
 #else
-static int dump_trace_70(pid_t pid, FILE *fout, uint64_t executor_globals_addr, uint64_t sapi_globals_addr, uint64_t core_globals_addr);
-static int dump_trace_71(pid_t pid, FILE *fout, uint64_t executor_globals_addr, uint64_t sapi_globals_addr, uint64_t core_globals_addr);
-static int dump_trace_72(pid_t pid, FILE *fout, uint64_t executor_globals_addr, uint64_t sapi_globals_addr, uint64_t core_globals_addr);
-static int dump_trace_73(pid_t pid, FILE *fout, uint64_t executor_globals_addr, uint64_t sapi_globals_addr, uint64_t core_globals_addr);
-static int print_array_recursive_70(pid_t pid, FILE *fout, zend_array_70 *array_ptr);
-static int print_array_recursive_71(pid_t pid, FILE *fout, zend_array_71 *array_ptr);
-static int print_array_recursive_72(pid_t pid, FILE *fout, zend_array_72 *array_ptr);
-static int print_array_recursive_73(pid_t pid, FILE *fout, zend_array_73 *array_ptr);
-static int copy_zend_string_70(pid_t pid, zend_string_70 *string_ptr, char **retval);
-static int copy_zend_string_71(pid_t pid, zend_string_71 *string_ptr, char **retval);
-static int copy_zend_string_72(pid_t pid, zend_string_72 *string_ptr, char **retval);
-static int copy_zend_string_73(pid_t pid, zend_string_73 *string_ptr, char **retval);
+static int dump_trace_70(trace_context_t *context);
+static int dump_trace_71(trace_context_t *context);
+static int dump_trace_72(trace_context_t *context);
+static int dump_trace_73(trace_context_t *context);
 #endif
 
 void usage(FILE *fp, int exit_code) {
@@ -72,6 +63,10 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "  -T, --threads=<num>                Set number of threads to use with `-P`\n");
     fprintf(fp, "                                       (default: %d)\n", opt_num_workers);
     fprintf(fp, "  -t, --top                          Show dynamic top-like output\n");
+    fprintf(fp, "  -e, --peek-var=<varspec>           Peek at the contents of the variable located\n");
+    fprintf(fp, "                                       at `varspec`, which has the format:\n");
+    fprintf(fp, "                                       <varname>@<path>:<lineno>\n");
+    fprintf(fp, "                                       e.g., xyz@/path/to.php:1234\n");
     fprintf(fp, "  -s, --sleep-ns=<ns>                Sleep `ns` nanoseconds between traces\n");
     fprintf(fp, "                                       (see also `-H`) (default: %ld)\n", opt_sleep_ns);
     fprintf(fp, "  -H, --rate-hz=<hz>                 Trace `hz` times per second\n");
@@ -85,7 +80,7 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "  -r, --request-info                 Capture request info as well as traces\n");
     fprintf(fp, "  -R, --request-info-opts=<opts>     Set request info parts to capture (q=query\n");
     fprintf(fp, "                                       c=cookie u=uri p=path) (capital=negation)\n");
-    fprintf(fp, "                                       (default: qcup, all)\n");
+    fprintf(fp, "                                       (default: qcup; all)\n");
     fprintf(fp, "  -o, --output=<path>                Write phpspy output to `path`\n");
     fprintf(fp, "                                       (default: %s; -=stdout)\n", opt_path_output);
     fprintf(fp, "  -O, --child-stdout=<path>          Write child stdout to `path`\n");
@@ -93,7 +88,7 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "  -E, --child-stderr=<path>          Write child stderr to `path`\n");
     fprintf(fp, "                                       (default: %s)\n", opt_path_child_err);
     fprintf(fp, "  -x, --addr-executor-globals=<hex>  Set address of executor_globals in hex\n");
-    fprintf(fp, "                                       (default: %lu, 0=find dynamically)\n", opt_sapi_globals_addr);
+    fprintf(fp, "                                       (default: %lu; 0=find dynamically)\n", opt_sapi_globals_addr);
     fprintf(fp, "  -a, --addr-sapi-globals=<hex>      Set address of sapi_globals in hex\n");
     fprintf(fp, "                                       (default: %lu; 0=find dynamically)\n", opt_executor_globals_addr);
     fprintf(fp, "  -S, --pause-process                Pause process while reading stacktrace\n");
@@ -115,6 +110,7 @@ static void parse_opts(int argc, char **argv) {
         { "pgrep",                 required_argument, NULL, 'P' },
         { "threads",               required_argument, NULL, 'T' },
         { "top",                   no_argument,       NULL, 't' },
+        { "peek-var",              required_argument, NULL, 'e' },
         { "sleep-ns",              required_argument, NULL, 's' },
         { "rate-hz",               required_argument, NULL, 'H' },
         { "php-version",           required_argument, NULL, 'V' },
@@ -133,13 +129,14 @@ static void parse_opts(int argc, char **argv) {
         { "version",               no_argument,       NULL, 'v' },
         { 0,                       0,                 0,    0   }
     };
-    while ((c = getopt_long(argc, argv, "hp:P:T:ts:H:V:l:n:rR:o:O:E:x:a:S1#:@v", long_opts, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:n:rR:o:O:E:x:a:S1#:@v", long_opts, NULL)) != -1) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
             case 'p': opt_pid = atoi(optarg); break;
             case 'P': opt_pgrep_args = optarg; break;
             case 'T': opt_num_workers = atoi(optarg); break;
             case 't': opt_top_mode = 1; break;
+            case 'e': varpeek_add(optarg); break;
             case 's': opt_sleep_ns = strtol(optarg, NULL, 10); break;
             case 'H': opt_sleep_ns = (1000000000ULL / strtol(optarg, NULL, 10)); break;
             case 'V': opt_phpv = optarg; break;
@@ -220,14 +217,14 @@ int main(int argc, char **argv) {
 int main_pid(pid_t pid) {
     int rv;
     uint64_t n;
-    uint64_t executor_globals_addr;
-    uint64_t sapi_globals_addr;
-    uint64_t core_globals_addr;
+    trace_context_t context;
     struct timespec start_time, end_time, sleep_time;
-    FILE *fout = NULL;
 
-    try(rv, find_addresses(pid, &executor_globals_addr, &sapi_globals_addr, &core_globals_addr));
-    try(rv, open_fout(&fout));
+    memset(&context, 0, sizeof(trace_context_t));
+    context.pid = pid;
+
+    try(rv, find_addresses(&context));
+    try(rv, open_fout(&context.fout));
 
     #ifdef USE_ZEND
     dump_trace_ptr = dump_trace;
@@ -247,17 +244,17 @@ int main_pid(pid_t pid) {
 
     n = 0;
     while (!done) {
-        try_clock_gettime(&start_time);
-        rv |= maybe_pause_pid(pid);
-        rv |= dump_trace_ptr(pid, fout, executor_globals_addr, sapi_globals_addr, core_globals_addr);
-        rv |= maybe_unpause_pid(pid);
+        get_clock_time(&start_time);
+        if (opt_pause) rv |= pause_pid(pid);
+        rv |= dump_trace_ptr(&context);
+        if (opt_pause) rv |= unpause_pid(pid);
         if (++n == opt_trace_limit || (rv & 2) != 0) break;
-        try_clock_gettime(&end_time);
+        get_clock_time(&end_time);
         calc_sleep_time(&end_time, &start_time, &sleep_time);
         nanosleep(&sleep_time, NULL);
     }
 
-    fclose(fout);
+    fclose(context.fout);
 
     return 0;
 }
@@ -282,9 +279,8 @@ static int main_fork(int argc, char **argv) {
     return rv;
 }
 
-static int maybe_pause_pid(pid_t pid) {
+static int pause_pid(pid_t pid) {
     int rv;
-    if (!opt_pause) return 0;
     if (ptrace(PTRACE_ATTACH, pid, 0, 0) == -1) {
         rv = errno;
         perror("ptrace");
@@ -297,9 +293,8 @@ static int maybe_pause_pid(pid_t pid) {
     return 0;
 }
 
-static int maybe_unpause_pid(pid_t pid) {
+static int unpause_pid(pid_t pid) {
     int rv;
-    if (!opt_pause) return 0;
     if (ptrace(PTRACE_DETACH, pid, 0, 0) == -1) {
         rv = errno;
         perror("ptrace");
@@ -353,20 +348,22 @@ static int open_fout(FILE **fout) {
     return 0;
 }
 
-static int find_addresses(pid_t pid, uint64_t *executor_globals_addr, uint64_t *sapi_globals_addr, uint64_t *core_globals_addr) {
+static int find_addresses(trace_context_t *context) {
     if (opt_executor_globals_addr != 0) {
-        *executor_globals_addr = opt_executor_globals_addr;
-    } else if (get_symbol_addr(pid, "executor_globals", executor_globals_addr) != 0) {
+        context->executor_globals_addr = opt_executor_globals_addr;
+    } else if (get_symbol_addr(context->pid, "executor_globals", &context->executor_globals_addr) != 0) {
         return 1;
     }
     if (opt_sapi_globals_addr != 0) {
-        *sapi_globals_addr = opt_sapi_globals_addr;
-    } else if (get_symbol_addr(pid, "sapi_globals", sapi_globals_addr) != 0) {
+        context->sapi_globals_addr = opt_sapi_globals_addr;
+    } else if (get_symbol_addr(context->pid, "sapi_globals", &context->sapi_globals_addr) != 0) {
         return 1;
     }
-    if (get_symbol_addr(pid, "core_globals", core_globals_addr) != 0) {
+    if (get_symbol_addr(context->pid, "core_globals", &context->core_globals_addr) != 0) {
+        // TODO opt_core_globals_addr
         return 1;
     }
+    // TODO probably don't need zend_string_val_offset
     #ifdef USE_ZEND
     zend_string_val_offset = offsetof(zend_string, val);
     #else
@@ -375,25 +372,7 @@ static int find_addresses(pid_t pid, uint64_t *executor_globals_addr, uint64_t *
     return 0;
 }
 
-static int copy_proc_mem(pid_t pid, void *raddr, void *laddr, size_t size) {
-    struct iovec local[1];
-    struct iovec remote[1];
-    local[0].iov_base = laddr;
-    local[0].iov_len = size;
-    remote[0].iov_base = raddr;
-    remote[0].iov_len = size;
-    if (process_vm_readv(pid, local, 1, remote, 1, 0) == -1) {
-        if (errno == ESRCH) { // No such process
-            perror("process_vm_readv");
-            return 2;
-        }
-        fprintf(stderr, "copy_proc_mem: %s; raddr=%p size=%lu\n", strerror(errno), raddr, size);
-        return 1;
-    }
-    return 0;
-}
-
-static void try_clock_gettime(struct timespec *ts) {
+static void get_clock_time(struct timespec *ts) {
     if (clock_gettime(CLOCK_MONOTONIC_RAW, ts) == -1) {
         perror("clock_gettime");
         ts->tv_sec = 0;
@@ -421,6 +400,44 @@ static void calc_sleep_time(struct timespec *end, struct timespec *start, struct
         sleep->tv_sec = (long)sleep_ns / 1000000000L;
         sleep->tv_nsec = (long)sleep_ns - (sleep->tv_sec * 1000000000L);
     }
+}
+
+static void varpeek_add(char *varspec) {
+    char *at_sign;
+    varpeek_entry_t *varpeek;
+    at_sign = strstr(varspec, "@");
+    if (!at_sign) {
+        fprintf(stderr, "varpeek_add: Malformed varspec: %s\n\n", varspec);
+        usage(stderr, 1);
+    }
+    varpeek = malloc(sizeof(varpeek_entry_t)); // TODO free
+    snprintf(varpeek->filename_lineno, PHPSPY_VARPEEK_KEY_SIZE, "%s", at_sign+1);
+    snprintf(varpeek->varname, PHPSPY_VARPEEK_VARNAME_SIZE, "%.*s", (int)(at_sign-varspec), varspec);
+    HASH_ADD_STR(varpeek_map, filename_lineno, varpeek);
+}
+
+static int copy_proc_mem(trace_context_t *context, const char *what, void *raddr, void *laddr, size_t size) {
+    int rv;
+    struct iovec local[1];
+    struct iovec remote[1];
+    local[0].iov_base = laddr;
+    local[0].iov_len = size;
+    remote[0].iov_base = raddr;
+    remote[0].iov_len = size;
+    rv = 0;
+    if (process_vm_readv(context->pid, local, 1, remote, 1, 0) == -1) {
+        if (errno == ESRCH) { // No such process
+            perror("process_vm_readv");
+            rv = 2;
+        } else {
+            fprintf(stderr, "copy_proc_mem: Failed to copy %s; err=%s raddr=%p size=%lu\n", what, strerror(errno), raddr, size);
+            rv = 1;
+        }
+    }
+    if (rv != 0 && context->wrote_trace) {
+        fprintf(context->fout, "%s", opt_trace_delim);
+    }
+    return rv;
 }
 
 // TODO figure out a way to make this cleaner

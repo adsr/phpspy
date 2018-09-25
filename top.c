@@ -43,6 +43,7 @@ int main_top(int argc, char **argv) {
     struct timespec ts, last_display;
     struct tb_event event;
     int rc, i;
+    // TODO consider doing this by aggregating in-process instead of fork/stdout
 
     outfd = errfd = ttyfd = pid = -1;
 

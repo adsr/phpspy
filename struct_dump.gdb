@@ -1,58 +1,104 @@
 macro define offsetof(st, f) ((size_t)&(((st *)0)->f))
-printf "zend_executor_globals size=%lu\n", sizeof(zend_executor_globals)
-printf "  .current_execute_data +%lu\n", offsetof(zend_executor_globals, current_execute_data)
+macro define typeof(st, f) ((st *)0)->f
+define fieldof
+  printf "  $arg1 +%lu\n", offsetof($arg0, $arg1)
+  printf "  "
+  whatis typeof($arg0, $arg1)
+  print sizeof($$)
+end
+
+printf "zend_executor_globals\n"
+whatis zend_executor_globals
+       fieldof zend_executor_globals current_execute_data
 printf "\n"
-printf "zend_execute_data size=%lu\n", sizeof(zend_execute_data)
-printf "  .opline +%lu\n", offsetof(zend_execute_data, opline)
-printf "  .func +%lu\n", offsetof(zend_execute_data, func)
-printf "  .prev_execute_data +%lu\n", offsetof(zend_execute_data, prev_execute_data)
+
+printf "zend_execute_data\n"
+whatis zend_execute_data
+       fieldof zend_execute_data opline
+       fieldof zend_execute_data func
+       fieldof zend_execute_data prev_execute_data
+       fieldof zend_execute_data symbol_table
 printf "\n"
-printf "zend_function size=%lu\n", sizeof(zend_function)
-printf "  .type +%lu\n", offsetof(zend_function, type)
-printf "  .common.function_name +%lu\n", offsetof(zend_function, common.function_name)
-printf "  .common.scope +%lu\n", offsetof(zend_function, common.scope)
-printf "  .op_array.filename +%lu\n", offsetof(zend_function, op_array.filename)
+
+printf "zend_op_array\n"
+whatis zend_op_array
+       fieldof zend_op_array last_var
+       fieldof zend_op_array vars
+       fieldof zend_op_array filename
+       fieldof zend_op_array line_start
 printf "\n"
-printf "zend_class_entry size=%lu\n", sizeof(zend_class_entry)
-printf "  .name +%lu\n", offsetof(zend_class_entry, name)
+
+printf "zend_function\n"
+whatis zend_function
+       fieldof zend_function type
+       fieldof zend_function common
+       fieldof zend_function common.function_name
+       fieldof zend_function common.scope
+       fieldof zend_function op_array
 printf "\n"
-printf "zend_string size=%lu\n", sizeof(zend_string)
-printf "  .len +%lu\n", offsetof(zend_string, len)
-printf "  .val +%lu\n", offsetof(zend_string, val)
+
+printf "zend_class_entry\n"
+whatis zend_class_entry
+       fieldof zend_class_entry name
 printf "\n"
-printf "zend_op size=%lu\n", sizeof(zend_op)
-printf "  .lineno +%lu\n", offsetof(zend_op, lineno)
+
+printf "zend_string\n"
+whatis zend_string
+       fieldof zend_string len
+       fieldof zend_string val
 printf "\n"
-printf "sapi_request_info=%lu\n", sizeof(sapi_request_info)
-printf "  .query_string +%lu\n", offsetof(sapi_request_info, query_string)
-printf "  .cookie_data +%lu\n", offsetof(sapi_request_info, cookie_data)
-printf "  .path_translated +%lu\n", offsetof(sapi_request_info, path_translated)
-printf "  .request_uri +%lu\n", offsetof(sapi_request_info, request_uri)
+
+printf "zend_op\n"
+whatis zend_op
+       fieldof zend_op lineno
 printf "\n"
-printf "sapi_globals_struct=%lu\n", sizeof(sapi_globals_struct)
-printf "  .request_info +%lu\n", offsetof(sapi_globals_struct, request_info)
-printf "  .global_request_time +%lu\n", offsetof(sapi_globals_struct, global_request_time)
+
+printf "sapi_request_info\n"
+whatis sapi_request_info
+       fieldof sapi_request_info query_string
+       fieldof sapi_request_info cookie_data
+       fieldof sapi_request_info path_translated
+       fieldof sapi_request_info request_uri
 printf "\n"
-printf "php_core_globals=%lu\n", sizeof(php_core_globals)
-printf "  .http_globals +%lu\n", offsetof(php_core_globals, http_globals)
+
+printf "sapi_globals_struct\n"
+whatis sapi_globals_struct
+       fieldof sapi_globals_struct request_info
+       fieldof sapi_globals_struct global_request_time
 printf "\n"
-printf "zval=%lu\n", sizeof(zval)
-printf "  .value +%lu\n", offsetof(zval, value)
-printf "  .u1 +%lu\n", offsetof(zval, u1)
+
+printf "php_core_globals\n"
+whatis php_core_globals
+       fieldof php_core_globals http_globals
 printf "\n"
-printf "zend_value=%lu\n", sizeof(zend_value)
-printf "  .str +%lu\n", offsetof(zend_value, str)
-printf "  .arr +%lu\n", offsetof(zend_value, arr)
+
+printf "zval\n"
+whatis zval
+       fieldof zval value
+       fieldof zval u1
+       fieldof zval u1.v
+       fieldof zval u1.v.type
 printf "\n"
-printf "zend_array=%lu\n", sizeof(zend_array)
-printf "  .arData +%lu\n", offsetof(zend_array, arData)
-printf "  .nNumUsed +%lu\n", offsetof(zend_array, nNumUsed)
-printf "  .nNumOfElements +%lu\n", offsetof(zend_array, nNumOfElements)
-printf "  .nTableSize +%lu\n", offsetof(zend_array, nTableSize)
+
+printf "zend_value\n"
+whatis zend_value
+       fieldof zend_value lval
+       fieldof zend_value dval
+       fieldof zend_value str
+       fieldof zend_value arr
 printf "\n"
-printf "Bucket=%lu\n", sizeof(Bucket)
-printf "  .val +%lu\n", offsetof(Bucket, val)
-printf "  .h +%lu\n", offsetof(Bucket, h)
-printf "  .key +%lu\n", offsetof(Bucket,key)
+
+printf "zend_array\n"
+whatis zend_array
+       fieldof zend_array arData
+       fieldof zend_array nNumUsed
+       fieldof zend_array nNumOfElements
+       fieldof zend_array nTableSize
 printf "\n"
+
+printf "Bucket\n"
+whatis Bucket
+       fieldof Bucket val
+       fieldof Bucket h
+       fieldof Bucket key
 printf "\n"
