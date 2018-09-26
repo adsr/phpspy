@@ -21,9 +21,12 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <sys/wait.h>
-#include <termbox.h>
 #include <time.h>
 #include <unistd.h>
+
+#ifdef USE_TERMBOX
+#include <termbox.h>
+#endif
 
 #ifdef USE_ZEND
 #include <main/php_config.h>
