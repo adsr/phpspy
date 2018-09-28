@@ -1,4 +1,4 @@
-phpspy_cflags:=-Wall -Wextra -pedantic -g -Ofast -pthread $(CFLAGS)
+phpspy_cflags:=-std=c90 -Wall -Wextra -pedantic -g -Ofast -pthread $(CFLAGS)
 phpspy_libs:=$(LDLIBS)
 phpspy_ldflags:=$(LDFLAGS)
 phpspy_includes:=-I.

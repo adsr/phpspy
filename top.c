@@ -6,10 +6,10 @@
 
 typedef struct func_entry_s {
     char func[FUNC_SIZE];
-    unsigned long long count_excl;
-    unsigned long long count_incl;
-    unsigned long long total_count_excl;
-    unsigned long long total_count_incl;
+    unsigned long count_excl;
+    unsigned long count_incl;
+    unsigned long total_count_excl;
+    unsigned long total_count_incl;
     float percent_excl;
     UT_hash_handle hh;
 } func_entry_t;
@@ -30,9 +30,9 @@ static size_t func_list_len = 0;
 static size_t func_list_size = 0;
 static char buf[BUF_SIZE];
 static size_t buf_len = 0;
-static unsigned long long total_samp_count = 0;
-static unsigned long long samp_count = 0;
-static unsigned long long total_err_count = 0;
+static unsigned long total_samp_count = 0;
+static unsigned long samp_count = 0;
+static unsigned long total_err_count = 0;
 static char phpspy_args[BUF_SIZE];
 
 int main_top(int argc, char **argv) {
@@ -43,18 +43,18 @@ int main_top(int argc, char **argv) {
     struct timespec ts, last_display;
     struct tb_event event;
     int rc, i;
-    // TODO consider doing this by aggregating in-process instead of fork/stdout
+    /* TODO consider doing this by aggregating in-process instead of fork/stdout */
 
     outfd = errfd = ttyfd = pid = -1;
 
     if (opt_pid == -1 && opt_pgrep_args == NULL && optind >= argc) {
-        // TODO DRY with main()
+        /* TODO DRY with main() */
         fprintf(stderr, "Expected pid (-p), pgrep (-P), or command\n\n");
         usage(stderr, 1);
         return 1;
     }
 
-    // TODO refactor this function
+    /* TODO refactor this function */
     filter_child_args(argc, argv);
     snprintf(phpspy_args, BUF_SIZE, "phpspy ");
     for (i = 1; i < argc; i++) {
@@ -73,7 +73,7 @@ int main_top(int argc, char **argv) {
     last_display.tv_sec = 0;
     last_display.tv_nsec = 0;
 
-    tb_init(); // TODO support for ncurses for portability sake?
+    tb_init(); /* TODO support for ncurses for portability sake? */
     while (!done) {
         clock_gettime(CLOCK_MONOTONIC, &ts);
         if (last_display.tv_sec == 0 || ts.tv_sec - last_display.tv_sec >= 1) {
@@ -193,7 +193,7 @@ static void read_child_out(int fd) {
 }
 
 static void read_child_err(int fd) {
-    // TODO DRY with read_child_out
+    /* TODO DRY with read_child_out */
     char buf[BUF_SIZE];
     char *nl;
     size_t buf_pos;
@@ -214,7 +214,7 @@ static void read_child_err(int fd) {
 }
 
 static void handle_line(char *line, int line_len) {
-    unsigned long long frame_num;
+    unsigned long frame_num;
     char *func;
     size_t func_len;
     func_entry_t *func_el;
@@ -254,7 +254,7 @@ static void handle_event(struct tb_event *event) {
     } else if (event->ch == 'q') {
         done = 1;
     } else if (event->ch == 'c') {
-        // TODO top mode handle_event
+        /* TODO top mode handle_event */
     }
 }
 
