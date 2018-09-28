@@ -4,7 +4,7 @@ pid_t opt_pid = -1;
 char *opt_pgrep_args = NULL;
 int opt_num_workers = 16;
 int opt_top_mode = 0;
-long opt_sleep_ns = 10101010; // ~99Hz
+long opt_sleep_ns = 10101010; /* ~99Hz */
 uint64_t opt_executor_globals_addr = 0;
 uint64_t opt_sapi_globals_addr = 0;
 int opt_capture_req = 0;
@@ -39,7 +39,6 @@ static void calc_sleep_time(struct timespec *end, struct timespec *start, struct
 static int copy_proc_mem(trace_context_t *context, const char *what, void *raddr, void *laddr, size_t size);
 static void varpeek_add(char *varspec);
 
-// TODO figure out a way to make this cleaner
 #ifdef USE_ZEND
 static int dump_trace(trace_context_t *context);
 #else
@@ -138,7 +137,7 @@ static void parse_opts(int argc, char **argv) {
             case 't': opt_top_mode = 1; break;
             case 'e': varpeek_add(optarg); break;
             case 's': opt_sleep_ns = strtol(optarg, NULL, 10); break;
-            case 'H': opt_sleep_ns = (1000000000ULL / strtol(optarg, NULL, 10)); break;
+            case 'H': opt_sleep_ns = (1000000000UL / strtol(optarg, NULL, 10)); break;
             case 'V': opt_phpv = optarg; break;
             case 'l': opt_trace_limit = strtoull(optarg, NULL, 10); break;
             case 'n': opt_max_stack_depth = atoi(optarg); break;
@@ -360,10 +359,10 @@ static int find_addresses(trace_context_t *context) {
         return 1;
     }
     if (get_symbol_addr(context->pid, "core_globals", &context->core_globals_addr) != 0) {
-        // TODO opt_core_globals_addr
+        /* TODO opt_core_globals_addr */
         return 1;
     }
-    // TODO probably don't need zend_string_val_offset
+    /* TODO probably don't need zend_string_val_offset */
     #ifdef USE_ZEND
     zend_string_val_offset = offsetof(zend_string, val);
     #else
@@ -381,12 +380,12 @@ static void get_clock_time(struct timespec *ts) {
 }
 
 static void calc_sleep_time(struct timespec *end, struct timespec *start, struct timespec *sleep) {
-    long long end_ns, start_ns, sleep_ns;
+    long end_ns, start_ns, sleep_ns;
     if (end->tv_sec == start->tv_sec) {
         sleep_ns = opt_sleep_ns - (end->tv_nsec - start->tv_nsec);
     } else {
-        end_ns = (end->tv_sec * 1000000000ULL) + (end->tv_nsec * 1ULL);
-        start_ns = (start->tv_sec * 1000000000ULL) + (start->tv_nsec * 1ULL);
+        end_ns = (end->tv_sec * 1000000000UL) + (end->tv_nsec * 1UL);
+        start_ns = (start->tv_sec * 1000000000UL) + (start->tv_nsec * 1UL);
         sleep_ns = opt_sleep_ns - (end_ns - start_ns);
     }
     if (sleep_ns < 0) {
@@ -410,7 +409,7 @@ static void varpeek_add(char *varspec) {
         fprintf(stderr, "varpeek_add: Malformed varspec: %s\n\n", varspec);
         usage(stderr, 1);
     }
-    varpeek = malloc(sizeof(varpeek_entry_t)); // TODO free
+    varpeek = malloc(sizeof(varpeek_entry_t)); /* TODO free */
     snprintf(varpeek->filename_lineno, PHPSPY_VARPEEK_KEY_SIZE, "%s", at_sign+1);
     snprintf(varpeek->varname, PHPSPY_VARPEEK_VARNAME_SIZE, "%.*s", (int)(at_sign-varspec), varspec);
     HASH_ADD_STR(varpeek_map, filename_lineno, varpeek);
@@ -426,7 +425,7 @@ static int copy_proc_mem(trace_context_t *context, const char *what, void *raddr
     remote[0].iov_len = size;
     rv = 0;
     if (process_vm_readv(context->pid, local, 1, remote, 1, 0) == -1) {
-        if (errno == ESRCH) { // No such process
+        if (errno == ESRCH) { /* No such process */
             perror("process_vm_readv");
             rv = 2;
         } else {
@@ -440,7 +439,7 @@ static int copy_proc_mem(trace_context_t *context, const char *what, void *raddr
     return rv;
 }
 
-// TODO figure out a way to make this cleaner
+/* TODO figure out a way to make this cleaner */
 #ifdef USE_ZEND
 #include "phpspy_trace.c"
 #else
