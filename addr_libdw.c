@@ -12,14 +12,16 @@ static int dwarf_module_callback(
 static char *debuginfo_path = NULL;
 static const char *dwarf_lookup_symbol = NULL;
 static const Dwfl_Callbacks proc_callbacks = {
-    .find_elf = dwfl_linux_proc_find_elf,
-    .find_debuginfo = dwfl_standard_find_debuginfo,
-    .debuginfo_path = &debuginfo_path,
+    dwfl_linux_proc_find_elf,
+    dwfl_standard_find_debuginfo,
+    NULL,
+    &debuginfo_path
 };
 
 int get_symbol_addr(pid_t pid, const char *symbol, uint64_t *raddr) {
     Dwfl *dwfl = NULL;
     int ret = 0;
+    const char *msg;
 
     dwarf_lookup_symbol = symbol;
     do {
@@ -33,7 +35,7 @@ int get_symbol_addr(pid_t pid, const char *symbol, uint64_t *raddr) {
 
         err = dwfl_linux_proc_report(dwfl, pid);
         if (err != 0) {
-            fprintf(stderr, "get_symbol_addr: Error reading from /proc. Details: %s\n", dwfl_errmsg(0));
+            fprintf(stderr, "get_symbol_addr: Error reading from /proc. Details: %s\n", (msg = dwfl_errmsg(0)) ? msg : strerror(err));
             ret = 1;
             break;
         }
@@ -68,7 +70,7 @@ static int dwarf_module_callback(
     Dwarf_Addr start __attribute__((unused)),
     void *arg
 ) {
-    unsigned long long *raddr = (unsigned long long *) arg;
+    uint64_t *raddr = (uint64_t *) arg;
     GElf_Sym sym;
     GElf_Addr value = 0;
     int i, n = dwfl_module_getsymtab(mod);

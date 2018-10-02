@@ -266,6 +266,7 @@ static int main_fork(int argc, char **argv) {
     if (fork_pid == 0) {
         redirect_child_stdio(STDOUT_FILENO, opt_path_child_out);
         redirect_child_stdio(STDERR_FILENO, opt_path_child_err);
+        ptrace(PTRACE_TRACEME, 0, NULL, NULL);
         execvp(argv[optind], argv + optind);
         perror("execvp");
         exit(1);
@@ -273,6 +274,9 @@ static int main_fork(int argc, char **argv) {
         perror("fork");
         exit(1);
     }
+    wait(NULL);
+    ptrace(PTRACE_EVENT_EXEC, fork_pid, NULL, NULL);
+    ptrace(PTRACE_CONT, fork_pid, NULL, NULL);
     rv = main_pid(fork_pid);
     waitpid(fork_pid, NULL, 0);
     return rv;
