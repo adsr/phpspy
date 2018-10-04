@@ -259,13 +259,14 @@ int main_pid(pid_t pid) {
 }
 
 static int main_fork(int argc, char **argv) {
-    int rv;
+    int rv, status;
     pid_t fork_pid;
     (void)argc;
     fork_pid = fork();
     if (fork_pid == 0) {
         redirect_child_stdio(STDOUT_FILENO, opt_path_child_out);
         redirect_child_stdio(STDERR_FILENO, opt_path_child_err);
+        ptrace(PTRACE_TRACEME, 0, NULL, NULL);
         execvp(argv[optind], argv + optind);
         perror("execvp");
         exit(1);
@@ -273,6 +274,11 @@ static int main_fork(int argc, char **argv) {
         perror("fork");
         exit(1);
     }
+    waitpid(fork_pid, &status, 0);
+    if (!WIFSTOPPED(status) || WSTOPSIG(status) != SIGTRAP) {
+        fprintf(stderr, "main_fork: Expected SIGTRAP from child\n");
+    }
+    ptrace(PTRACE_DETACH, fork_pid, NULL, NULL);
     rv = main_pid(fork_pid);
     waitpid(fork_pid, NULL, 0);
     return rv;
@@ -285,7 +291,7 @@ static int pause_pid(pid_t pid) {
         perror("ptrace");
         return rv == ESRCH ? 2 : 1;
     }
-    if (waitpid(pid, NULL, 0) == -1) {
+    if (waitpid(pid, NULL, 0) < 0) {
         perror("waitpid");
         return 1;
     }
