@@ -91,16 +91,14 @@ static int dump_trace(trace_context_t *context) {
     }
     if (wrote_trace) {
         if (opt_capture_req) {
-            /* TODO review opt_capture_req* */
             try_copy_proc_mem("sapi_globals", (void*)context->sapi_globals_addr, &sapi_globals, sizeof(sapi_globals));
-            /* TODO try(func) instead of macro */
-            #define try_copy_sapi_global_field(__field, __local) do {                                       \
-                if ((opt_capture_req_ ## __local) && sapi_globals.request_info.__field) {                   \
-                    try_copy_proc_mem(#__field, sapi_globals.request_info.__field, &__local, PHPSPY_STR_LEN+1);    \
-                } else {                                                                                    \
-                    __local[0] = '-';                                                                       \
-                    __local[1] = '\0';                                                                      \
-                }                                                                                           \
+            #define try_copy_sapi_global_field(__field, __local) do {                                           \
+                if ((opt_capture_req_ ## __local) && sapi_globals.request_info.__field) {                       \
+                    try_copy_proc_mem(#__field, sapi_globals.request_info.__field, &__local, PHPSPY_STR_LEN+1); \
+                } else {                                                                                        \
+                    __local[0] = '-';                                                                           \
+                    __local[1] = '\0';                                                                          \
+                }                                                                                               \
             } while (0)
             try_copy_sapi_global_field(query_string, qstring);
             try_copy_sapi_global_field(cookie_data, cookie);
