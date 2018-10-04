@@ -61,10 +61,9 @@ All with no changes to your application and minimal overhead.
                                            (default: 0; 0=unlimited)
       -n, --max-depth=<max>              Set max stack trace depth
                                            (default: -1; -1=unlimited)
-      -r, --request-info                 Capture request info as well as traces
-      -R, --request-info-opts=<opts>     Set request info parts to capture (q=query
+      -r, --request-info=<opts>          Set request info parts to capture (q=query
                                            c=cookie u=uri p=path) (capital=negation)
-                                           (default: qcup; all)
+                                           (default: QCUP; none)
       -o, --output=<path>                Write phpspy output to `path`
                                            (default: -; -=stdout)
       -O, --child-stdout=<path>          Write child stdout to `path`
