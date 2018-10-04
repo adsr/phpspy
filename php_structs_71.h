@@ -56,7 +56,7 @@ union __attribute__((__packed__)) _zend_function_71 {
 
 struct __attribute__((__packed__)) _zend_class_entry_71 {
     uint8_t                 pad0[8];                /* 0        +8 */
-    zend_function_71        *name;                  /* 8        +8 */
+    zend_string_71          *name;                  /* 8        +8 */
 };
 
 struct __attribute__((__packed__)) _zend_string_71 {

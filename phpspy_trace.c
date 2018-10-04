@@ -1,13 +1,12 @@
 #define try_copy_proc_mem(__what, __raddr, __laddr, __size) \
     try(rv, copy_proc_mem(context, (__what), (__raddr), (__laddr), (__size)))
 
+static int copy_zstring(trace_context_t *context, const char *what, zend_string *rzstring, char *retstr, size_t *retlen);
 static int varpeek_find(trace_context_t *context, varpeek_entry_t *varpeek_map, zend_execute_data *local_execute_data, zend_execute_data *remote_execute_data, zend_op_array *op_array, char *file, int file_len);
-static int varpeek_copy_zstring(trace_context_t *context, zend_string *string_ptr, char **retstr, size_t *retlen);
 static int varpeek_print_zval(trace_context_t *context, zval *local_zval);
 static int varpeek_print_array(trace_context_t *context, zend_array *local_arr);
 
 static int dump_trace(trace_context_t *context) {
-    /* TODO replace context with struct ptr */
     char func[PHPSPY_STR_LEN+1];
     char file[PHPSPY_STR_LEN+1];
     char class[PHPSPY_STR_LEN+1];
@@ -15,9 +14,9 @@ static int dump_trace(trace_context_t *context) {
     char path[PHPSPY_STR_LEN+1];
     char qstring[PHPSPY_STR_LEN+1];
     char cookie[PHPSPY_STR_LEN+1];
-    int file_len;
-    int func_len;
-    int class_len;
+    size_t file_len;
+    size_t func_len;
+    size_t class_len;
     int lineno;
     int depth;
     int wrote_trace;
@@ -48,32 +47,19 @@ static int dump_trace(trace_context_t *context) {
         try_copy_proc_mem("execute_data", remote_execute_data, &execute_data, sizeof(execute_data));
         try_copy_proc_mem("zfunc", execute_data.func, &zfunc, sizeof(zfunc));
         if (zfunc.common.function_name) {
-            /* TODO DRY with varpeek_copy_zstring */
-            try_copy_proc_mem("function_name", zfunc.common.function_name, &zstring, sizeof(zstring));
-            func_len = PHPSPY_MIN(zstring.len, PHPSPY_STR_LEN);
-            try_copy_proc_mem("function_name.val", ((char*)zfunc.common.function_name) + zend_string_val_offset, func, func_len);
+            try(rv, copy_zstring(context, "function_name", zfunc.common.function_name, func, &func_len));
         } else {
             func_len = snprintf(func, sizeof(func), "<main>");
         }
         if (zfunc.common.scope) {
             try_copy_proc_mem("zce", zfunc.common.scope, &zce, sizeof(zce));
-            try_copy_proc_mem("class_name", zce.name, &zstring, sizeof(zstring));
-            class_len = PHPSPY_MIN(zstring.len, PHPSPY_STR_LEN);
-            try_copy_proc_mem("class_name.val", ((char*)zce.name) + zend_string_val_offset, class, class_len);
-            if (class_len+2 <= PHPSPY_STR_LEN) {
-                class[class_len+0] = ':';
-                class[class_len+1] = ':';
-                class[class_len+2] = '\0';
-                class_len += 2;
-            }
+            try(rv, copy_zstring(context, "class_name", zce.name, class, &class_len));
         } else {
             class[0] = '\0';
             class_len = 0;
         }
         if (zfunc.type == 2) {
-            try_copy_proc_mem("filename", zfunc.op_array.filename, &zstring, sizeof(zstring));
-            file_len = PHPSPY_MIN(zstring.len, PHPSPY_STR_LEN);
-            try_copy_proc_mem("filename.val", ((char*)zfunc.op_array.filename) + zend_string_val_offset, file, file_len);
+            try(rv, copy_zstring(context, "filename", zfunc.op_array.filename, file, &file_len));
             lineno = zfunc.op_array.line_start;
             /* TODO split this function up, add comments */
             if (HASH_CNT(hh, varpeek_map) > 0) {
@@ -83,7 +69,7 @@ static int dump_trace(trace_context_t *context) {
             file_len = snprintf(file, sizeof(file), "<internal>");
             lineno = -1;
         }
-        fprintf(context->fout, "%d %.*s%.*s %.*s:%d%s", depth, class_len, class, func_len, func, file_len, file, lineno, opt_frame_delim);
+        fprintf(context->fout, "%d %.*s%s%.*s %.*s:%d%s", depth, (int)class_len, class, class_len > 0 ? "::" : "", (int)func_len, func, (int)file_len, file, lineno, opt_frame_delim);
         if (!wrote_trace) wrote_trace = 1;
         remote_execute_data = execute_data.prev_execute_data;
         depth += 1;
@@ -121,7 +107,7 @@ static int dump_trace(trace_context_t *context) {
 static int varpeek_find(trace_context_t *context, varpeek_entry_t *varpeek_map, zend_execute_data *local_execute_data, zend_execute_data *remote_execute_data, zend_op_array *op_array, char *file, int file_len) {
     int rv;
     int i;
-    char *tmp;
+    char tmp[PHPSPY_STR_LEN+1];
     size_t tmp_len;
     zend_string *zstrp;
     varpeek_entry_t *varpeek;
@@ -138,7 +124,7 @@ static int varpeek_find(trace_context_t *context, varpeek_entry_t *varpeek_map, 
 
     for (i = 0; i < op_array->last_var; i++) {
         try_copy_proc_mem("var", op_array->vars + i, &zstrp, sizeof(zstrp));
-        try(rv, varpeek_copy_zstring(context, zstrp, &tmp, &tmp_len));
+        try(rv, copy_zstring(context, "var", zstrp, tmp, &tmp_len));
         if (strncmp(tmp, varpeek->varname, tmp_len) != 0) continue;
         try_copy_proc_mem("zval", ((zval*)(remote_execute_data)) + ((int)(5 + i)), &zv, sizeof(zv));
         /* TODO review output formats */
@@ -150,29 +136,21 @@ static int varpeek_find(trace_context_t *context, varpeek_entry_t *varpeek_map, 
     return 0;
 }
 
-static int varpeek_copy_zstring(trace_context_t *context, zend_string *string_ptr, char **retstr, size_t *retlen) {
+static int copy_zstring(trace_context_t *context, const char *what, zend_string *rzstring, char *retstr, size_t *retlen) {
     int rv;
-    zend_string string_partial;
-    zend_string *string_full;
-    size_t copy_size;
-
-    string_full = (zend_string*)context->buf;
-    try_copy_proc_mem("string_partial", string_ptr, &string_partial, sizeof(string_partial));
-
-    /* TODO can avoid recopying the first half of the struct */
-    /* TODO DRY with string copying in dump_trace */
-    copy_size = PHPSPY_MIN(sizeof(context->buf)-1, sizeof(string_partial) + string_partial.len);
-    try_copy_proc_mem("string_full", string_ptr, string_full, copy_size);
-
-    *retstr = context->buf + sizeof(string_partial) - 1;
-    *retlen = copy_size - sizeof(string_partial);
+    zend_string lzstring;
+    *retstr = '\0';
+    *retlen = 0;
+    try_copy_proc_mem(what, rzstring, &lzstring, sizeof(lzstring));
+    *retlen = PHPSPY_MIN(lzstring.len, PHPSPY_STR_LEN);
+    try_copy_proc_mem(what, ((char*)rzstring) + zend_string_val_offset, retstr, *retlen);
     return 0;
 }
 
 static int varpeek_print_zval(trace_context_t *context, zval *local_zval) {
     int rv;
     int type;
-    char *tmp;
+    char tmp[PHPSPY_STR_LEN+1];
     size_t tmp_len;
     type = (int)local_zval->u1.v.type;
     switch (type) {
@@ -183,7 +161,7 @@ static int varpeek_print_zval(trace_context_t *context, zval *local_zval) {
             fprintf(context->fout, "%f\n", local_zval->value.dval);
             break;
         case IS_STRING:
-            try(rv, varpeek_copy_zstring(context, local_zval->value.str, &tmp, &tmp_len));
+            try(rv, copy_zstring(context, "zval", local_zval->value.str, tmp, &tmp_len));
             fprintf(context->fout, "\"%.*s\"\n", (int)tmp_len, tmp);
             break;
         case IS_ARRAY:
@@ -200,7 +178,7 @@ static int varpeek_print_zval(trace_context_t *context, zval *local_zval) {
 static int varpeek_print_array(trace_context_t *context, zend_array *local_arr) {
     int rv;
     int i;
-    char *tmp;
+    char tmp[PHPSPY_STR_LEN+1];
     size_t tmp_len;
     int length;
     Bucket *buckets;
@@ -215,7 +193,7 @@ static int varpeek_print_array(trace_context_t *context, zend_array *local_arr) 
     for (i = 0; i < length; i++) {
         /* if it is a non-associative array, don't attempt to print the key */
         if (buckets[i].key != 0) {
-            try(rv, varpeek_copy_zstring(context, buckets[i].key, &tmp, &tmp_len));
+            try(rv, copy_zstring(context, "array_key", buckets[i].key, tmp, &tmp_len));
             fprintf(context->fout, "%.*s : ", (int)tmp_len, tmp);
         }
         try(rv, varpeek_print_zval(context, &buckets[i].val));

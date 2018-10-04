@@ -16,8 +16,8 @@
 #define zval                  concat2(zval_,                  phpv)
 
 #define dump_trace            concat2(dump_trace_,            phpv)
+#define copy_zstring          concat2(copy_zstring_,          phpv)
 #define varpeek_find          concat2(varpeek_find_,          phpv)
-#define varpeek_copy_zstring  concat2(varpeek_copy_zstring_,  phpv)
 #define varpeek_print_zval    concat2(varpeek_print_zval_,    phpv)
 #define varpeek_print_array   concat2(varpeek_print_array_,   phpv)
 
@@ -38,7 +38,7 @@
 #undef zval
 
 #undef dump_trace
+#undef copy_zstring
 #undef varpeek_find
-#undef varpeek_copy_zstring
 #undef varpeek_print_zval
 #undef varpeek_print_array

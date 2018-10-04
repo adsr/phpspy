@@ -33,6 +33,11 @@ All with no changes to your application and minimal overhead.
 
     $ make
     cc -Wall -Wextra -pedantic -g -Ofast -pthread  -I.  phpspy.c pgrep.c top.c -o phpspy
+    $ ./phpspy -v
+    phpspy v0.3 USE_TERMBOX=y USE_ZEND=n USE_LIBDW=n
+
+### Usage
+
     $ ./phpspy -h
     Usage:
       phpspy [options] -p <pid>
