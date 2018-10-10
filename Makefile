@@ -1,8 +1,8 @@
 phpspy_cflags:=-std=c90 -Wall -Wextra -pedantic -g -Ofast -pthread $(CFLAGS)
-phpspy_libs:=$(LDLIBS)
+phpspy_libs:=$(LDLIBS) -ltermbox
 phpspy_ldflags:=$(LDFLAGS)
 phpspy_includes:=-I.
-phpspy_defines:=
+phpspy_defines:=-DUSE_TERMBOX=1
 phpspy_sources:=phpspy.c pgrep.c top.c addr_libdw.c addr_readelf.c
 prefix?=/usr/local
 
@@ -22,24 +22,39 @@ ifdef USE_ZEND
   phpspy_defines:=$(phpspy_defines) -DUSE_ZEND=1
 endif
 
-ifeq ($(has_termbox), :)
-  USE_TERMBOX=1
+all: phpspy_libdw
+
+libdw:
+ifeq ($(has_libdw),)
+	cd vendor/elfutils && autoreconf -if && ./configure --enable-maintainer-mode && $(MAKE) && $(MAKE) install
+else
+	@echo "has libdw"
 endif
-ifdef USE_TERMBOX
-  $(or $(has_termbox), $(error Need libtermbox))
-  phpspy_libs:=$(phpspy_libs) -ltermbox
-  phpspy_defines:=$(phpspy_defines) -DUSE_TERMBOX=1
+phpspy_libs:=$(phpspy_libs) -ldw
+phpspy_defines:=$(phpspy_defines) -DUSE_LIBDW=1
+
+
+libtermbox:
+ifeq ($(has_termbox),)
+	cd vendor/termbox && ./waf configure && ./waf install --targets=termbox_shared
+else
+	@echo "has libtermbox"
 endif
 
-all: phpspy_readelf
 
-phpspy_libdw: check=$(or $(has_libdw), $(error Need libdw))
-phpspy_libdw: phpspy_defines:=$(phpspy_defines) -DUSE_LIBDW=1
-phpspy_libdw: phpspy_libs:=$(phpspy_libs) -ldw
+update_deps:
+	git submodule update
+
+clean_deps:
+	cd vendor/elfutils && make uninstall
+	cd vendor/termbox  && ./waf uninstall
+
+phpspy_libdw: update_deps libdw libtermbox
 phpspy_libdw: phpspy
 
 phpspy_readelf: check=$(or $(has_readelf), $(error Need readelf))
 phpspy_readelf: phpspy_defines:=$(phpspy_defines) -DUSE_READELF=1
+phpspy_readelf: update_deps libtermbox
 phpspy_readelf: phpspy
 
 phpspy: $(wildcard *.c *.h)
@@ -52,4 +67,4 @@ install: phpspy
 clean:
 	rm -f phpspy
 
-.PHONY: all phpspy_libdw phpspy_readelf install clean
+.PHONY: all phpspy_libdw phpspy_readelf clean_deps update_deps libdw libtermbox install clean
