@@ -44,7 +44,7 @@
 #endif
 
 #ifdef USE_LIBDW
-#include <elfutils/libdwfl.h>
+#include "libdwfl.h"
 #endif
 
 #include "uthash.h"
