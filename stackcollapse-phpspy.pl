@@ -33,8 +33,7 @@
 #   <main>;bbb;aaa;sleep 1
 #
 # To make a flamegraph:
-# git clone https://github.com/brendangregg/FlameGraph flamegraph
-# ./stackcollapse-phpspy.pl infile | ./flamegraph/flamegraph.pl > svg.out
+# ./stackcollapse-phpspy.pl infile | ./vendor/flamegraph.pl > svg.out
 
 use strict;
 use warnings;

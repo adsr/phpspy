@@ -25,7 +25,7 @@ All with no changes to your application and minimal overhead.
     $ cd phpspy
     $ make
     cc -Wall -Wextra -pedantic -g -Ofast -pthread  -I.  phpspy.c pgrep.c top.c -o phpspy
-    $ sudo ./phpspy -l 1000 -p $(pgrep -n httpd) | ./stackcollapse-phpspy.pl | ./flamegraph.pl > flame.svg
+    $ sudo ./phpspy -l 1000 -p $(pgrep -n httpd) | ./stackcollapse-phpspy.pl | ./vendor/flamegraph.pl > flame.svg
     ...
     $ google-chrome flame.svg # view flame.svg in browser
 
