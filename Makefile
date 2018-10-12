@@ -1,5 +1,5 @@
 elfutils_subdirs:=lib libelf libebl libdwelf libdwfl libdw libcpu backends
-elfutils_includes=$(foreach subdir,$(elfutils_subdirs),-Ivendor/elfutils/$(subdir))
+elfutils_includes:=$(foreach subdir,$(elfutils_subdirs),-Ivendor/elfutils/$(subdir))
 
 elfutils_libs:=libdw libelf libdwfl libebl libdwelf
 elfutils_sources:=$(foreach lib,$(elfutils_libs),vendor/elfutils/$(lib)/$(lib).a)
@@ -33,14 +33,14 @@ libtermbox := vendor/termbox/build/src/libtermbox.a
 
 all: phpspy_libdw
 
-$(libdw) :
+$(libdw):
 	cd vendor/elfutils && autoreconf -if && ./configure --enable-maintainer-mode && $(MAKE) SUBDIRS="$(elfutils_subdirs)"
 
-$(libtermbox) :
+$(libtermbox):
 	cd vendor/termbox && ./waf configure && ./waf --targets=termbox_static
 
 update_deps:
-	git submodule update
+	git submodule update --init
 
 clean_deps:
 	cd vendor/elfutils && make clean
