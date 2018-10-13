@@ -31,7 +31,7 @@ endif
 libdw      := vendor/elfutils/libdw/libdw.a
 libtermbox := vendor/termbox/build/src/libtermbox.a
 
-all: phpspy_libdw
+all: phpspy_readelf
 
 $(libdw):
 	cd vendor/elfutils && autoreconf -if && ./configure --enable-maintainer-mode && $(MAKE) SUBDIRS="$(elfutils_subdirs)"
