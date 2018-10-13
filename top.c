@@ -263,7 +263,16 @@ static int func_list_compare(const void *a, const void *b) {
     fa = *((func_entry_t**)a);
     fb = *((func_entry_t**)b);
     if (fb->count_excl == fa->count_excl) {
-        return 0;
+        if (fb->count_incl == fa->count_incl) {
+            if (fb->total_count_excl == fa->total_count_excl) {
+                if (fb->total_count_incl == fa->total_count_incl) {
+                    return 0;
+                }
+                return fb->total_count_incl > fa->total_count_incl ? 1 : -1;
+            }
+            return fb->total_count_excl > fa->total_count_excl ? 1 : -1;
+        }
+        return fb->count_incl > fa->count_incl ? 1 : -1;
     }
     return fb->count_excl > fa->count_excl ? 1 : -1;
 }
