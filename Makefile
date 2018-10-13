@@ -11,13 +11,14 @@ phpspy_libs:=$(LDLIBS)
 phpspy_ldflags:=$(LDFLAGS)
 phpspy_includes:=-I. $(elfutils_includes)
 phpspy_defines:=-DUSE_TERMBOX=1
-phpspy_sources:=phpspy.c pgrep.c top.c addr_libdw.c addr_readelf.c event_fout.c
+phpspy_sources:=phpspy.c pgrep.c top.c addr_libdw.c addr_readelf.c addr_objdump.c event_fout.c
 prefix?=/usr/local
 
 sinclude config.mk
 
 has_pthread := $(shell $(LD) $(phpspy_ldflags) -lpthread -o/dev/null >/dev/null 2>&1 && echo :)
 has_readelf := $(shell command -v readelf                            >/dev/null 2>&1 && echo :)
+has_objdump := $(shell command -v objdump                            >/dev/null 2>&1 && echo :)
 has_phpconf := $(shell command -v php-config                         >/dev/null 2>&1 && echo :)
 
 $(or $(has_pthread), $(error Need libpthread))
@@ -53,10 +54,16 @@ phpspy_libdw: phpspy_sources:=$(phpspy_sources) $(elfutils_sources) $(libtermbox
 phpspy_libdw: phpspy
 
 phpspy_readelf: check=$(or $(has_readelf), $(error Need readelf))
-phpspy_readelf: phpspy_defines:=$(phpspy_defines) -DUSE_READELF=1
 phpspy_readelf: update_deps $(libtermbox)
+phpspy_readelf: phpspy_defines:=$(phpspy_defines) -DUSE_READELF=1
 phpspy_readelf: phpspy_sources:=$(phpspy_sources) $(libtermbox)
 phpspy_readelf: phpspy
+
+phpspy_objdump: check=$(or $(has_objdump), $(error Need objdump))
+phpspy_objdump: update_deps $(libtermbox)
+phpspy_objdump: phpspy_defines:=$(phpspy_defines) -DUSE_OBJDUMP=1
+phpspy_objdump: phpspy_sources:=$(phpspy_sources) $(libtermbox)
+phpspy_objdump: phpspy
 
 phpspy: $(wildcard *.c *.h)
 	@$(check)
