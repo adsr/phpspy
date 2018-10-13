@@ -49,11 +49,22 @@
 
 #include "uthash.h"
 
-#define PHPSPY_VERSION "0.3"
+#define try(__rv, __call) do { if (((__rv) = (__call)) != 0) return (__rv); } while(0)
+
+#define PHPSPY_VERSION "0.4"
 #define PHPSPY_MIN(a, b) ((a) < (b) ? (a) : (b))
 #define PHPSPY_MAX(a, b) ((a) > (b) ? (a) : (b))
-#define PHPSPY_STR_LEN 256
-#define try(__rv, __call) do { if (((__rv) = (__call)) != 0) return (__rv); } while(0)
+#define PHPSPY_STR_SIZE 256
+#define PHPSPY_MAX_BUCKETS 64
+
+#define PHPSPY_TRACE_EVENT_INIT        0
+#define PHPSPY_TRACE_EVENT_STACK_BEGIN 1
+#define PHPSPY_TRACE_EVENT_FRAME       2
+#define PHPSPY_TRACE_EVENT_VARPEEK     3
+#define PHPSPY_TRACE_EVENT_REQUEST     4
+#define PHPSPY_TRACE_EVENT_STACK_END   5
+#define PHPSPY_TRACE_EVENT_ERROR       6
+#define PHPSPY_TRACE_EVENT_DEINIT      7
 
 #ifndef USE_ZEND
 #define IS_UNDEF     0
@@ -77,27 +88,66 @@ typedef struct varpeek_entry_s {
     UT_hash_handle hh;
 } varpeek_entry_t;
 
-typedef struct trace_context_s {
+typedef struct trace_frame_s {
+    char func[PHPSPY_STR_SIZE];
+    char file[PHPSPY_STR_SIZE];
+    char class[PHPSPY_STR_SIZE];
+    size_t func_len;
+    size_t file_len;
+    size_t class_len;
+    int lineno;
+    int depth;
+} trace_frame_t;
+
+typedef struct trace_request_s {
+    char uri[PHPSPY_STR_SIZE];
+    char path[PHPSPY_STR_SIZE];
+    char qstring[PHPSPY_STR_SIZE];
+    char cookie[PHPSPY_STR_SIZE];
+    double ts;
+} trace_request_t;
+
+typedef struct trace_varpeek_s {
+    varpeek_entry_t *entry;
+    char *zval_str;
+} trace_varpeek_t;
+
+typedef struct trace_target_s {
     pid_t pid;
-    FILE *fout;
     uint64_t executor_globals_addr;
     uint64_t sapi_globals_addr;
     uint64_t core_globals_addr;
-    char buf[PHPSPY_STR_LEN+1];
-    int wrote_trace;
+} trace_target_t;
+
+typedef struct trace_context_s {
+    trace_target_t target;
+    union {
+        trace_frame_t frame;
+        trace_request_t request;
+        trace_varpeek_t varpeek;
+        char error[PHPSPY_STR_SIZE];
+    } event;
+    void *event_udata;
+    int (*event_handler)(struct trace_context_s *context, int event_type);
+    char buf[PHPSPY_STR_SIZE];
 } trace_context_t;
 
 extern char *opt_pgrep_args;
 extern int done;
 extern int opt_num_workers;
 extern pid_t opt_pid;
+extern char *opt_frame_delim;
+extern char *opt_trace_delim;
+extern char *opt_path_output;
 
 extern int main_pgrep();
 extern int main_pid(pid_t pid);
-extern void usage(FILE *fp, int exit_code);
-extern int get_symbol_addr(pid_t pid, const char *symbol, uint64_t *raddr);
 #ifdef USE_TERMBOX
 extern int main_top(int argc, char **argv);
 #endif
+
+extern void usage(FILE *fp, int exit_code);
+extern int get_symbol_addr(pid_t pid, const char *symbol, uint64_t *raddr);
+extern int event_handler_fout(struct trace_context_s *context, int event_type);
 
 #endif

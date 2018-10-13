@@ -11,7 +11,7 @@ phpspy_libs:=$(LDLIBS)
 phpspy_ldflags:=$(LDFLAGS)
 phpspy_includes:=-I. $(elfutils_includes)
 phpspy_defines:=-DUSE_TERMBOX=1
-phpspy_sources:=phpspy.c pgrep.c top.c addr_libdw.c addr_readelf.c
+phpspy_sources:=phpspy.c pgrep.c top.c addr_libdw.c addr_readelf.c event_fout.c
 prefix?=/usr/local
 
 sinclude config.mk

@@ -15,11 +15,11 @@
 #define php_core_globals      concat2(php_core_globals_,      phpv)
 #define zval                  concat2(zval_,                  phpv)
 
-#define dump_trace            concat2(dump_trace_,            phpv)
+#define do_trace              concat2(do_trace_,              phpv)
 #define copy_zstring          concat2(copy_zstring_,          phpv)
+#define copy_zval             concat2(copy_zval_,             phpv)
+#define copy_zarray           concat2(copy_zarray_,           phpv)
 #define varpeek_find          concat2(varpeek_find_,          phpv)
-#define varpeek_print_zval    concat2(varpeek_print_zval_,    phpv)
-#define varpeek_print_array   concat2(varpeek_print_array_,   phpv)
 
 #include "phpspy_trace.c"
 
@@ -37,8 +37,8 @@
 #undef php_core_globals
 #undef zval
 
-#undef dump_trace
-#undef copy_zstring
+#undef do_trace
 #undef varpeek_find
-#undef varpeek_print_zval
-#undef varpeek_print_array
+#undef copy_zstring
+#undef copy_zval
+#undef copy_zarray
