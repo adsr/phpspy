@@ -14,7 +14,7 @@ int opt_capture_req_uri = 0;
 int opt_capture_req_path = 0;
 int opt_max_stack_depth = -1;
 char *opt_frame_delim = "\n";
-char *opt_trace_delim = "\n\n";
+char *opt_trace_delim = "\n";
 uint64_t opt_trace_limit = 0;
 char *opt_path_output = "-";
 char *opt_path_child_out = "phpspy.%d.out";
@@ -24,7 +24,7 @@ int opt_pause = 0;
 
 size_t zend_string_val_offset = 0;
 int done = 0;
-int (*dump_trace_ptr)(trace_context_t *context) = NULL;
+int (*do_trace_ptr)(trace_context_t *context) = NULL;
 varpeek_entry_t *varpeek_map = NULL;
 
 static void parse_opts(int argc, char **argv);
@@ -32,20 +32,19 @@ static int main_fork(int argc, char **argv);
 static int pause_pid(pid_t pid);
 static int unpause_pid(pid_t pid);
 static void redirect_child_stdio(int proc_fd, char *opt_path);
-static int open_fout(FILE **fout);
-static int find_addresses(trace_context_t *context);
+static int find_addresses(trace_target_t *target);
 static void get_clock_time(struct timespec *ts);
 static void calc_sleep_time(struct timespec *end, struct timespec *start, struct timespec *sleep);
 static int copy_proc_mem(trace_context_t *context, const char *what, void *raddr, void *laddr, size_t size);
 static void varpeek_add(char *varspec);
 
 #ifdef USE_ZEND
-static int dump_trace(trace_context_t *context);
+static int do_trace(trace_context_t *context);
 #else
-static int dump_trace_70(trace_context_t *context);
-static int dump_trace_71(trace_context_t *context);
-static int dump_trace_72(trace_context_t *context);
-static int dump_trace_73(trace_context_t *context);
+static int do_trace_70(trace_context_t *context);
+static int do_trace_71(trace_context_t *context);
+static int do_trace_72(trace_context_t *context);
+static int do_trace_73(trace_context_t *context);
 #endif
 
 void usage(FILE *fp, int exit_code) {
@@ -218,24 +217,24 @@ int main_pid(pid_t pid) {
     struct timespec start_time, end_time, sleep_time;
 
     memset(&context, 0, sizeof(trace_context_t));
-    context.pid = pid;
-
-    try(rv, find_addresses(&context));
-    try(rv, open_fout(&context.fout));
+    context.target.pid = pid;
+    context.event_handler = event_handler_fout; /* TODO set based on option */
+    try(rv, find_addresses(&context.target));
+    try(rv, context.event_handler(&context, PHPSPY_TRACE_EVENT_INIT));
 
     #ifdef USE_ZEND
-    dump_trace_ptr = dump_trace;
+    do_trace_ptr = do_trace;
     #else
     if (strcmp("70", opt_phpv) == 0) {
-        dump_trace_ptr = dump_trace_70;
+        do_trace_ptr = do_trace_70;
     } else if (strcmp("71", opt_phpv) == 0) {
-        dump_trace_ptr = dump_trace_71;
+        do_trace_ptr = do_trace_71;
     } else if (strcmp("72", opt_phpv) == 0) {
-        dump_trace_ptr = dump_trace_72;
+        do_trace_ptr = do_trace_72;
     } else if (strcmp("73", opt_phpv) == 0) {
-        dump_trace_ptr = dump_trace_73;
+        do_trace_ptr = do_trace_73;
     } else {
-        dump_trace_ptr = dump_trace_72;
+        do_trace_ptr = do_trace_72;
     }
     #endif
 
@@ -243,7 +242,7 @@ int main_pid(pid_t pid) {
     while (!done) {
         get_clock_time(&start_time);
         if (opt_pause) rv |= pause_pid(pid);
-        rv |= dump_trace_ptr(&context);
+        rv |= do_trace_ptr(&context);
         if (opt_pause) rv |= unpause_pid(pid);
         if (++n == opt_trace_limit || (rv & 2) != 0) break;
         get_clock_time(&end_time);
@@ -251,8 +250,8 @@ int main_pid(pid_t pid) {
         nanosleep(&sleep_time, NULL);
     }
 
-    fclose(context.fout);
-
+    /* TODO proper signal handling for non-pgrep modes */
+    context.event_handler(&context, PHPSPY_TRACE_EVENT_DEINIT);
     return 0;
 }
 
@@ -333,36 +332,18 @@ static void redirect_child_stdio(int proc_fd, char *opt_path) {
     free(redir_path);
 }
 
-static int open_fout(FILE **fout) {
-    int tfd;
-    tfd = -1;
-    if (strcmp(opt_path_output, "-") == 0) {
-        tfd = dup(STDOUT_FILENO);
-        *fout = fdopen(tfd, "w");
-    } else {
-        *fout = fopen(opt_path_output, "w");
-    }
-    if (!*fout) {
-        perror("fopen");
-        if (tfd != -1) close(tfd);
-        return 1;
-    }
-    setvbuf(*fout, NULL, _IOLBF, PIPE_BUF);
-    return 0;
-}
-
-static int find_addresses(trace_context_t *context) {
+static int find_addresses(trace_target_t *target) {
     if (opt_executor_globals_addr != 0) {
-        context->executor_globals_addr = opt_executor_globals_addr;
-    } else if (get_symbol_addr(context->pid, "executor_globals", &context->executor_globals_addr) != 0) {
+        target->executor_globals_addr = opt_executor_globals_addr;
+    } else if (get_symbol_addr(target->pid, "executor_globals", &target->executor_globals_addr) != 0) {
         return 1;
     }
     if (opt_sapi_globals_addr != 0) {
-        context->sapi_globals_addr = opt_sapi_globals_addr;
-    } else if (get_symbol_addr(context->pid, "sapi_globals", &context->sapi_globals_addr) != 0) {
+        target->sapi_globals_addr = opt_sapi_globals_addr;
+    } else if (get_symbol_addr(target->pid, "sapi_globals", &target->sapi_globals_addr) != 0) {
         return 1;
     }
-    if (get_symbol_addr(context->pid, "core_globals", &context->core_globals_addr) != 0) {
+    if (get_symbol_addr(target->pid, "core_globals", &target->core_globals_addr) != 0) {
         /* TODO opt_core_globals_addr */
         return 1;
     }
@@ -428,7 +409,7 @@ static int copy_proc_mem(trace_context_t *context, const char *what, void *raddr
     remote[0].iov_base = raddr;
     remote[0].iov_len = size;
     rv = 0;
-    if (process_vm_readv(context->pid, local, 1, remote, 1, 0) == -1) {
+    if (process_vm_readv(context->target.pid, local, 1, remote, 1, 0) == -1) {
         if (errno == ESRCH) { /* No such process */
             perror("process_vm_readv");
             rv = 2;
@@ -436,9 +417,6 @@ static int copy_proc_mem(trace_context_t *context, const char *what, void *raddr
             fprintf(stderr, "copy_proc_mem: Failed to copy %s; err=%s raddr=%p size=%lu\n", what, strerror(errno), raddr, size);
             rv = 1;
         }
-    }
-    if (rv != 0 && context->wrote_trace) {
-        fprintf(context->fout, "%s", opt_trace_delim);
     }
     return rv;
 }
