@@ -165,7 +165,7 @@ static void parse_opts(int argc, char **argv) {
             case '@': break;
             case 'v':
                 printf(
-                    "phpspy v%s USE_TERMBOX=%s USE_ZEND=%s USE_LIBDW=%s\n",
+                    "phpspy v%s USE_TERMBOX=%s USE_ZEND=%s\n",
                     PHPSPY_VERSION,
                     #ifdef USE_TERMBOX
                     "y",
@@ -173,11 +173,6 @@ static void parse_opts(int argc, char **argv) {
                     "n",
                     #endif
                     #ifdef USE_ZEND
-                    "y",
-                    #else
-                    "n",
-                    #endif
-                    #ifdef USE_LIBDW
                     "y"
                     #else
                     "n"
