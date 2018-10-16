@@ -67,7 +67,7 @@ phpspy_objdump: phpspy
 
 phpspy: $(wildcard *.c *.h)
 	@$(check)
-	$(CC) $(phpspy_cflags) $(phpspy_includes) $(phpspy_defines) $(phpspy_sources) -static -o phpspy $(phpspy_ldflags) $(phpspy_libs)
+	$(CC) $(phpspy_cflags) $(phpspy_includes) $(phpspy_defines) $(phpspy_sources) -o phpspy $(phpspy_ldflags) $(phpspy_libs)
 
 install: phpspy
 	install -D -v -m 755 phpspy $(DESTDIR)$(prefix)/bin/phpspy
