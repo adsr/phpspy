@@ -1,6 +1,11 @@
 #include "phpspy.h"
 #ifdef USE_LIBDW
 
+typedef struct {
+  const char *symbol;
+  uint64_t   *raddr;
+} dwarf_callback_args;
+
 static int dwarf_module_callback(
     Dwfl_Module *mod,
     void **unused __attribute__((unused)),
@@ -10,7 +15,6 @@ static int dwarf_module_callback(
 );
 
 static char *debuginfo_path = NULL;
-static const char *dwarf_lookup_symbol = NULL;
 static const Dwfl_Callbacks proc_callbacks = {
     dwfl_linux_proc_find_elf,
     dwfl_standard_find_debuginfo,
@@ -22,8 +26,8 @@ int get_symbol_addr(pid_t pid, const char *symbol, uint64_t *raddr) {
     Dwfl *dwfl = NULL;
     int ret = 0;
     const char *msg;
+    dwarf_callback_args args = { symbol, raddr };
 
-    dwarf_lookup_symbol = symbol;
     do {
         int err = 0;
         dwfl = dwfl_begin(&proc_callbacks);
@@ -47,7 +51,7 @@ int get_symbol_addr(pid_t pid, const char *symbol, uint64_t *raddr) {
         }
 
         *raddr = 0;
-        if (dwfl_getmodules(dwfl, dwarf_module_callback, raddr, 0) == -1) {
+        if (dwfl_getmodules(dwfl, dwarf_module_callback, &args, 0) == -1) {
             fprintf(stderr, "get_symbol_addr: Error reading DWARF modules. Details: %s\n", dwfl_errmsg(0));
             ret = 1;
             break;
@@ -57,7 +61,6 @@ int get_symbol_addr(pid_t pid, const char *symbol, uint64_t *raddr) {
             break;
         }
     } while (0);
-    dwarf_lookup_symbol = NULL;
 
     dwfl_end(dwfl);
     return ret;
@@ -68,9 +71,9 @@ static int dwarf_module_callback(
     void **unused __attribute__((unused)),
     const char *name __attribute__((unused)),
     Dwarf_Addr start __attribute__((unused)),
-    void *arg
+    void *_args
 ) {
-    uint64_t *raddr = (uint64_t *) arg;
+    dwarf_callback_args *args = (dwarf_callback_args *) _args;
     GElf_Sym sym;
     GElf_Addr value = 0;
     int i, n = dwfl_module_getsymtab(mod);
@@ -86,8 +89,8 @@ static int dwarf_module_callback(
         case STT_TLS:
             break;
         default:
-            if (!strcmp(symbol_name, dwarf_lookup_symbol) && value != 0) {
-                *raddr = value;
+            if (!strcmp(symbol_name, args->symbol) && value != 0) {
+                *(args->raddr) = value;
                 return DWARF_CB_ABORT;
             }
             break;
