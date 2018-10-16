@@ -1,5 +1,4 @@
 #include "phpspy.h"
-#ifdef USE_LIBDW
 
 typedef struct {
   const char *symbol;
@@ -99,7 +98,3 @@ static int dwarf_module_callback(
 
     return DWARF_CB_OK;
 }
-
-#else
-typedef int __no_libdw;
-#endif
