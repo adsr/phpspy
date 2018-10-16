@@ -89,9 +89,7 @@ All with no changes to your application and minimal overhead.
 
 ### Build options
 
-    $ make phpspy_readelf    # Use readelf (default) binary (requires elfutils)
-    $ # or
-    $ make phpspy_libdw      # Use libdw (requires libdw-dev or elfutils-devel)
+    $ make
     $ # also
     $ USE_ZEND=1 make ...    # Use Zend structs instead of built-in structs (requires php-dev or php-devel)
     $ USE_TERMBOX=1 make ... # Enable top mode support via termbox (requires libtermbox)
@@ -145,27 +143,27 @@ All with no changes to your application and minimal overhead.
     0 usleep <internal>:-1
     1 <main> <internal>:-1
     # 1535179291.009094 - - Standard input code -
-    
+
     0 usleep <internal>:-1
     1 <main> <internal>:-1
     # 1535179291.009094 - - Standard input code -
-    
+
     0 usleep <internal>:-1
     1 <main> <internal>:-1
     # 1535179291.009094 - - Standard input code -
-    
+
     0 usleep <internal>:-1
     1 <main> <internal>:-1
     # 1535179291.009094 - - Standard input code -
-    
+
     0 usleep <internal>:-1
     1 <main> <internal>:-1
     # 1535179291.009094 - - Standard input code -
-    
+
     0 usleep <internal>:-1
     1 <main> <internal>:-1
     # 1535179291.009094 - - Standard input code -
-    
+
     process_vm_readv: No such process
 
 ### Example (cli attach)

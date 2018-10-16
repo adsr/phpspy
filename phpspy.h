@@ -44,10 +44,7 @@
 #include <php_structs_74.h>
 #endif
 
-#ifdef USE_LIBDW
 #include "libdwfl.h"
-#endif
-
 #include "uthash.h"
 
 #define try(__rv, __call) do { if (((__rv) = (__call)) != 0) return (__rv); } while(0)
