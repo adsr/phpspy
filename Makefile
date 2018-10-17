@@ -9,7 +9,7 @@ elfutils_sources:=$(elfutils_sources) vendor/elfutils/backends/libebl_x86_64_pic
 phpspy_cflags:=-std=c99 -Wall -Wextra -pedantic -g -Ofast -pthread $(CFLAGS)
 phpspy_libs:=$(LDLIBS)
 phpspy_ldflags:=$(LDFLAGS)
-phpspy_includes:=-I. $(elfutils_includes)
+phpspy_includes:=-I. -I./vendor $(elfutils_includes)
 phpspy_defines:=-DUSE_TERMBOX=1
 phpspy_sources:=phpspy.c pgrep.c top.c addr_libdw.c addr_readelf.c addr_objdump.c event_fout.c
 prefix?=/usr/local
