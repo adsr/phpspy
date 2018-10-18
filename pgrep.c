@@ -88,16 +88,17 @@ static void pgrep_for_pids() {
     }
     while (!done) {
         if (wait_for_turn('p')) break;
-        pcmd = popen(pgrep_cmd, "r");
         found = 0;
-        while (avail_pids_count < opt_num_workers && fgets(line, sizeof(line), pcmd) != NULL) {
-            if (strlen(line) < 1 || *line == '\n') continue;
-            pid = atoi(line);
-            if (is_already_attached(pid)) continue;
-            avail_pids[avail_pids_count++] = pid;
-            found += 1;
+        if ((pcmd = popen(pgrep_cmd, "r")) != NULL) {
+            while (avail_pids_count < opt_num_workers && fgets(line, sizeof(line), pcmd) != NULL) {
+                if (strlen(line) < 1 || *line == '\n') continue;
+                pid = atoi(line);
+                if (is_already_attached(pid)) continue;
+                avail_pids[avail_pids_count++] = pid;
+                found += 1;
+            }
+            pclose(pcmd);
         }
-        pclose(pcmd);
         if (found > 0) {
             pthread_cond_broadcast(&can_consume);
         } else {

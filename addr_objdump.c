@@ -86,6 +86,7 @@ static int popen_read_line(char *buf, size_t buf_size, char *cmd_fmt, ...) {
     }
     if (fgets(buf, buf_size-1, fp) == NULL) {
         fprintf(stderr, "popen_read_line: No stdout; cmd=%s\n", cmd);
+        pclose(fp);
         return 1;
     }
     pclose(fp);
