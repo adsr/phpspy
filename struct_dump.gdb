@@ -1,10 +1,9 @@
 macro define offsetof(st, f) ((size_t)&(((st *)0)->f))
-macro define typeof(st, f) ((st *)0)->f
+macro define typeof(st, f) ((st *)0).f
 define fieldof
-  printf "  $arg1 +%lu\n", offsetof($arg0, $arg1)
   printf "  "
   whatis typeof($arg0, $arg1)
-  print sizeof($$)
+  printf "  $arg1 %lu +%lu\n", offsetof($arg0, $arg1), sizeof(typeof($arg0, $arg1))
 end
 
 printf "zend_executor_globals\n"

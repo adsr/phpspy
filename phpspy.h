@@ -41,6 +41,7 @@
 #include <php_structs_71.h>
 #include <php_structs_72.h>
 #include <php_structs_73.h>
+#include <php_structs_74.h>
 #endif
 
 #ifdef USE_LIBDW
