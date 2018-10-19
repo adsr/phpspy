@@ -45,6 +45,7 @@ static int do_trace_70(trace_context_t *context);
 static int do_trace_71(trace_context_t *context);
 static int do_trace_72(trace_context_t *context);
 static int do_trace_73(trace_context_t *context);
+static int do_trace_74(trace_context_t *context);
 #endif
 
 void usage(FILE *fp, int exit_code) {
@@ -70,7 +71,7 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "  -H, --rate-hz=<hz>                 Trace `hz` times per second\n");
     fprintf(fp, "                                       (see also `-s`) (default: %lu)\n", 1000000000UL/opt_sleep_ns);
     fprintf(fp, "  -V, --php-version=<ver>            Set PHP version\n");
-    fprintf(fp, "                                       (default: %s; supported: 70 71 72 73)\n", opt_phpv);
+    fprintf(fp, "                                       (default: %s; supported: 70 71 72 73 74)\n", opt_phpv);
     fprintf(fp, "  -l, --limit=<num>                  Limit total number of traces to capture\n");
     fprintf(fp, "                                       (default: %lu; 0=unlimited)\n", opt_trace_limit);
     fprintf(fp, "  -n, --max-depth=<max>              Set max stack trace depth\n");
@@ -233,6 +234,8 @@ int main_pid(pid_t pid) {
         do_trace_ptr = do_trace_72;
     } else if (strcmp("73", opt_phpv) == 0) {
         do_trace_ptr = do_trace_73;
+    } else if (strcmp("74", opt_phpv) == 0) {
+        do_trace_ptr = do_trace_74;
     } else {
         do_trace_ptr = do_trace_72;
     }
@@ -435,6 +438,9 @@ static int copy_proc_mem(trace_context_t *context, const char *what, void *raddr
 #include "phpspy_trace_tpl.c"
 #undef phpv
 #define phpv 73
+#include "phpspy_trace_tpl.c"
+#undef phpv
+#define phpv 74
 #include "phpspy_trace_tpl.c"
 #undef phpv
 #endif
