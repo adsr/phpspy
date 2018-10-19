@@ -187,7 +187,7 @@ static void read_child_out(int fd) {
     while ((nl = memchr(buf, '\n', buf_len)) != NULL) {
         line_len = nl-buf;
         handle_line(buf, line_len);
-        memmove(buf, nl+1, buf_len-line_len+1);
+        memmove(buf, nl+1, buf_len-(line_len+1));
         buf_len -= line_len+1;
     }
 }
