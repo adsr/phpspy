@@ -9,7 +9,7 @@ elfutils_sources:=$(elfutils_sources) vendor/elfutils/backends/libebl_x86_64_pic
 phpspy_cflags:=-std=c99 -Wall -Wextra -pedantic -g -Ofast -pthread $(CFLAGS)
 phpspy_libs:=$(LDLIBS)
 phpspy_ldflags:=$(LDFLAGS)
-phpspy_includes:=-I. -I./vendor $(elfutils_includes)
+phpspy_includes:=-I. -I./vendor
 phpspy_defines:=-DUSE_TERMBOX=1
 phpspy_sources:=phpspy.c pgrep.c top.c addr_libdw.c addr_readelf.c addr_objdump.c event_fout.c
 prefix?=/usr/local
@@ -32,7 +32,7 @@ endif
 libdw      := vendor/elfutils/libdw/libdw.a
 libtermbox := vendor/termbox/build/src/libtermbox.a
 
-all: phpspy_readelf
+all: phpspy_objdump
 
 $(libdw):
 	cd vendor/elfutils && autoreconf -if && ./configure --enable-maintainer-mode && $(MAKE) SUBDIRS="$(elfutils_subdirs)"
@@ -41,7 +41,7 @@ $(libtermbox):
 	cd vendor/termbox && ./waf configure && ./waf --targets=termbox_static
 
 update_deps:
-	git submodule update --init
+	@git submodule update --init --depth 1
 
 clean_deps:
 	cd vendor/elfutils && make clean
@@ -49,6 +49,7 @@ clean_deps:
 
 phpspy_libdw: update_deps $(libdw) $(libtermbox)
 phpspy_libdw: phpspy_libs:=$(phpspy_libs) -ldl -lz -llzma -lbz2
+phpspy_libdw: phpspy_includes:=$(phpspy_includes) $(elfutils_includes)
 phpspy_libdw: phpspy_defines:=$(phpspy_defines) -DUSE_LIBDW=1
 phpspy_libdw: phpspy_sources:=$(phpspy_sources) $(elfutils_sources) $(libtermbox)
 phpspy_libdw: phpspy
