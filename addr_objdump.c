@@ -63,7 +63,7 @@ static int get_php_base_addr(pid_t pid, char *path, uint64_t *raddr) {
 
 static int get_symbol_offset(char *path, const char *symbol, uint64_t *raddr) {
     char buf[128];
-    char *cmd_fmt = "objdump -T %s | grep ' %s$' | awk '{print $1; exit}'";
+    char *cmd_fmt = "objdump -Tt %s | grep ' %s$' | awk '{print $1; exit}'";
     if (popen_read_line(buf, sizeof(buf), cmd_fmt, path, symbol) != 0) {
         fprintf(stderr, "get_symbol_offset: Failed\n");
         return 1;
