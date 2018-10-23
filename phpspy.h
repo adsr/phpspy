@@ -122,7 +122,7 @@ typedef struct trace_target_s {
 
 typedef struct trace_context_s {
     trace_target_t target;
-    union {
+    struct {
         trace_frame_t frame;
         trace_request_t request;
         trace_varpeek_t varpeek;
