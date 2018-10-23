@@ -12,6 +12,9 @@ phpspy_ldflags:=$(LDFLAGS)
 phpspy_includes:=-I. -I./vendor
 phpspy_defines:=-DUSE_TERMBOX=1
 phpspy_sources:=phpspy.c pgrep.c top.c addr_libdw.c addr_readelf.c addr_objdump.c event_fout.c
+
+test_scripts:=$(wildcard tests/test_*.sh)
+
 prefix?=/usr/local
 
 sinclude config.mk
@@ -70,10 +73,22 @@ phpspy: $(wildcard *.c *.h)
 	@$(check)
 	$(CC) $(phpspy_cflags) $(phpspy_includes) $(phpspy_defines) $(phpspy_sources) -o phpspy $(phpspy_ldflags) $(phpspy_libs)
 
+test: phpspy $(test_scripts)
+	@total=0; \
+	pass=0; \
+	for t in $(test_scripts); do \
+		tput bold; echo TEST $$t; tput sgr0; \
+		PHPSPY=./phpspy TEST_DIR=$$(dirname $$t) ./$$t; ec=$$?; echo; \
+		[ $$ec -eq 0 ] && pass=$$((pass+1)); \
+		total=$$((total+1)); \
+	done; \
+	printf "Passed %d out of %d tests\n" $$pass $$total ; \
+	[ $$pass -eq $$total ] || exit 1
+
 install: phpspy
 	install -D -v -m 755 phpspy $(DESTDIR)$(prefix)/bin/phpspy
 
 clean:
 	rm -f phpspy
 
-.PHONY: all phpspy_libdw phpspy_readelf clean_deps update_deps install clean
+.PHONY: all phpspy_libdw phpspy_readelf phpspy_objdump test clean_deps update_deps install clean
