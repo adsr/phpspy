@@ -243,11 +243,12 @@ int main_pid(pid_t pid) {
 
     n = 0;
     while (!done) {
+        rv = 0;
         get_clock_time(&start_time);
         if (opt_pause) rv |= pause_pid(pid);
         rv |= do_trace_ptr(&context);
         if (opt_pause) rv |= unpause_pid(pid);
-        if (++n == opt_trace_limit || (rv & 2) != 0) break;
+        if ((rv == 0 && ++n == opt_trace_limit) || (rv & 2) != 0) break;
         get_clock_time(&end_time);
         calc_sleep_time(&end_time, &start_time, &sleep_time);
         nanosleep(&sleep_time, NULL);
@@ -415,7 +416,7 @@ static int copy_proc_mem(trace_context_t *context, const char *what, void *raddr
     if (process_vm_readv(context->target.pid, local, 1, remote, 1, 0) == -1) {
         if (errno == ESRCH) { /* No such process */
             perror("process_vm_readv");
-            rv = 2;
+            rv = 2; /* Return value of 2 tells main_pid to exit */
         } else {
             fprintf(stderr, "copy_proc_mem: Failed to copy %s; err=%s raddr=%p size=%lu\n", what, strerror(errno), raddr, size);
             rv = 1;

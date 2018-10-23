@@ -69,7 +69,7 @@ static int do_trace(trace_context_t *context) {
         depth += 1;
     }
     if (depth < 1) {
-        return 0;
+        return 1;
     } else if (opt_capture_req) {
         request = &context->event.request;
         try_copy_proc_mem("sapi_globals", (void*)target->sapi_globals_addr, &sapi_globals, sizeof(sapi_globals));
