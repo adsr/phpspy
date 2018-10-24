@@ -44,8 +44,8 @@
 #include <php_structs_74.h>
 #endif
 
-#include "libdwfl.h"
-#include "uthash.h"
+#include <elfutils/libdwfl.h>
+#include <uthash.h>
 
 #define try(__rv, __call) do { if (((__rv) = (__call)) != 0) return (__rv); } while(0)
 

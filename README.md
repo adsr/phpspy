@@ -24,20 +24,20 @@ All with no changes to your application and minimal overhead.
     ...
     $ cd phpspy
     $ make
-    cc -Wall -Wextra -pedantic -g -Ofast -pthread  -I.  phpspy.c pgrep.c top.c -o phpspy
+    ...
     $ sudo ./phpspy -l 1000 -p $(pgrep -n httpd) | ./stackcollapse-phpspy.pl | ./vendor/flamegraph.pl > flame.svg
     ...
-    $ google-chrome flame.svg # view flame.svg in browser
+    $ google-chrome flame.svg # View flame.svg in browser
 
-### Build
+### Build options
 
-    $ make
-    cc -Wall -Wextra -pedantic -g -Ofast -pthread  -I.  phpspy.c pgrep.c top.c -o phpspy
-    $ ./phpspy -v
-    phpspy v0.3 USE_TERMBOX=y USE_ZEND=n USE_LIBDW=n
+    $ make                   # Build dependencies locally and statically link
+    $ # or
+    $ make phpspy_dynamic    # Dynamically link dependencies
+    $ # or
+    $ USE_ZEND=1 make ...    # Use Zend structs instead of built-in structs (requires php-dev or php-devel)
 
 ### Usage
-
     $ ./phpspy -h
     Usage:
       phpspy [options] -p <pid>
@@ -61,7 +61,7 @@ All with no changes to your application and minimal overhead.
       -H, --rate-hz=<hz>                 Trace `hz` times per second
                                            (see also `-s`) (default: 99)
       -V, --php-version=<ver>            Set PHP version
-                                           (default: 72; supported: 70 71 72 73)
+                                           (default: 72; supported: 70 71 72 73 74)
       -l, --limit=<num>                  Limit total number of traces to capture
                                            (default: 0; 0=unlimited)
       -n, --max-depth=<max>              Set max stack trace depth
@@ -86,13 +86,6 @@ All with no changes to your application and minimal overhead.
                                            commands
       -@, --nothing                      Ignored
       -v, --version                      Print phpspy version and exit
-
-### Build options
-
-    $ make
-    $ # also
-    $ USE_ZEND=1 make ...    # Use Zend structs instead of built-in structs (requires php-dev or php-devel)
-    $ USE_TERMBOX=1 make ... # Enable top mode support via termbox (requires libtermbox)
 
 ### Example (variable peek)
 
