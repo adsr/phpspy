@@ -19,7 +19,7 @@ uint64_t opt_trace_limit = 0;
 char *opt_path_output = "-";
 char *opt_path_child_out = "phpspy.%d.out";
 char *opt_path_child_err = "phpspy.%d.err";
-char *opt_phpv = "72";
+char *opt_phpv = NULL;
 int opt_pause = 0;
 
 size_t zend_string_val_offset = 0;
@@ -37,6 +37,7 @@ static void get_clock_time(struct timespec *ts);
 static void calc_sleep_time(struct timespec *end, struct timespec *start, struct timespec *sleep);
 static int copy_proc_mem(trace_context_t *context, const char *what, void *raddr, void *laddr, size_t size);
 static void varpeek_add(char *varspec);
+static void try_get_php_version(char **phpv);
 
 #ifdef USE_ZEND
 static int do_trace(trace_context_t *context);
@@ -223,6 +224,12 @@ int main_pid(pid_t pid) {
     #ifdef USE_ZEND
     do_trace_ptr = do_trace;
     #else
+
+
+    if (opt_phpv == NULL) {
+      try_get_php_version(&opt_phpv);
+    }
+
     if (strcmp("70", opt_phpv) == 0) {
         do_trace_ptr = do_trace_70;
     } else if (strcmp("71", opt_phpv) == 0) {
@@ -420,6 +427,58 @@ static int copy_proc_mem(trace_context_t *context, const char *what, void *raddr
         }
     }
     return rv;
+}
+
+void try_get_php_version(char **phpv) {
+    FILE *pcmd;
+    char *which_cmd;
+    char *strings_cmd;
+    char *php_path = NULL;
+    size_t php_path_size = 4096;
+    ssize_t size;
+    char *phpv_raw = NULL;
+    size_t phpv_raw_size = 64;
+
+    if (asprintf(&which_cmd, "which php") < 0) {
+        errno = ENOMEM;
+        perror("asprintf");
+        return;
+    }
+
+    if ((pcmd = popen(which_cmd, "r")) != NULL) {
+        size = getline(&php_path, &php_path_size, pcmd);
+        if (size <= 0) {
+            perror("Unable to locate path to php binary");
+            return;
+        }
+        php_path[size - 1] = 0;
+        pclose(pcmd);
+    }
+    free(which_cmd);
+
+    if (asprintf(&strings_cmd, "strings -d %s | grep \"X-Powered-By\"", php_path) < 0) {
+        errno = ENOMEM;
+        perror("asprintf");
+        return;
+    }
+
+    if ((pcmd = popen(strings_cmd, "r")) != NULL) {
+        size = getline(&phpv_raw, &phpv_raw_size, pcmd);
+        if (size <= 0) {
+            perror("Unable to determine php version");
+            return;
+        }
+
+        if (asprintf(phpv, "%c%c", phpv_raw[18], phpv_raw[20]) < 0) {
+            errno = ENOMEM;
+            perror("asprintf");
+            return;
+        }
+        pclose(pcmd);
+    }
+    free(strings_cmd);
+    free(php_path);
+    free(phpv_raw);
 }
 
 /* TODO figure out a way to make this cleaner */
