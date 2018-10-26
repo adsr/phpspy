@@ -25,7 +25,7 @@
 #include <unistd.h>
 
 #ifdef USE_TERMBOX
-#include <termbox.h>
+#include "termbox.h"
 #endif
 
 #ifdef USE_ZEND

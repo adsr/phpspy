@@ -1,7 +1,7 @@
 phpspy_cflags:=-std=c99 -Wall -Wextra -pedantic -g -Ofast -pthread $(CFLAGS)
 phpspy_libs:=$(LDLIBS)
 phpspy_ldflags:=$(LDFLAGS)
-phpspy_includes:=-I. -Ivendor
+phpspy_includes:=-I. -I./vendor -Ivendor/termbox/src
 phpspy_defines:=-DUSE_TERMBOX=1
 phpspy_tests:=$(wildcard tests/test_*.sh)
 phpspy_sources:=phpspy.c pgrep.c top.c addr_libdw.c event_fout.c
