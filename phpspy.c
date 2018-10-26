@@ -61,11 +61,6 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "                                       pgrep `args` (see also `-T`)\n");
     fprintf(fp, "  -T, --threads=<num>                Set number of threads to use with `-P`\n");
     fprintf(fp, "                                       (default: %d)\n", opt_num_workers);
-    fprintf(fp, "  -t, --top                          Show dynamic top-like output\n");
-    fprintf(fp, "  -e, --peek-var=<varspec>           Peek at the contents of the variable located\n");
-    fprintf(fp, "                                       at `varspec`, which has the format:\n");
-    fprintf(fp, "                                       <varname>@<path>:<lineno>\n");
-    fprintf(fp, "                                       e.g., xyz@/path/to.php:1234\n");
     fprintf(fp, "  -s, --sleep-ns=<ns>                Sleep `ns` nanoseconds between traces\n");
     fprintf(fp, "                                       (see also `-H`) (default: %ld)\n", opt_sleep_ns);
     fprintf(fp, "  -H, --rate-hz=<hz>                 Trace `hz` times per second\n");
@@ -89,13 +84,20 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "                                       (default: %lu; 0=find dynamically)\n", opt_sapi_globals_addr);
     fprintf(fp, "  -a, --addr-sapi-globals=<hex>      Set address of sapi_globals in hex\n");
     fprintf(fp, "                                       (default: %lu; 0=find dynamically)\n", opt_executor_globals_addr);
-    fprintf(fp, "  -S, --pause-process                Pause process while reading stacktrace\n");
-    fprintf(fp, "                                       (unsafe for production!)\n");
     fprintf(fp, "  -1, --single-line                  Output in single-line mode\n");
     fprintf(fp, "  -#, --comment=<any>                Ignored; intended for self-documenting\n");
     fprintf(fp, "                                       commands\n");
     fprintf(fp, "  -@, --nothing                      Ignored\n");
     fprintf(fp, "  -v, --version                      Print phpspy version and exit\n");
+    fprintf(fp, "\n");
+    fprintf(fp, "Experimental Features:\n");
+    fprintf(fp, "  -S, --pause-process                Pause process while reading stacktrace\n");
+    fprintf(fp, "                                       (unsafe for production!)\n");
+    fprintf(fp, "  -e, --peek-var=<varspec>           Peek at the contents of the variable located\n");
+    fprintf(fp, "                                       at `varspec`, which has the format:\n");
+    fprintf(fp, "                                       <varname>@<path>:<lineno>\n");
+    fprintf(fp, "                                       e.g., xyz@/path/to.php:1234\n");
+    fprintf(fp, "  -t, --top                          Show dynamic top-like output\n");
     exit(exit_code);
 }
 
