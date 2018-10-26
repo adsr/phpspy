@@ -2,7 +2,7 @@ before_install:
   - sudo add-apt-repository -y ppa:ondrej/php
   - sudo apt-get update
   - sudo apt-get install -y php7.3-cli
-  - sudo cp -vf "$(command -v php7.3)" "$(command -v php)"
+  - echo "php_path:=/usr/bin/php7.3" | sudo tee config.mk
 before_script: make
 script: make test
 after_script: make clean
