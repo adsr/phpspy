@@ -64,7 +64,7 @@ vendor/elfutils/configure:
 	git submodule update --init --remote --recursive
 	cd vendor/elfutils && git reset --hard
 
-test: phpspy $(phpspy_tests)
+test: phpspy_static $(phpspy_tests)
 	@total=0; \
 	pass=0; \
 	for t in $(phpspy_tests); do \
