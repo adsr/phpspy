@@ -19,7 +19,7 @@ uint64_t opt_trace_limit = 0;
 char *opt_path_output = "-";
 char *opt_path_child_out = "phpspy.%d.out";
 char *opt_path_child_err = "phpspy.%d.err";
-char *opt_phpv = "72";
+char *opt_phpv = "auto";
 int opt_pause = 0;
 
 size_t zend_string_val_offset = 0;
@@ -37,6 +37,7 @@ static void get_clock_time(struct timespec *ts);
 static void calc_sleep_time(struct timespec *end, struct timespec *start, struct timespec *sleep);
 static int copy_proc_mem(trace_context_t *context, const char *what, void *raddr, void *laddr, size_t size);
 static void varpeek_add(char *varspec);
+static void try_get_php_version(pid_t pid);
 
 #ifdef USE_ZEND
 static int do_trace(trace_context_t *context);
@@ -223,6 +224,12 @@ int main_pid(pid_t pid) {
     #ifdef USE_ZEND
     do_trace_ptr = do_trace;
     #else
+
+
+    if (strcmp(opt_phpv, "auto") == 0) {
+        try_get_php_version(pid);
+    }
+
     if (strcmp("70", opt_phpv) == 0) {
         do_trace_ptr = do_trace_70;
     } else if (strcmp("71", opt_phpv) == 0) {
@@ -420,6 +427,38 @@ static int copy_proc_mem(trace_context_t *context, const char *what, void *raddr
         }
     }
     return rv;
+}
+
+void try_get_php_version(pid_t pid) {
+    char version_cmd[256];
+    char phpv_minor;
+    FILE *pcmd;
+
+    snprintf(
+        version_cmd,
+        sizeof(version_cmd),
+        "awk 'NR==1{path=$NF} /libphp7/{path=$NF} END{print path}' /proc/%d/maps"
+        " | xargs strings -d "
+        " | grep -Po '(?<=X-Powered-By: PHP/7\\.)\\d'",
+        pid
+    );
+
+    if ((pcmd = popen(version_cmd, "r")) == NULL) {
+        perror("try_get_php_version: popen");
+        return;
+    } else if (fread(&phpv_minor, sizeof(char), 1, pcmd) == 1) {
+        switch (phpv_minor) {
+            case '0': opt_phpv = "70"; break;
+            case '1': opt_phpv = "71"; break;
+            case '2': opt_phpv = "72"; break;
+            case '3': opt_phpv = "73"; break;
+            case '4': opt_phpv = "74"; break;
+        }
+    }
+    if (opt_phpv == NULL) {
+        fprintf(stderr, "try_get_php_version: Could not detect PHP version\n");
+    }
+    pclose(pcmd);
 }
 
 /* TODO figure out a way to make this cleaner */
