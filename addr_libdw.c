@@ -1,8 +1,8 @@
 #include "phpspy.h"
 
 typedef struct {
-  const char *symbol;
-  uint64_t   *raddr;
+    const char *symbol;
+    uint64_t *raddr;
 } dwarf_callback_args;
 
 static int dwarf_module_callback(
