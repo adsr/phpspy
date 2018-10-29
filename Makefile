@@ -50,7 +50,7 @@ phpspy_dynamic: $(wildcard *.c *.h)
 	@$(or $(has_termbox), $(error Need libtermbox. Hint: try `make phpspy_static`))
 	$(CC) $(phpspy_cflags) $(phpspy_includes) $(phpspy_defines) $(phpspy_sources) -o phpspy $(phpspy_ldflags) $(phpspy_libs) -ldw -ltermbox
 
-vendor/elfutils/libdw/libdw.a: vendor/elfutils/configure
+vendor/elfutils/libdw/libdw.a: vendor/elfutils/configure.ac
 	cd vendor/elfutils && autoreconf -if && ./configure --enable-maintainer-mode && $(MAKE) SUBDIRS="$(elfutils_subdirs)"
 
 vendor/termbox/build/src/libtermbox.a: vendor/termbox/waf
@@ -60,7 +60,7 @@ vendor/termbox/waf:
 	git submodule update --init --remote --recursive
 	cd vendor/termbox && git reset --hard
 
-vendor/elfutils/configure:
+vendor/elfutils/configure.ac:
 	git submodule update --init --remote --recursive
 	cd vendor/elfutils && git reset --hard
 
