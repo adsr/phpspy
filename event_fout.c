@@ -54,9 +54,10 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
         case PHPSPY_TRACE_EVENT_VARPEEK:
             fprintf(
                 udata->fout,
-                "# varpeek %s@%s = %s%s",
+                "# varpeek %s@%s:%" PRIu32 " = %s%s",
                 context->event.varpeek.entry->varname,
-                context->event.varpeek.entry->filename_lineno,
+                context->event.varpeek.filename,
+                context->event.varpeek.lineno,
                 context->event.varpeek.zval_str,
                 opt_frame_delim
             );

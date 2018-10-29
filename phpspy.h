@@ -10,7 +10,6 @@
 #include <signal.h>
 #include <stdarg.h>
 #include <stddef.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,6 +24,7 @@
 #include <unistd.h>
 #include <termbox.h>
 #include <regex.h>
+#include <inttypes.h>
 
 #ifdef USE_ZEND
 #include <main/php_config.h>
@@ -79,8 +79,10 @@
 typedef struct varpeek_entry_s {
     #define PHPSPY_VARPEEK_KEY_SIZE 256
     #define PHPSPY_VARPEEK_VARNAME_SIZE 64
-    char filename_lineno[PHPSPY_VARPEEK_KEY_SIZE];
+    char filename[PHPSPY_VARPEEK_KEY_SIZE];
     char varname[PHPSPY_VARPEEK_VARNAME_SIZE];
+    uint32_t line_number;
+    struct varpeek_entry_s *map;
     UT_hash_handle hh;
 } varpeek_entry_t;
 
@@ -106,6 +108,8 @@ typedef struct trace_request_s {
 typedef struct trace_varpeek_s {
     varpeek_entry_t *entry;
     char *zval_str;
+    char *filename;
+    uint32_t lineno;
 } trace_varpeek_t;
 
 typedef struct trace_target_s {
