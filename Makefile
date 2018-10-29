@@ -64,19 +64,19 @@ vendor/elfutils/configure:
 	git submodule update --init --remote --recursive
 	cd vendor/elfutils && git reset --hard
 
-test: phpspy $(phpspy_tests)
+test: phpspy_static $(phpspy_tests)
 	@total=0; \
 	pass=0; \
 	for t in $(phpspy_tests); do \
 		tput bold; echo TEST $$t; tput sgr0; \
-		PHPSPY=./phpspy PHP=$(php_path) TEST_DIR=$$(dirname $$t) ./$$t; ec=$$?; echo; \
+		PHPSPY=./phpspy PHP=$(php_path) TEST_SH=$$(dirname $$t)/test.sh ./$$t; ec=$$?; echo; \
 		[ $$ec -eq 0 ] && pass=$$((pass+1)); \
 		total=$$((total+1)); \
 	done; \
 	printf "Passed %d out of %d tests\n" $$pass $$total ; \
 	[ $$pass -eq $$total ] || exit 1
 
-install: phpspy
+install: phpspy_static
 	install -D -v -m 755 phpspy $(DESTDIR)$(prefix)/bin/phpspy
 
 clean:
