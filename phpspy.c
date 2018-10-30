@@ -437,10 +437,11 @@ void try_get_php_version(pid_t pid) {
     snprintf(
         version_cmd,
         sizeof(version_cmd),
-        "awk 'NR==1{path=$NF} /libphp7/{path=$NF} END{print path}' /proc/%d/maps"
-        " | xargs strings -d "
-        " | grep -Po '(?<=X-Powered-By: PHP/7\\.)\\d'",
-        pid
+        "{ awk '/libphp7/{print $NF; exit 0} END{exit 1}' /proc/%d/maps "
+        "  || readlink -e /proc/%d/exe; } "
+        "| xargs strings -d "
+        "| grep -Po '(?<=X-Powered-By: PHP/7\\.)\\d'",
+        pid, pid
     );
 
     if ((pcmd = popen(version_cmd, "r")) == NULL) {
@@ -453,9 +454,9 @@ void try_get_php_version(pid_t pid) {
             case '2': opt_phpv = "72"; break;
             case '3': opt_phpv = "73"; break;
             case '4': opt_phpv = "74"; break;
+            default: fprintf(stderr, "try_get_php_version: Unrecognized PHP version\n"); break;
         }
-    }
-    if (opt_phpv == NULL) {
+    } else {
         fprintf(stderr, "try_get_php_version: Could not detect PHP version\n");
     }
     pclose(pcmd);

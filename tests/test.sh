@@ -1,5 +1,4 @@
 #!/bin/bash
-[ -z "$phpv" ] && phpv=$($PHP -r '$v=PHP_VERSION; echo $v{0} . $v{2};')
 
 maybe_sudo=''
 [ -n "$use_sudo" ] && maybe_sudo='sudo'
@@ -10,7 +9,6 @@ maybe_timeout=''
 actual=$(
     $maybe_sudo $maybe_timeout $PHPSPY \
     --limit=1 \
-    --php-version=$phpv \
     --child-stdout=/dev/null \
     --child-stderr=/dev/null \
     "${phpspy_opts[@]}"
