@@ -8,14 +8,14 @@ fail()    { echo -e "  \x1b[31mERR\x1b[0m $@"; exit 1; }
 flame_svg=$(mktemp)
 trap on_exit EXIT
 
-$PHPSPY --request-info=qcup \
+$PHPSPY --child-stdout=/dev/null --child-stderr=/dev/null --request-info=qcup \
     -- $PHP -r 'sleep(2);' \
     | $REPO/stackcollapse-phpspy.pl \
     | $REPO/vendor/flamegraph.pl \
     > $flame_svg
 grep -Pq '\d+ samples' $flame_svg || fail "Failed to generate flame graph"
 
-$PHPSPY \
+$PHPSPY --child-stdout=/dev/null --child-stderr=/dev/null --request-info=QCUP \
     -- $PHP -r 'sleep(2);' \
     | $REPO/stackcollapse-phpspy.pl \
     | $REPO/vendor/flamegraph.pl \
