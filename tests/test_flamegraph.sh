@@ -3,7 +3,7 @@
 REPO=$(dirname $(dirname $TEST_SH))
 
 
-php -r 'sleep(5);' &
+/usr/bin/php7.3 -r 'sleep(5);' &
 _pid=$!
 awk 'NR==1{path=$NF} /libphp7/{path=$NF} END{print path}' /proc/$_pid/maps
 cat /proc/$_pid/maps
