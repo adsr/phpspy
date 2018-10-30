@@ -437,9 +437,10 @@ void try_get_php_version(pid_t pid) {
     snprintf(
         version_cmd,
         sizeof(version_cmd),
-        "awk 'NR==1{path=$NF} /libphp7/{path=$NF} END{print path}' /proc/%d/maps"
-        " | xargs strings -d "
-        " | grep -Po '(?<=X-Powered-By: PHP/7\\.)\\d'",
+        "sort /proc/%d/maps "
+        "| awk 'NR==1{path=$NF} /libphp7/{path=$NF} END{print path}' "
+        "| xargs strings -d "
+        "| grep -Po '(?<=X-Powered-By: PHP/7\\.)\\d'",
         pid
     );
 
