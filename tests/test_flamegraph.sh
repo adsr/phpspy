@@ -2,6 +2,8 @@
 
 REPO=$(dirname $(dirname $TEST_SH))
 
+echo /usr/bin/php7.3 | xargs strings -d | grep -Po '(?<=X-Powered-By: PHP/7\.)\d'
+
 on_exit() { rm -f $flame_svg; }
 fail()    { echo -e "  \x1b[31mERR\x1b[0m $@"; exit 1; }
 

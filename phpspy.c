@@ -453,9 +453,9 @@ void try_get_php_version(pid_t pid) {
             case '2': opt_phpv = "72"; break;
             case '3': opt_phpv = "73"; break;
             case '4': opt_phpv = "74"; break;
+            default: fprintf(stderr, "try_get_php_version: Unrecognized PHP version\n"); break;
         }
-    }
-    if (opt_phpv == NULL) {
+    } else {
         fprintf(stderr, "try_get_php_version: Could not detect PHP version\n");
     }
     pclose(pcmd);
