@@ -58,24 +58,20 @@ usage() if $help;
 # internals
 my %stacks;
 my @frames;
-my $last_depth;
 
 while (defined(my $line = <>)) {
-    next unless $line =~ /^\S+ \S/;
+    next unless $line =~ /^(?:#|\d+) \S/;
 
     my ($depth, $func) = (split ' ', $line)[0,1];
-    $last_depth = $depth;
 
-    if (@frames && $depth eq '#') {
-        $stacks{join(';', reverse @frames)} += 1;
-        next;
-    } elsif ($depth == 0) {
+    if ($depth ne '#' && $depth == 0) {
+        $stacks{join(';', reverse @frames)} += 1 if @frames;
         @frames = ();
     }
 
     push @frames, $func if $line =~ /^\d/;
 }
-$stacks{join(';', reverse @frames)} += 1 if @frames && $last_depth eq '#';
+$stacks{join(';', reverse @frames)} += 1 if @frames;
 
 while ( my ($k, $v) = each %stacks ) {
     print "$k $v\n";
