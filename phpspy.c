@@ -21,13 +21,16 @@ char *opt_path_child_out = "phpspy.%d.out";
 char *opt_path_child_err = "phpspy.%d.err";
 char *opt_phpv = "auto";
 int opt_pause = 0;
+regex_t *opt_filter_re = NULL;
 
 size_t zend_string_val_offset = 0;
 int done = 0;
 int (*do_trace_ptr)(trace_context_t *context) = NULL;
 varpeek_entry_t *varpeek_map = NULL;
+regex_t filter_re;
 
 static void parse_opts(int argc, char **argv);
+static void cleanup();
 static int main_fork(int argc, char **argv);
 static int pause_pid(pid_t pid);
 static int unpause_pid(pid_t pid);
@@ -48,6 +51,27 @@ static int do_trace_72(trace_context_t *context);
 static int do_trace_73(trace_context_t *context);
 static int do_trace_74(trace_context_t *context);
 #endif
+
+int main(int argc, char **argv) {
+    int rv;
+    parse_opts(argc, argv);
+
+    if (opt_top_mode != 0) {
+        rv = main_top(argc, argv);
+    } else if (opt_pid != -1) {
+        rv = main_pid(opt_pid);
+    } else if (opt_pgrep_args != NULL) {
+        rv = main_pgrep();
+    } else if (optind < argc) {
+        rv = main_fork(argc, argv);
+    } else {
+        fprintf(stderr, "Expected pid (-p), pgrep (-P), or command\n\n");
+        usage(stderr, 1);
+        rv = 1;
+    }
+    cleanup();
+    return rv;
+}
 
 void usage(FILE *fp, int exit_code) {
     fprintf(fp, "Usage:\n");
@@ -86,6 +110,8 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "  -a, --addr-sapi-globals=<hex>      Set address of sapi_globals in hex\n");
     fprintf(fp, "                                       (default: %lu; 0=find dynamically)\n", opt_executor_globals_addr);
     fprintf(fp, "  -1, --single-line                  Output in single-line mode\n");
+    fprintf(fp, "  -f, --filter=<regex>               Filter output by POSIX regex\n");
+    fprintf(fp, "                                       (default: none)\n");
     fprintf(fp, "  -#, --comment=<any>                Ignored; intended for self-documenting\n");
     fprintf(fp, "                                       commands\n");
     fprintf(fp, "  -@, --nothing                      Ignored\n");
@@ -99,6 +125,7 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "                                       <varname>@<path>:<lineno>\n");
     fprintf(fp, "                                       e.g., xyz@/path/to.php:1234\n");
     fprintf(fp, "  -t, --top                          Show dynamic top-like output\n");
+    cleanup();
     exit(exit_code);
 }
 
@@ -110,8 +137,6 @@ static void parse_opts(int argc, char **argv) {
         { "pid",                   required_argument, NULL, 'p' },
         { "pgrep",                 required_argument, NULL, 'P' },
         { "threads",               required_argument, NULL, 'T' },
-        { "top",                   no_argument,       NULL, 't' },
-        { "peek-var",              required_argument, NULL, 'e' },
         { "sleep-ns",              required_argument, NULL, 's' },
         { "rate-hz",               required_argument, NULL, 'H' },
         { "php-version",           required_argument, NULL, 'V' },
@@ -124,19 +149,21 @@ static void parse_opts(int argc, char **argv) {
         { "addr-executor-globals", required_argument, NULL, 'x' },
         { "addr-sapi-globals",     required_argument, NULL, 'a' },
         { "single-line",           no_argument,       NULL, '1' },
+        { "filter",                required_argument, NULL, 'f' },
         { "comment",               required_argument, NULL, '#' },
         { "nothing",               no_argument,       NULL, '@' },
         { "version",               no_argument,       NULL, 'v' },
+        { "pause-process",         no_argument,       NULL, 'S' },
+        { "peek-var",              required_argument, NULL, 'e' },
+        { "top",                   no_argument,       NULL, 't' },
         { 0,                       0,                 0,    0   }
     };
-    while ((c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:n:r:o:O:E:x:a:S1#:@v", long_opts, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:n:r:o:O:E:x:a:1f:#:@vSe:t", long_opts, NULL)) != -1) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
             case 'p': opt_pid = atoi(optarg); break;
             case 'P': opt_pgrep_args = optarg; break;
             case 'T': opt_num_workers = atoi(optarg); break;
-            case 't': opt_top_mode = 1; break;
-            case 'e': varpeek_add(optarg); break;
             case 's': opt_sleep_ns = strtol(optarg, NULL, 10); break;
             case 'H': opt_sleep_ns = (1000000000UL / strtol(optarg, NULL, 10)); break;
             case 'V': opt_phpv = optarg; break;
@@ -162,8 +189,18 @@ static void parse_opts(int argc, char **argv) {
             case 'E': opt_path_child_err = optarg; break;
             case 'x': opt_executor_globals_addr = strtoull(optarg, NULL, 16); break;
             case 'a': opt_sapi_globals_addr = strtoull(optarg, NULL, 16); break;
-            case 'S': opt_pause = 1; break;
             case '1': opt_frame_delim = "\t"; opt_trace_delim = "\n"; break;
+            case 'f':
+                if (opt_filter_re) {
+                    regfree(opt_filter_re);
+                }
+                if (regcomp(&filter_re, optarg, REG_EXTENDED | REG_NOSUB | REG_NEWLINE) == 0) {
+                    opt_filter_re = &filter_re;
+                } else {
+                    fprintf(stderr, "parse_opts: Failed to compile filter regex\n\n"); /* TODO regerror */
+                    usage(stderr, 1);
+                }
+                break;
             case '#': break;
             case '@': break;
             case 'v':
@@ -177,26 +214,11 @@ static void parse_opts(int argc, char **argv) {
                     #endif
                 );
                 exit(0);
+            case 'S': opt_pause = 1; break;
+            case 'e': varpeek_add(optarg); break;
+            case 't': opt_top_mode = 1; break;
         }
     }
-}
-
-int main(int argc, char **argv) {
-    parse_opts(argc, argv);
-
-    if (opt_top_mode != 0) {
-        return main_top(argc, argv);
-    } else if (opt_pid != -1) {
-        return main_pid(opt_pid);
-    } else if (opt_pgrep_args != NULL) {
-        return main_pgrep();
-    } else if (optind < argc) {
-        return main_fork(argc, argv);
-    }
-
-    fprintf(stderr, "Expected pid (-p), pgrep (-P), or command\n\n");
-    usage(stderr, 1);
-    return 1;
 }
 
 int main_pid(pid_t pid) {
@@ -277,6 +299,19 @@ static int main_fork(int argc, char **argv) {
     rv = main_pid(fork_pid);
     waitpid(fork_pid, NULL, 0);
     return rv;
+}
+
+static void cleanup() {
+    varpeek_entry_t *entry, *entry_tmp;
+
+    if (opt_filter_re) {
+        regfree(opt_filter_re);
+    }
+
+    HASH_ITER(hh, varpeek_map, entry, entry_tmp) {
+        HASH_DEL(varpeek_map, entry);
+        free(entry);
+    }
 }
 
 static int pause_pid(pid_t pid) {
@@ -429,7 +464,7 @@ void try_get_php_version(pid_t pid) {
         sizeof(version_cmd),
         "{ awk '/libphp7/{print $NF; exit 0} END{exit 1}' /proc/%d/maps "
         "  || readlink -e /proc/%d/exe; } "
-        "| xargs strings -d "
+        "| xargs strings "
         "| grep -Po '(?<=X-Powered-By: PHP/7\\.)\\d'",
         pid, pid
     );
