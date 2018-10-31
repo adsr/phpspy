@@ -24,6 +24,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <termbox.h>
+#include <regex.h>
 
 #ifdef USE_ZEND
 #include <main/php_config.h>
@@ -134,6 +135,7 @@ extern pid_t opt_pid;
 extern char *opt_frame_delim;
 extern char *opt_trace_delim;
 extern char *opt_path_output;
+extern regex_t *opt_filter_re;
 
 extern int main_pgrep();
 extern int main_pid(pid_t pid);

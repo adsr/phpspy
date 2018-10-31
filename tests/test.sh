@@ -24,4 +24,14 @@ for testname in "${!expected[@]}"; do
     fi
 done
 
+for testname in "${!not_expected[@]}"; do
+    not_expected_re="${not_expected[$testname]}"
+    if ! grep -Pq "$not_expected_re" <<<"$actual"; then
+        echo -e "  \x1b[32mOK \x1b[0m $testname"
+    else
+        echo -e "  \x1b[31mERR\x1b[0m $testname\nnot_expected=$not_expected_re\n\nactual=\n$actual"
+        exit 1
+    fi
+done
+
 unset expected
