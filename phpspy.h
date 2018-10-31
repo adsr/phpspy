@@ -23,10 +23,7 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
-
-#ifdef USE_TERMBOX
-#include "termbox.h"
-#endif
+#include <termbox.h>
 
 #ifdef USE_ZEND
 #include <main/php_config.h>
@@ -140,9 +137,7 @@ extern char *opt_path_output;
 
 extern int main_pgrep();
 extern int main_pid(pid_t pid);
-#ifdef USE_TERMBOX
 extern int main_top(int argc, char **argv);
-#endif
 
 extern void usage(FILE *fp, int exit_code);
 extern int get_symbol_addr(pid_t pid, const char *symbol, uint64_t *raddr);
