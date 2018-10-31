@@ -168,13 +168,8 @@ static void parse_opts(int argc, char **argv) {
             case '@': break;
             case 'v':
                 printf(
-                    "phpspy v%s USE_TERMBOX=%s USE_ZEND=%s\n",
+                    "phpspy v%s USE_ZEND=%s\n",
                     PHPSPY_VERSION,
-                    #ifdef USE_TERMBOX
-                    "y",
-                    #else
-                    "n",
-                    #endif
                     #ifdef USE_ZEND
                     "y"
                     #else
@@ -190,12 +185,7 @@ int main(int argc, char **argv) {
     parse_opts(argc, argv);
 
     if (opt_top_mode != 0) {
-        #ifdef USE_TERMBOX
         return main_top(argc, argv);
-        #else
-        fprintf(stderr, "Please recompile phpspy with USE_TERMBOX=1 for top mode support.\n");
-        return 1;
-        #endif
     } else if (opt_pid != -1) {
         return main_pid(opt_pid);
     } else if (opt_pgrep_args != NULL) {
