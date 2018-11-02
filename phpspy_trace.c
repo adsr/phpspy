@@ -138,6 +138,7 @@ static int copy_zstring(trace_context_t *context, const char *what, zend_string 
     try_copy_proc_mem(what, rzstring, &lzstring, sizeof(lzstring));
     *buf_len = PHPSPY_MIN(lzstring.len, PHPSPY_MAX(1, buf_size)-1);
     try_copy_proc_mem(what, ((char*)rzstring) + zend_string_val_offset, buf, *buf_len);
+    *(buf + (int)*buf_len) = '\0';
     return 0;
 }
 
@@ -163,7 +164,7 @@ static int copy_zval(trace_context_t *context, zval *local_zval, char *buf, size
         default:
             /* TODO handle other zval types */
             /* fprintf(context->fout, "value not supported, found type: %d\n", type); */
-            break;
+            return 1;
     }
     return 0;
 }
