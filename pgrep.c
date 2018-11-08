@@ -196,6 +196,7 @@ static void *run_signal_thread(void *arg) {
     sa.sa_handler = handle_signal;
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
+    sigaction(SIGHUP, &sa, NULL);
     sa.sa_handler = SIG_IGN;
     sigaction(SIGPIPE, &sa, NULL);
 
