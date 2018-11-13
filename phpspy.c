@@ -12,6 +12,7 @@ int opt_capture_req_qstring = 0;
 int opt_capture_req_cookie = 0;
 int opt_capture_req_uri = 0;
 int opt_capture_req_path = 0;
+int opt_capture_mem = 0;
 int opt_max_stack_depth = -1;
 char *opt_frame_delim = "\n";
 char *opt_trace_delim = "\n";
@@ -99,6 +100,8 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "  -r, --request-info=<opts>          Set request info parts to capture (q=query\n");
     fprintf(fp, "                                       c=cookie u=uri p=path) (capital=negation)\n");
     fprintf(fp, "                                       (default: QCUP; none)\n");
+    fprintf(fp, "  -m, --memory-usage                 Capture peak and current memory usage\n");
+    fprintf(fp, "                                       with each trace\n");
     fprintf(fp, "  -o, --output=<path>                Write phpspy output to `path`\n");
     fprintf(fp, "                                       (default: %s; -=stdout)\n", opt_path_output);
     fprintf(fp, "  -O, --child-stdout=<path>          Write child stdout to `path`\n");
@@ -117,7 +120,7 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "  -@, --nothing                      Ignored\n");
     fprintf(fp, "  -v, --version                      Print phpspy version and exit\n");
     fprintf(fp, "\n");
-    fprintf(fp, "Experimental Features:\n");
+    fprintf(fp, "Experimental options:\n");
     fprintf(fp, "  -S, --pause-process                Pause process while reading stacktrace\n");
     fprintf(fp, "                                       (unsafe for production!)\n");
     fprintf(fp, "  -e, --peek-var=<varspec>           Peek at the contents of the variable located\n");
@@ -143,6 +146,7 @@ static void parse_opts(int argc, char **argv) {
         { "limit",                 required_argument, NULL, 'l' },
         { "max-depth",             required_argument, NULL, 'n' },
         { "request-info",          required_argument, NULL, 'r' },
+        { "memory-usage",          no_argument,       NULL, 'm' },
         { "output",                required_argument, NULL, 'o' },
         { "child-stdout",          required_argument, NULL, 'O' },
         { "child-stderr",          required_argument, NULL, 'E' },
@@ -158,7 +162,7 @@ static void parse_opts(int argc, char **argv) {
         { "top",                   no_argument,       NULL, 't' },
         { 0,                       0,                 0,    0   }
     };
-    while ((c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:n:r:o:O:E:x:a:1f:#:@vSe:t", long_opts, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:n:r:mo:O:E:x:a:1f:#:@vSe:t", long_opts, NULL)) != -1) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
             case 'p': opt_pid = atoi(optarg); break;
@@ -184,6 +188,7 @@ static void parse_opts(int argc, char **argv) {
                 }
                 opt_capture_req = opt_capture_req_qstring | opt_capture_req_cookie | opt_capture_req_uri | opt_capture_req_path;
                 break;
+            case 'm': opt_capture_mem = 1; break;
             case 'o': opt_path_output = optarg; break;
             case 'O': opt_path_child_out = optarg; break;
             case 'E': opt_path_child_err = optarg; break;
@@ -366,20 +371,20 @@ static void redirect_child_stdio(int proc_fd, char *opt_path) {
 }
 
 static int find_addresses(trace_target_t *target) {
+    int rv;
     if (opt_executor_globals_addr != 0) {
         target->executor_globals_addr = opt_executor_globals_addr;
-    } else if (get_symbol_addr(target->pid, "executor_globals", &target->executor_globals_addr) != 0) {
-        return 1;
+    } else {
+        try(rv, get_symbol_addr(target->pid, "executor_globals", &target->executor_globals_addr));
     }
     if (opt_sapi_globals_addr != 0) {
         target->sapi_globals_addr = opt_sapi_globals_addr;
-    } else if (get_symbol_addr(target->pid, "sapi_globals", &target->sapi_globals_addr) != 0) {
-        return 1;
+    } else {
+        try(rv, get_symbol_addr(target->pid, "sapi_globals", &target->sapi_globals_addr));
     }
-    if (get_symbol_addr(target->pid, "core_globals", &target->core_globals_addr) != 0) {
-        /* TODO opt_core_globals_addr */
-        return 1;
-    }
+    try(rv, get_symbol_addr(target->pid, "core_globals", &target->core_globals_addr));
+    try(rv, get_symbol_addr(target->pid, "alloc_globals", &target->alloc_globals_addr));
+
     /* TODO probably don't need zend_string_val_offset */
     #ifdef USE_ZEND
     zend_string_val_offset = offsetof(zend_string, val);

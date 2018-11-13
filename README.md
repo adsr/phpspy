@@ -53,17 +53,12 @@ All with no changes to your application and minimal overhead.
                                            pgrep `args` (see also `-T`)
       -T, --threads=<num>                Set number of threads to use with `-P`
                                            (default: 16)
-      -t, --top                          Show dynamic top-like output
-      -e, --peek-var=<varspec>           Peek at the contents of the variable located
-                                           at `varspec`, which has the format:
-                                           <varname>@<path>:<lineno>
-                                           e.g., xyz@/path/to.php:1234
       -s, --sleep-ns=<ns>                Sleep `ns` nanoseconds between traces
                                            (see also `-H`) (default: 10101010)
       -H, --rate-hz=<hz>                 Trace `hz` times per second
                                            (see also `-s`) (default: 99)
       -V, --php-version=<ver>            Set PHP version
-                                           (default: 72; supported: 70 71 72 73 74)
+                                           (default: auto; supported: 70 71 72 73 74)
       -l, --limit=<num>                  Limit total number of traces to capture
                                            (default: 0; 0=unlimited)
       -n, --max-depth=<max>              Set max stack trace depth
@@ -71,6 +66,8 @@ All with no changes to your application and minimal overhead.
       -r, --request-info=<opts>          Set request info parts to capture (q=query
                                            c=cookie u=uri p=path) (capital=negation)
                                            (default: QCUP; none)
+      -m, --memory-usage                 Capture peak and current memory usage
+                                           with each trace
       -o, --output=<path>                Write phpspy output to `path`
                                            (default: -; -=stdout)
       -O, --child-stdout=<path>          Write child stdout to `path`
@@ -81,13 +78,22 @@ All with no changes to your application and minimal overhead.
                                            (default: 0; 0=find dynamically)
       -a, --addr-sapi-globals=<hex>      Set address of sapi_globals in hex
                                            (default: 0; 0=find dynamically)
-      -S, --pause-process                Pause process while reading stacktrace
-                                           (unsafe for production!)
       -1, --single-line                  Output in single-line mode
+      -f, --filter=<regex>               Filter output by POSIX regex
+                                           (default: none)
       -#, --comment=<any>                Ignored; intended for self-documenting
                                            commands
       -@, --nothing                      Ignored
       -v, --version                      Print phpspy version and exit
+
+    Experimental options:
+      -S, --pause-process                Pause process while reading stacktrace
+                                           (unsafe for production!)
+      -e, --peek-var=<varspec>           Peek at the contents of the variable located
+                                           at `varspec`, which has the format:
+                                           <varname>@<path>:<lineno>
+                                           e.g., xyz@/path/to.php:1234
+      -t, --top                          Show dynamic top-like output
 
 ### Example (variable peek)
 

@@ -11,7 +11,9 @@ static int do_trace(trace_context_t *context) {
     int rv;
     zend_execute_data *remote_execute_data;
     zend_executor_globals executor_globals;
+    zend_alloc_globals alloc_globals;
     zend_execute_data execute_data;
+    zend_mm_heap mm_heap;
     zend_class_entry zce;
     zend_function zfunc;
     zend_string zstring;
@@ -36,7 +38,6 @@ static int do_trace(trace_context_t *context) {
         memset(&zfunc, 0, sizeof(zfunc));
         memset(&zstring, 0, sizeof(zstring));
         memset(&zce, 0, sizeof(zce));
-        memset(&sapi_globals, 0, sizeof(sapi_globals));
 
         try_copy_proc_mem("execute_data", remote_execute_data, &execute_data, sizeof(execute_data));
         try_copy_proc_mem("zfunc", execute_data.func, &zfunc, sizeof(zfunc));
@@ -68,9 +69,13 @@ static int do_trace(trace_context_t *context) {
         remote_execute_data = execute_data.prev_execute_data;
         depth += 1;
     }
+
     if (depth < 1) {
         return 1;
-    } else if (opt_capture_req) {
+    }
+
+    if (opt_capture_req) {
+        memset(&sapi_globals, 0, sizeof(sapi_globals));
         request = &context->event.request;
         try_copy_proc_mem("sapi_globals", (void*)target->sapi_globals_addr, &sapi_globals, sizeof(sapi_globals));
         #define try_copy_sapi_global_field(__field, __local) do {                                                   \
@@ -89,6 +94,16 @@ static int do_trace(trace_context_t *context) {
         request->ts = sapi_globals.global_request_time;
         context->event_handler(context, PHPSPY_TRACE_EVENT_REQUEST);
     }
+
+    if (opt_capture_mem) {
+        memset(&mm_heap, 0, sizeof(mm_heap));
+        try_copy_proc_mem("alloc_globals", (void*)target->alloc_globals_addr, &alloc_globals, sizeof(alloc_globals));
+        try_copy_proc_mem("mm_heap", alloc_globals.mm_heap, &mm_heap, sizeof(mm_heap));
+        context->event.mem.size = mm_heap.size;
+        context->event.mem.peak = mm_heap.peak;
+        context->event_handler(context, PHPSPY_TRACE_EVENT_MEM);
+    }
+
     context->event_handler(context, PHPSPY_TRACE_EVENT_STACK_END);
 
     /* TODO feature to print core_globals */

@@ -79,6 +79,17 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
             );
             len = PHPSPY_MIN(udata->rem_len, len);
             break;
+        case PHPSPY_TRACE_EVENT_MEM:
+            len = snprintf(
+                udata->cur,
+                udata->rem_len + 1,
+                "# mem %lu %lu%s",
+                (uint64_t)context->event.mem.size,
+                (uint64_t)context->event.mem.peak,
+                opt_frame_delim
+            );
+            len = PHPSPY_MIN(udata->rem_len, len);
+            break;
         case PHPSPY_TRACE_EVENT_STACK_END:
             if (opt_filter_re && regexec(opt_filter_re, udata->buf, 0, NULL, 0) != 0) {
                 break;

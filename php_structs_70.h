@@ -17,6 +17,8 @@ typedef struct _zval_70                  zval_70;
 typedef struct _php_core_globals_70      php_core_globals_70;
 typedef struct _Bucket_70                Bucket_70;
 typedef struct _zend_array_70            zend_array_70;
+typedef struct _zend_alloc_globals_70    zend_alloc_globals_70;
+typedef struct _zend_mm_heap_70          zend_mm_heap_70;
 
 /* Assumes 8-byte pointers */
                                                     /* offset   length */
@@ -121,6 +123,16 @@ struct __attribute__((__packed__)) _Bucket_70 {
     zval_70                 val;                    /* 0        +16 */
     uint64_t                h;                      /* 16       +8 */
     zend_string_70          *key;                   /* 24       +32 */
+};
+
+struct __attribute__((__packed__)) _zend_alloc_globals_70 {
+    zend_mm_heap_70         *mm_heap;               /* 0        +8 */
+};
+
+struct __attribute__((__packed__)) _zend_mm_heap_70 {
+    uint8_t                 pad0[16];               /* 0        +16 */
+    size_t                  size;                   /* 16       +8 */
+    size_t                  peak;                   /* 24       +8 */
 };
 
 #endif
