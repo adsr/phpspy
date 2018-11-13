@@ -32,6 +32,7 @@ static size_t buf_len = 0;
 static unsigned long total_samp_count = 0;
 static unsigned long samp_count = 0;
 static unsigned long total_err_count = 0;
+static int is_paused = 0;
 static char phpspy_args[BUF_SIZE];
 
 int main_top(int argc, char **argv) {
@@ -87,6 +88,13 @@ int main_top(int argc, char **argv) {
         timeout.tv_usec = 0;
         rc = select(maxfd + 1, &readfds, NULL, NULL, &timeout);
         if (rc < 0) {
+            if (errno == EINTR) {
+                /* Probably due to SIGWINCH (terminal resize) */
+                /* Call tb_peek_event to let termbox update dimensions */
+                tb_peek_event(&event, 0);
+                last_display.tv_sec = 0; /* Immediately re-display */
+                continue;
+            }
             perror("select");
             break;
         }
@@ -252,9 +260,10 @@ static void handle_event(struct tb_event *event) {
         return;
     } else if (event->ch == 'q') {
         done = 1;
-    } else if (event->ch == 'c') {
-        /* TODO top mode handle_event */
+    } else if (event->ch == 'p') {
+        is_paused = 1 - is_paused;
     }
+    /* TODO other commands in top mode */
 }
 
 static int func_list_compare(const void *a, const void *b) {
@@ -324,7 +333,7 @@ static void display() {
     }
     samp_count = 0;
 
-    tb_present();
+    if (!is_paused) tb_present();
 }
 
 static void tb_print(const char *str, int x, int y, uint16_t fg, uint16_t bg) {
