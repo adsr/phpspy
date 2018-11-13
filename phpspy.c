@@ -379,11 +379,16 @@ static int find_addresses(trace_target_t *target) {
     }
     if (opt_sapi_globals_addr != 0) {
         target->sapi_globals_addr = opt_sapi_globals_addr;
-    } else {
+    } else if (opt_capture_req) {
         try(rv, get_symbol_addr(target->pid, "sapi_globals", &target->sapi_globals_addr));
     }
-    try(rv, get_symbol_addr(target->pid, "core_globals", &target->core_globals_addr));
-    try(rv, get_symbol_addr(target->pid, "alloc_globals", &target->alloc_globals_addr));
+    if (0) {
+        /* TODO feature to print core_globals */
+        try(rv, get_symbol_addr(target->pid, "core_globals", &target->core_globals_addr));
+    }
+    if (opt_capture_mem) {
+        try(rv, get_symbol_addr(target->pid, "alloc_globals", &target->alloc_globals_addr));
+    }
 
     /* TODO probably don't need zend_string_val_offset */
     #ifdef USE_ZEND
