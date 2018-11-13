@@ -58,9 +58,10 @@
 #define PHPSPY_TRACE_EVENT_FRAME       2
 #define PHPSPY_TRACE_EVENT_VARPEEK     3
 #define PHPSPY_TRACE_EVENT_REQUEST     4
-#define PHPSPY_TRACE_EVENT_STACK_END   5
-#define PHPSPY_TRACE_EVENT_ERROR       6
-#define PHPSPY_TRACE_EVENT_DEINIT      7
+#define PHPSPY_TRACE_EVENT_MEM         5
+#define PHPSPY_TRACE_EVENT_STACK_END   6
+#define PHPSPY_TRACE_EVENT_ERROR       7
+#define PHPSPY_TRACE_EVENT_DEINIT      8
 
 #ifndef USE_ZEND
 #define IS_UNDEF     0
@@ -103,6 +104,11 @@ typedef struct trace_request_s {
     double ts;
 } trace_request_t;
 
+typedef struct trace_mem_s {
+    size_t size;
+    size_t peak;
+} trace_mem_t;
+
 typedef struct trace_varpeek_s {
     varpeek_entry_t *entry;
     char *zval_str;
@@ -113,6 +119,7 @@ typedef struct trace_target_s {
     uint64_t executor_globals_addr;
     uint64_t sapi_globals_addr;
     uint64_t core_globals_addr;
+    uint64_t alloc_globals_addr;
 } trace_target_t;
 
 typedef struct trace_context_s {
@@ -120,6 +127,7 @@ typedef struct trace_context_s {
     struct {
         trace_frame_t frame;
         trace_request_t request;
+        trace_mem_t mem;
         trace_varpeek_t varpeek;
         char error[PHPSPY_STR_SIZE];
     } event;

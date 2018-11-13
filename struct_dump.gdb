@@ -101,3 +101,14 @@ whatis Bucket
        fieldof Bucket h
        fieldof Bucket key
 printf "\n"
+
+printf "zend_alloc_globals\n"
+whatis zend_alloc_globals
+       fieldof zend_alloc_globals mm_heap
+printf "\n"
+
+printf "zend_mm_heap\n"
+whatis zend_mm_heap
+       fieldof zend_mm_heap size
+       fieldof zend_mm_heap peak
+printf "\n"
