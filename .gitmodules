@@ -1,6 +1,3 @@
-[submodule "vendor/elfutils"]
-	path = vendor/elfutils
-	url = https://sourceware.org/git/elfutils.git
 [submodule "vendor/termbox"]
 	path = vendor/termbox
 	url = https://github.com/nsf/termbox.git
