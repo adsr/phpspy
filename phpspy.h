@@ -42,7 +42,6 @@
 #include <php_structs_74.h>
 #endif
 
-#include <elfutils/libdwfl.h>
 #include <uthash.h>
 
 #define try(__rv, __call) do { if (((__rv) = (__call)) != 0) return (__rv); } while(0)
@@ -136,6 +135,11 @@ typedef struct trace_context_s {
     char buf[PHPSPY_STR_SIZE];
 } trace_context_t;
 
+typedef struct addr_memo_s {
+    char php_bin_path[PHPSPY_STR_SIZE];
+    uint64_t php_base_addr;
+} addr_memo_t;
+
 extern char *opt_pgrep_args;
 extern int done;
 extern int opt_num_workers;
@@ -150,7 +154,7 @@ extern int main_pid(pid_t pid);
 extern int main_top(int argc, char **argv);
 
 extern void usage(FILE *fp, int exit_code);
-extern int get_symbol_addr(pid_t pid, const char *symbol, uint64_t *raddr);
+extern int get_symbol_addr(addr_memo_t *memo, pid_t pid, const char *symbol, uint64_t *raddr);
 extern int event_handler_fout(struct trace_context_s *context, int event_type);
 
 #endif

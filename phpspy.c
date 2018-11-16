@@ -372,22 +372,26 @@ static void redirect_child_stdio(int proc_fd, char *opt_path) {
 
 static int find_addresses(trace_target_t *target) {
     int rv;
+    addr_memo_t memo;
+
+    memset(&memo, 0, sizeof(addr_memo_t));
+
     if (opt_executor_globals_addr != 0) {
         target->executor_globals_addr = opt_executor_globals_addr;
     } else {
-        try(rv, get_symbol_addr(target->pid, "executor_globals", &target->executor_globals_addr));
+        try(rv, get_symbol_addr(&memo, target->pid, "executor_globals", &target->executor_globals_addr));
     }
     if (opt_sapi_globals_addr != 0) {
         target->sapi_globals_addr = opt_sapi_globals_addr;
     } else if (opt_capture_req) {
-        try(rv, get_symbol_addr(target->pid, "sapi_globals", &target->sapi_globals_addr));
+        try(rv, get_symbol_addr(&memo, target->pid, "sapi_globals", &target->sapi_globals_addr));
     }
     if (0) {
         /* TODO feature to print core_globals */
-        try(rv, get_symbol_addr(target->pid, "core_globals", &target->core_globals_addr));
+        try(rv, get_symbol_addr(&memo, target->pid, "core_globals", &target->core_globals_addr));
     }
     if (opt_capture_mem) {
-        try(rv, get_symbol_addr(target->pid, "alloc_globals", &target->alloc_globals_addr));
+        try(rv, get_symbol_addr(&memo, target->pid, "alloc_globals", &target->alloc_globals_addr));
     }
 
     /* TODO probably don't need zend_string_val_offset */
@@ -447,6 +451,10 @@ static int copy_proc_mem(trace_context_t *context, const char *what, void *raddr
     int rv;
     struct iovec local[1];
     struct iovec remote[1];
+    if (raddr == NULL) {
+        fprintf(stderr, "copy_proc_mem: Not copying %s; raddr is NULL\n", what);
+        return 1;
+    }
     local[0].iov_base = laddr;
     local[0].iov_len = size;
     remote[0].iov_base = raddr;
