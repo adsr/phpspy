@@ -55,7 +55,7 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
             fprintf(
                 udata->fout,
                 "# varpeek %s@%s = %s%s",
-                context->event.varpeek.entry->varname,
+                context->event.varpeek.var->name,
                 context->event.varpeek.entry->filename_lineno,
                 context->event.varpeek.zval_str,
                 opt_frame_delim
