@@ -126,7 +126,8 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "  -e, --peek-var=<varspec>           Peek at the contents of the variable located\n");
     fprintf(fp, "                                       at `varspec`, which has the format:\n");
     fprintf(fp, "                                       <varname>@<path>:<lineno>\n");
-    fprintf(fp, "                                       e.g., xyz@/path/to.php:1234\n");
+    fprintf(fp, "                                       <varname>@<path>:<start>-<end>\n");
+    fprintf(fp, "                                       e.g., xyz@/path/to.php:10-20\n");
     fprintf(fp, "  -t, --top                          Show dynamic top-like output\n");
     cleanup();
     exit(exit_code);
@@ -308,12 +309,17 @@ static int main_fork(int argc, char **argv) {
 
 static void cleanup() {
     varpeek_entry_t *entry, *entry_tmp;
+    varpeek_var_t *var, *var_tmp;
 
     if (opt_filter_re) {
         regfree(opt_filter_re);
     }
 
     HASH_ITER(hh, varpeek_map, entry, entry_tmp) {
+        HASH_ITER(hh, entry->varmap, var, var_tmp) {
+            HASH_DEL(entry->varmap, var);
+            free(var);
+        }
         HASH_DEL(varpeek_map, entry);
         free(entry);
     }
@@ -434,17 +440,34 @@ static void calc_sleep_time(struct timespec *end, struct timespec *start, struct
 }
 
 static void varpeek_add(char *varspec) {
-    char *at_sign;
+    char *at_sign, *colon, *dash;
+    uint32_t line_start, line_end, lineno;
     varpeek_entry_t *varpeek;
-    at_sign = strstr(varspec, "@");
-    if (!at_sign) {
+    varpeek_var_t *var;
+    char varpeek_key[PHPSPY_STR_SIZE];
+    /* varspec: var@/path/file.php:line */
+    /*   -or-   var@/path/file.php:start-end */
+    at_sign = strchr(varspec, '@');
+    colon = strrchr(varspec, ':');
+    dash = strrchr(varspec, '-');
+    if (!at_sign || !colon) {
         fprintf(stderr, "varpeek_add: Malformed varspec: %s\n\n", varspec);
         usage(stderr, 1);
     }
-    varpeek = malloc(sizeof(varpeek_entry_t)); /* TODO free */
-    snprintf(varpeek->filename_lineno, PHPSPY_VARPEEK_KEY_SIZE, "%s", at_sign+1);
-    snprintf(varpeek->varname, PHPSPY_VARPEEK_VARNAME_SIZE, "%.*s", (int)(at_sign-varspec), varspec);
-    HASH_ADD_STR(varpeek_map, filename_lineno, varpeek);
+    line_start = strtoul(colon+1, NULL, 10);
+    line_end = dash ? strtoul(dash+1, NULL, 10) : line_start;
+    for (lineno = line_start; lineno <= line_end; lineno++) {
+        snprintf(varpeek_key, sizeof(varpeek_key), "%.*s:%d", (int)(colon-at_sign-1), at_sign+1, lineno);
+        HASH_FIND_STR(varpeek_map, varpeek_key, varpeek);
+        if (!varpeek) {
+            varpeek = calloc(1, sizeof(varpeek_entry_t));
+            strncpy(varpeek->filename_lineno, varpeek_key, sizeof(varpeek->filename_lineno));
+            HASH_ADD_STR(varpeek_map, filename_lineno, varpeek);
+        }
+        var = calloc(1, sizeof(varpeek_var_t));
+        snprintf(var->name, sizeof(var->name), "%.*s", (int)(at_sign-varspec), varspec);
+        HASH_ADD_STR(varpeek->varmap, name, var);
+    }
 }
 
 static int copy_proc_mem(trace_context_t *context, const char *what, void *raddr, void *laddr, size_t size) {

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 maybe_sudo=''
-[ -n "$use_sudo" ] && maybe_sudo='sudo'
+[ -n "$use_sudo" ] && maybe_sudo='sudo -n'
 
 maybe_timeout=''
 [ -n "$use_timeout_s" ] && maybe_timeout="timeout $use_timeout_s"

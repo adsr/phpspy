@@ -76,11 +76,14 @@
 #define IS_REFERENCE 10
 #endif
 
+typedef struct varpeek_var_s {
+    char name[PHPSPY_STR_SIZE];
+    UT_hash_handle hh;
+} varpeek_var_t;
+
 typedef struct varpeek_entry_s {
-    #define PHPSPY_VARPEEK_KEY_SIZE 256
-    #define PHPSPY_VARPEEK_VARNAME_SIZE 64
-    char filename_lineno[PHPSPY_VARPEEK_KEY_SIZE];
-    char varname[PHPSPY_VARPEEK_VARNAME_SIZE];
+    char filename_lineno[PHPSPY_STR_SIZE];
+    varpeek_var_t *varmap;
     UT_hash_handle hh;
 } varpeek_entry_t;
 
@@ -110,6 +113,7 @@ typedef struct trace_mem_s {
 
 typedef struct trace_varpeek_s {
     varpeek_entry_t *entry;
+    varpeek_var_t *var;
     char *zval_str;
 } trace_varpeek_t;
 

@@ -1,7 +1,7 @@
 #define try_copy_proc_mem(__what, __raddr, __laddr, __size) \
     try(rv, copy_proc_mem(context, (__what), (__raddr), (__laddr), (__size)))
 
-static int varpeek_find(trace_context_t *context, varpeek_entry_t *varpeek_map, zend_execute_data *local_execute_data, zend_execute_data *remote_execute_data, zend_op_array *op_array, char *file, int file_len);
+static int varpeek_find(trace_context_t *context, zend_op *zop, zend_execute_data *remote_execute_data, zend_op_array *op_array, char *file, int file_len);
 static int copy_zstring(trace_context_t *context, const char *what, zend_string *rzstring, char *buf, size_t buf_size, size_t *buf_len);
 static int copy_zval(trace_context_t *context, zval *local_zval, char *buf, size_t buf_size, size_t *buf_len);
 static int copy_zarray(trace_context_t *context, zend_array *local_arr, char *buf, size_t buf_size, size_t *buf_len);
@@ -17,6 +17,7 @@ static int do_trace(trace_context_t *context) {
     zend_class_entry zce;
     zend_function zfunc;
     zend_string zstring;
+    zend_op zop;
     sapi_globals_struct sapi_globals;
     trace_target_t *target;
     trace_frame_t *frame;
@@ -38,6 +39,7 @@ static int do_trace(trace_context_t *context) {
         memset(&zfunc, 0, sizeof(zfunc));
         memset(&zstring, 0, sizeof(zstring));
         memset(&zce, 0, sizeof(zce));
+        memset(&zop, 0, sizeof(zop));
 
         try_copy_proc_mem("execute_data", remote_execute_data, &execute_data, sizeof(execute_data));
         try_copy_proc_mem("zfunc", execute_data.func, &zfunc, sizeof(zfunc));
@@ -58,7 +60,8 @@ static int do_trace(trace_context_t *context) {
             frame->lineno = zfunc.op_array.line_start;
             /* TODO add comments */
             if (HASH_CNT(hh, varpeek_map) > 0) {
-                varpeek_find(context, varpeek_map, &execute_data, remote_execute_data, &zfunc.op_array, frame->file, frame->file_len);
+                try_copy_proc_mem("opline", execute_data.opline, &zop, sizeof(zop));
+                varpeek_find(context, &zop, remote_execute_data, &zfunc.op_array, frame->file, frame->file_len);
             }
         } else {
             frame->file_len = snprintf(frame->file, sizeof(frame->file), "<internal>");
@@ -112,34 +115,36 @@ static int do_trace(trace_context_t *context) {
     return 0;
 }
 
-static int varpeek_find(trace_context_t *context, varpeek_entry_t *varpeek_map, zend_execute_data *local_execute_data, zend_execute_data *remote_execute_data, zend_op_array *op_array, char *file, int file_len) {
-    int rv;
-    int i;
+static int varpeek_find(trace_context_t *context, zend_op *zop, zend_execute_data *remote_execute_data, zend_op_array *op_array, char *file, int file_len) {
+    int rv, i, num_vars_found, num_vars_peeking;
     char tmp[PHPSPY_STR_SIZE];
     size_t tmp_len;
     zend_string *zstrp;
-    varpeek_entry_t *varpeek;
-    char varpeek_key[PHPSPY_VARPEEK_KEY_SIZE];
-    zend_op zop;
+    varpeek_entry_t *entry;
+    varpeek_var_t *var;
+    char varpeek_key[PHPSPY_STR_SIZE];
     zval zv;
 
-    memset(&zop, 0, sizeof(zop));
-    try_copy_proc_mem("opline", (void*)local_execute_data->opline, &zop, sizeof(zop));
+    snprintf(varpeek_key, sizeof(varpeek_key), "%.*s:%d", file_len, file, zop->lineno);
+    HASH_FIND_STR(varpeek_map, varpeek_key, entry);
+    if (!entry) return 0;
 
-    snprintf(varpeek_key, sizeof(varpeek_key), "%.*s:%d", file_len, file, zop.lineno); /* TODO support line ranges */
-    HASH_FIND_STR(varpeek_map, varpeek_key, varpeek);
-    if (!varpeek) return 0;
+    num_vars_found = 0;
+    num_vars_peeking = HASH_CNT(hh, entry->varmap);
 
     for (i = 0; i < op_array->last_var; i++) {
         try_copy_proc_mem("var", op_array->vars + i, &zstrp, sizeof(zstrp));
         try(rv, copy_zstring(context, "var", zstrp, tmp, sizeof(tmp), &tmp_len));
-        if (strncmp(tmp, varpeek->varname, tmp_len) != 0) continue;
+        HASH_FIND(hh, entry->varmap, tmp, tmp_len, var);
+        if (!var) continue;
+        num_vars_found += 1;
         try_copy_proc_mem("zval", ((zval*)(remote_execute_data)) + ((int)(5 + i)), &zv, sizeof(zv));
         try(rv, copy_zval(context, &zv, tmp, sizeof(tmp), &tmp_len));
-        context->event.varpeek.entry = varpeek;
+        context->event.varpeek.entry = entry;
+        context->event.varpeek.var = var;
         context->event.varpeek.zval_str = tmp;
         try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_VARPEEK));
-        break;
+        if (num_vars_found >= num_vars_peeking) break;
     }
 
     return 0;
