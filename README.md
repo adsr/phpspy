@@ -81,6 +81,7 @@ All with no changes to your application and minimal overhead.
       -1, --single-line                  Output in single-line mode
       -f, --filter=<regex>               Filter output by POSIX regex
                                            (default: none)
+      -F, --filter-negate=<regex>        Same as `-f` except negated
       -#, --comment=<any>                Ignored; intended for self-documenting
                                            commands
       -@, --nothing                      Ignored
@@ -92,7 +93,14 @@ All with no changes to your application and minimal overhead.
       -e, --peek-var=<varspec>           Peek at the contents of the variable located
                                            at `varspec`, which has the format:
                                            <varname>@<path>:<lineno>
-                                           e.g., xyz@/path/to.php:1234
+                                           <varname>@<path>:<start>-<end>
+                                           e.g., xyz@/path/to.php:10-20
+      -g, --peek-global=<glospec>        Peek at the contents of a superglobal variable
+                                           located at `glospec`, which has the format:
+                                           <global>.<key>
+                                           where <global> is one of:
+                                           post, get, cookies, server, env, files,
+                                           e.g., server.request_id
       -t, --top                          Show dynamic top-like output
 
 ### Example (variable peek)
