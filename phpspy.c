@@ -23,6 +23,7 @@ char *opt_path_child_err = "phpspy.%d.err";
 char *opt_phpv = "auto";
 int opt_pause = 0;
 regex_t *opt_filter_re = NULL;
+int opt_filter_negate = 0;
 
 size_t zend_string_val_offset = 0;
 int done = 0;
@@ -115,6 +116,7 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "  -1, --single-line                  Output in single-line mode\n");
     fprintf(fp, "  -f, --filter=<regex>               Filter output by POSIX regex\n");
     fprintf(fp, "                                       (default: none)\n");
+    fprintf(fp, "  -F, --filter-negate=<regex>        Same as `-f` except negated\n");
     fprintf(fp, "  -#, --comment=<any>                Ignored; intended for self-documenting\n");
     fprintf(fp, "                                       commands\n");
     fprintf(fp, "  -@, --nothing                      Ignored\n");
@@ -155,6 +157,7 @@ static void parse_opts(int argc, char **argv) {
         { "addr-sapi-globals",     required_argument, NULL, 'a' },
         { "single-line",           no_argument,       NULL, '1' },
         { "filter",                required_argument, NULL, 'f' },
+        { "filter-negate",         required_argument, NULL, 'F' },
         { "comment",               required_argument, NULL, '#' },
         { "nothing",               no_argument,       NULL, '@' },
         { "version",               no_argument,       NULL, 'v' },
@@ -163,7 +166,7 @@ static void parse_opts(int argc, char **argv) {
         { "top",                   no_argument,       NULL, 't' },
         { 0,                       0,                 0,    0   }
     };
-    while ((c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:n:r:mo:O:E:x:a:1f:#:@vSe:t", long_opts, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:n:r:mo:O:E:x:a:1f:#:@vSe:g:t", long_opts, NULL)) != -1) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
             case 'p': opt_pid = atoi(optarg); break;
@@ -197,6 +200,7 @@ static void parse_opts(int argc, char **argv) {
             case 'a': opt_sapi_globals_addr = strtoull(optarg, NULL, 16); break;
             case '1': opt_frame_delim = "\t"; opt_trace_delim = "\n"; break;
             case 'f':
+            case 'F':
                 if (opt_filter_re) {
                     regfree(opt_filter_re);
                 }
@@ -206,6 +210,7 @@ static void parse_opts(int argc, char **argv) {
                     fprintf(stderr, "parse_opts: Failed to compile filter regex\n\n"); /* TODO regerror */
                     usage(stderr, 1);
                 }
+                opt_filter_negate = c == 'F' ? 1 : 0;
                 break;
             case '#': break;
             case '@': break;
