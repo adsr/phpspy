@@ -91,8 +91,10 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
             len = PHPSPY_MIN(udata->rem_len, len);
             break;
         case PHPSPY_TRACE_EVENT_STACK_END:
-            if (opt_filter_re && regexec(opt_filter_re, udata->buf, 0, NULL, 0) != 0) {
-                break;
+            if (opt_filter_re) {
+                rv = regexec(opt_filter_re, udata->buf, 0, NULL, 0);
+                if (opt_filter_negate == 0 && rv != 0) break;
+                if (opt_filter_negate != 0 && rv == 0) break;
             }
             fprintf(
                 udata->fout,
