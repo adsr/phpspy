@@ -61,6 +61,15 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
                 opt_frame_delim
             );
             break;
+        case PHPSPY_TRACE_EVENT_GLOPEEK:
+            fprintf(
+                udata->fout,
+                "# glopeek %s = %s%s",
+                context->event.glopeek.gentry->key,
+                context->event.glopeek.zval_str,
+                opt_frame_delim
+            );
+            break;
         case PHPSPY_TRACE_EVENT_REQUEST:
             request = &context->event.request;
             len = snprintf(

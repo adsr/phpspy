@@ -29,6 +29,7 @@ size_t zend_string_val_offset = 0;
 int done = 0;
 int (*do_trace_ptr)(trace_context_t *context) = NULL;
 varpeek_entry_t *varpeek_map = NULL;
+glopeek_entry_t *glopeek_map = NULL;
 regex_t filter_re;
 
 static void parse_opts(int argc, char **argv);
@@ -42,6 +43,7 @@ static void get_clock_time(struct timespec *ts);
 static void calc_sleep_time(struct timespec *end, struct timespec *start, struct timespec *sleep);
 static int copy_proc_mem(trace_context_t *context, const char *what, void *raddr, void *laddr, size_t size);
 static void varpeek_add(char *varspec);
+static void glopeek_add(char *glospec);
 static void try_get_php_version(pid_t pid);
 
 #ifdef USE_ZEND
@@ -130,6 +132,12 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "                                       <varname>@<path>:<lineno>\n");
     fprintf(fp, "                                       <varname>@<path>:<start>-<end>\n");
     fprintf(fp, "                                       e.g., xyz@/path/to.php:10-20\n");
+    fprintf(fp, "  -g, --peek-global=<glospec>        Peek at the contents of a superglobal variable\n");
+    fprintf(fp, "                                       located at `glospec`, which has the format:\n");
+    fprintf(fp, "                                       <global>.<key>\n");
+    fprintf(fp, "                                       where <global> is one of:\n");
+    fprintf(fp, "                                       post, get, cookies, server, env, files,\n");
+    fprintf(fp, "                                       e.g., server.request_id\n");
     fprintf(fp, "  -t, --top                          Show dynamic top-like output\n");
     cleanup();
     exit(exit_code);
@@ -163,6 +171,7 @@ static void parse_opts(int argc, char **argv) {
         { "version",               no_argument,       NULL, 'v' },
         { "pause-process",         no_argument,       NULL, 'S' },
         { "peek-var",              required_argument, NULL, 'e' },
+        { "peek-global",           required_argument, NULL, 'g' },
         { "top",                   no_argument,       NULL, 't' },
         { 0,                       0,                 0,    0   }
     };
@@ -227,6 +236,7 @@ static void parse_opts(int argc, char **argv) {
                 exit(0);
             case 'S': opt_pause = 1; break;
             case 'e': varpeek_add(optarg); break;
+            case 'g': glopeek_add(optarg); break;
             case 't': opt_top_mode = 1; break;
         }
     }
@@ -315,6 +325,7 @@ static int main_fork(int argc, char **argv) {
 static void cleanup() {
     varpeek_entry_t *entry, *entry_tmp;
     varpeek_var_t *var, *var_tmp;
+    glopeek_entry_t *gentry, *gentry_tmp;
 
     if (opt_filter_re) {
         regfree(opt_filter_re);
@@ -327,6 +338,11 @@ static void cleanup() {
         }
         HASH_DEL(varpeek_map, entry);
         free(entry);
+    }
+
+    HASH_ITER(hh, glopeek_map, gentry, gentry_tmp) {
+        HASH_DEL(glopeek_map, gentry);
+        free(gentry);
     }
 }
 
@@ -397,8 +413,7 @@ static int find_addresses(trace_target_t *target) {
     } else if (opt_capture_req) {
         try(rv, get_symbol_addr(&memo, target->pid, "sapi_globals", &target->sapi_globals_addr));
     }
-    if (0) {
-        /* TODO feature to print core_globals */
+    if (HASH_CNT(hh, glopeek_map)) {
         try(rv, get_symbol_addr(&memo, target->pid, "core_globals", &target->core_globals_addr));
     }
     if (opt_capture_mem) {
@@ -473,6 +488,40 @@ static void varpeek_add(char *varspec) {
         snprintf(var->name, sizeof(var->name), "%.*s", (int)(at_sign-varspec), varspec);
         HASH_ADD_STR(varpeek->varmap, name, var);
     }
+}
+
+static void glopeek_add(char *glospec) {
+    char *dot;
+    int index;
+    glopeek_entry_t *gentry;
+    dot = strchr(glospec, '.');
+    if (!dot) {
+        fprintf(stderr, "glopeek_add: Malformed glospec: %s\n\n", glospec);
+        usage(stderr, 1);
+    }
+    HASH_FIND_STR(glopeek_map, glospec, gentry);
+    if (gentry) return;
+    if (strncmp("post.", glospec, dot-glospec) == 0) {
+        index = 0;
+    } else if (strncmp("get.", glospec, dot-glospec) == 0) {
+        index = 1;
+    } else if (strncmp("cookies.", glospec, dot-glospec) == 0) {
+        index = 2;
+    } else if (strncmp("server.", glospec, dot-glospec) == 0) {
+        index = 3;
+    } else if (strncmp("env.", glospec, dot-glospec) == 0) {
+        index = 4;
+    } else if (strncmp("files.", glospec, dot-glospec) == 0) {
+        index = 5;
+    } else {
+        fprintf(stderr, "glopeek_add: Invalid global: %s\n\n", glospec);
+        usage(stderr, 1);
+    }
+    gentry = calloc(1, sizeof(glopeek_entry_t));
+    snprintf(gentry->key, sizeof(gentry->key), "%s", glospec);
+    gentry->index = index;
+    snprintf(gentry->varname, sizeof(gentry->varname), "%s", dot+1);
+    HASH_ADD_STR(glopeek_map, key, gentry);
 }
 
 static int copy_proc_mem(trace_context_t *context, const char *what, void *raddr, void *laddr, size_t size) {
