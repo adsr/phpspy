@@ -4,7 +4,7 @@
 static int varpeek_find(trace_context_t *context, zend_op *zop, zend_execute_data *remote_execute_data, zend_op_array *op_array, char *file, int file_len);
 static int copy_zstring(trace_context_t *context, const char *what, zend_string *rzstring, char *buf, size_t buf_size, size_t *buf_len);
 static int copy_zval(trace_context_t *context, zval *local_zval, char *buf, size_t buf_size, size_t *buf_len);
-static int copy_zarray(trace_context_t *context, zend_array *local_arr, char *buf, size_t buf_size, size_t *buf_len);
+static int copy_zarray(trace_context_t *context, zend_array *local_arr, char *buf, size_t buf_size, size_t *buf_len, char *single_key);
 
 static int do_trace(trace_context_t *context) {
     int depth;
@@ -19,9 +19,11 @@ static int do_trace(trace_context_t *context) {
     zend_string zstring;
     zend_op zop;
     sapi_globals_struct sapi_globals;
+    php_core_globals core_globals;
     trace_target_t *target;
     trace_frame_t *frame;
     trace_request_t *request;
+    glopeek_entry_t *gentry, *gentry_tmp;
 
     target = &context->target;
     frame = &context->event.frame;
@@ -107,11 +109,19 @@ static int do_trace(trace_context_t *context) {
         context->event_handler(context, PHPSPY_TRACE_EVENT_MEM);
     }
 
+    if (HASH_CNT(hh, glopeek_map) > 0) {
+        memset(&core_globals, 0, sizeof(php_core_globals));
+        try_copy_proc_mem("core_globals", (void*)target->core_globals_addr, &core_globals, sizeof(core_globals));
+        HASH_ITER(hh, glopeek_map, gentry, gentry_tmp) {
+            try(rv, copy_zarray(context, core_globals.http_globals[gentry->index].value.arr, context->buf, sizeof(context->buf), &context->buf_len, gentry->varname));
+            context->event.glopeek.gentry = gentry;
+            context->event.glopeek.zval_str = context->buf;
+            try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_GLOPEEK));
+        }
+    }
+
     context->event_handler(context, PHPSPY_TRACE_EVENT_STACK_END);
 
-    /* TODO feature to print core_globals */
-    /* try_copy_proc_mem("core_globals", (void*)target->core_globals_addr, &core_globals, sizeof(core_globals)); */
-    /* copy_zarray(context, core_globals.http_globals[3].value.arr) */
     return 0;
 }
 
@@ -179,7 +189,7 @@ static int copy_zval(trace_context_t *context, zval *local_zval, char *buf, size
             try(rv, copy_zstring(context, "zval", local_zval->value.str, buf, buf_size, buf_len));
             break;
         case IS_ARRAY:
-            try(rv, copy_zarray(context, local_zval->value.arr, buf, buf_size, buf_len));
+            try(rv, copy_zarray(context, local_zval->value.arr, buf, buf_size, buf_len, NULL));
             break;
         default:
             /* TODO handle other zval types */
@@ -189,7 +199,7 @@ static int copy_zval(trace_context_t *context, zval *local_zval, char *buf, size
     return 0;
 }
 
-static int copy_zarray(trace_context_t *context, zend_array *local_arr, char *buf, size_t buf_size, size_t *buf_len) {
+static int copy_zarray(trace_context_t *context, zend_array *local_arr, char *buf, size_t buf_size, size_t *buf_len, char *single_key) {
     int rv;
     int i;
     int array_len;
@@ -204,24 +214,37 @@ static int copy_zarray(trace_context_t *context, zend_array *local_arr, char *bu
 
     try_copy_proc_mem("buckets", array.arData, buckets, sizeof(Bucket) * array_len);
     for (i = 0; i < array_len; i++) {
-        if (buckets[i].key != 0) {
+        if (single_key) {
+            if (buckets[i].key == 0) {
+                continue;
+            }
             try(rv, copy_zstring(context, "array_key", buckets[i].key, buf, buf_size, &tmp_len));
+            if (strncmp(buf, single_key, tmp_len) != 0 || tmp_len != strlen(single_key)) {
+                continue;
+            }
+            try(rv, copy_zval(context, &buckets[i].val, buf, buf_size, &tmp_len));
+            *buf_len = (size_t)(buf - obuf);
+            return 0;
+        } else {
+            if (buckets[i].key != 0) {
+                try(rv, copy_zstring(context, "array_key", buckets[i].key, buf, buf_size, &tmp_len));
+                buf_size -= tmp_len;
+                buf += tmp_len;
+
+                snprintf(buf, buf_size, "=");
+                tmp_len = strlen(buf);
+                buf_size -= tmp_len;
+                buf += tmp_len;
+            }
+            try(rv, copy_zval(context, &buckets[i].val, buf, buf_size, &tmp_len));
             buf_size -= tmp_len;
             buf += tmp_len;
 
-            snprintf(buf, buf_size, "=");
+            snprintf(buf, buf_size, ",");
             tmp_len = strlen(buf);
             buf_size -= tmp_len;
             buf += tmp_len;
         }
-        try(rv, copy_zval(context, &buckets[i].val, buf, buf_size, &tmp_len));
-        buf_size -= tmp_len;
-        buf += tmp_len;
-
-        snprintf(buf, buf_size, ",");
-        tmp_len = strlen(buf);
-        buf_size -= tmp_len;
-        buf += tmp_len;
     }
 
     *buf_len = (size_t)(buf - obuf);

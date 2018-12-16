@@ -50,17 +50,18 @@
 #define PHPSPY_MIN(a, b) ((a) < (b) ? (a) : (b))
 #define PHPSPY_MAX(a, b) ((a) > (b) ? (a) : (b))
 #define PHPSPY_STR_SIZE 256
-#define PHPSPY_MAX_BUCKETS 64
+#define PHPSPY_MAX_BUCKETS 256
 
 #define PHPSPY_TRACE_EVENT_INIT        0
 #define PHPSPY_TRACE_EVENT_STACK_BEGIN 1
 #define PHPSPY_TRACE_EVENT_FRAME       2
 #define PHPSPY_TRACE_EVENT_VARPEEK     3
-#define PHPSPY_TRACE_EVENT_REQUEST     4
-#define PHPSPY_TRACE_EVENT_MEM         5
-#define PHPSPY_TRACE_EVENT_STACK_END   6
-#define PHPSPY_TRACE_EVENT_ERROR       7
-#define PHPSPY_TRACE_EVENT_DEINIT      8
+#define PHPSPY_TRACE_EVENT_GLOPEEK     4
+#define PHPSPY_TRACE_EVENT_REQUEST     5
+#define PHPSPY_TRACE_EVENT_MEM         6
+#define PHPSPY_TRACE_EVENT_STACK_END   7
+#define PHPSPY_TRACE_EVENT_ERROR       8
+#define PHPSPY_TRACE_EVENT_DEINIT      9
 
 #ifndef USE_ZEND
 #define IS_UNDEF     0
@@ -86,6 +87,13 @@ typedef struct varpeek_entry_s {
     varpeek_var_t *varmap;
     UT_hash_handle hh;
 } varpeek_entry_t;
+
+typedef struct glopeek_entry_s {
+    char key[PHPSPY_STR_SIZE];
+    int index;
+    char varname[PHPSPY_STR_SIZE];
+    UT_hash_handle hh;
+} glopeek_entry_t;
 
 typedef struct trace_frame_s {
     char func[PHPSPY_STR_SIZE];
@@ -117,6 +125,11 @@ typedef struct trace_varpeek_s {
     char *zval_str;
 } trace_varpeek_t;
 
+typedef struct trace_glopeek_s {
+    glopeek_entry_t *gentry;
+    char *zval_str;
+} trace_glopeek_t;
+
 typedef struct trace_target_s {
     pid_t pid;
     uint64_t executor_globals_addr;
@@ -132,11 +145,13 @@ typedef struct trace_context_s {
         trace_request_t request;
         trace_mem_t mem;
         trace_varpeek_t varpeek;
+        trace_glopeek_t glopeek;
         char error[PHPSPY_STR_SIZE];
     } event;
     void *event_udata;
     int (*event_handler)(struct trace_context_s *context, int event_type);
     char buf[PHPSPY_STR_SIZE];
+    size_t buf_len;
 } trace_context_t;
 
 typedef struct addr_memo_s {
