@@ -247,6 +247,9 @@ static int copy_zarray(trace_context_t *context, zend_array *local_arr, char *bu
         }
     }
 
+    /* If we get here when looking for a single_key, we have lost */
+    if (single_key) return 1;
+
     *buf_len = (size_t)(buf - obuf);
     return 0;
 }
