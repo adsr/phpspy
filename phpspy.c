@@ -17,6 +17,7 @@ int opt_max_stack_depth = -1;
 char *opt_frame_delim = "\n";
 char *opt_trace_delim = "\n";
 uint64_t opt_trace_limit = 0;
+long opt_time_limit_ms = 0;
 char *opt_path_output = "-";
 char *opt_path_child_out = "phpspy.%d.out";
 char *opt_path_child_err = "phpspy.%d.err";
@@ -32,18 +33,21 @@ varpeek_entry_t *varpeek_map = NULL;
 glopeek_entry_t *glopeek_map = NULL;
 regex_t filter_re;
 
+
 static void parse_opts(int argc, char **argv);
-static void cleanup();
 static int main_fork(int argc, char **argv);
+static void cleanup();
 static int pause_pid(pid_t pid);
 static int unpause_pid(pid_t pid);
 static void redirect_child_stdio(int proc_fd, char *opt_path);
 static int find_addresses(trace_target_t *target);
-static void get_clock_time(struct timespec *ts);
+static void clock_get(struct timespec *ts);
+static void clock_add(struct timespec *a, struct timespec *b, struct timespec *res);
+static int clock_diff(struct timespec *a, struct timespec *b);
 static void calc_sleep_time(struct timespec *end, struct timespec *start, struct timespec *sleep);
-static int copy_proc_mem(trace_context_t *context, const char *what, void *raddr, void *laddr, size_t size);
 static void varpeek_add(char *varspec);
 static void glopeek_add(char *glospec);
+static int copy_proc_mem(trace_context_t *context, const char *what, void *raddr, void *laddr, size_t size);
 static void try_get_php_version(pid_t pid);
 
 #ifdef USE_ZEND
@@ -98,6 +102,8 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "                                       (default: %s; supported: 70 71 72 73 74)\n", opt_phpv);
     fprintf(fp, "  -l, --limit=<num>                  Limit total number of traces to capture\n");
     fprintf(fp, "                                       (default: %lu; 0=unlimited)\n", opt_trace_limit);
+    fprintf(fp, "  -i, --time-limit-ms=<ms>           Stop tracing after `ms` milliseconds\n");
+    fprintf(fp, "                                       (default: %lu; 0=unlimited)\n", opt_time_limit_ms);
     fprintf(fp, "  -n, --max-depth=<max>              Set max stack trace depth\n");
     fprintf(fp, "                                       (default: %d; -1=unlimited)\n", opt_max_stack_depth);
     fprintf(fp, "  -r, --request-info=<opts>          Set request info parts to capture (q=query\n");
@@ -155,6 +161,7 @@ static void parse_opts(int argc, char **argv) {
         { "rate-hz",               required_argument, NULL, 'H' },
         { "php-version",           required_argument, NULL, 'V' },
         { "limit",                 required_argument, NULL, 'l' },
+        { "time-limit-ms",         required_argument, NULL, 'i' },
         { "max-depth",             required_argument, NULL, 'n' },
         { "request-info",          required_argument, NULL, 'r' },
         { "memory-usage",          no_argument,       NULL, 'm' },
@@ -175,7 +182,7 @@ static void parse_opts(int argc, char **argv) {
         { "top",                   no_argument,       NULL, 't' },
         { 0,                       0,                 0,    0   }
     };
-    while ((c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:n:r:mo:O:E:x:a:1f:#:@vSe:g:t", long_opts, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:i:n:r:mo:O:E:x:a:1f:#:@vSe:g:t", long_opts, NULL)) != -1) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
             case 'p': opt_pid = atoi(optarg); break;
@@ -185,6 +192,7 @@ static void parse_opts(int argc, char **argv) {
             case 'H': opt_sleep_ns = (1000000000UL / strtol(optarg, NULL, 10)); break;
             case 'V': opt_phpv = optarg; break;
             case 'l': opt_trace_limit = strtoull(optarg, NULL, 10); break;
+            case 'i': opt_time_limit_ms = strtol(optarg, NULL, 10); break;
             case 'n': opt_max_stack_depth = atoi(optarg); break;
             case 'r':
                 for (i = 0; i < strlen(optarg); i++) {
@@ -246,7 +254,8 @@ int main_pid(pid_t pid) {
     int rv;
     uint64_t n;
     trace_context_t context;
-    struct timespec start_time, end_time, sleep_time;
+    struct timespec start_time, end_time, sleep_time, _stop_time, limit_time;
+    struct timespec *stop_time;
 
     memset(&context, 0, sizeof(trace_context_t));
     context.target.pid = pid;
@@ -257,7 +266,6 @@ int main_pid(pid_t pid) {
     #ifdef USE_ZEND
     do_trace_ptr = do_trace;
     #else
-
 
     if (strcmp(opt_phpv, "auto") == 0) {
         try_get_php_version(pid);
@@ -278,17 +286,27 @@ int main_pid(pid_t pid) {
     }
     #endif
 
+    stop_time = NULL;
+    if (opt_time_limit_ms > 0) {
+        stop_time = &_stop_time;
+        limit_time.tv_sec = opt_time_limit_ms / 1000L;
+        limit_time.tv_nsec = (opt_time_limit_ms % 1000L) * 1000000L;
+        clock_get(stop_time);
+        clock_add(stop_time, &limit_time, stop_time);
+    }
+
     n = 0;
     while (!done) {
         rv = 0;
-        get_clock_time(&start_time);
-        if (opt_pause) rv |= pause_pid(pid);
-        rv |= do_trace_ptr(&context);
-        if (opt_pause) rv |= unpause_pid(pid);
-        if ((rv == 0 && ++n == opt_trace_limit) || (rv & 2) != 0) break;
-        get_clock_time(&end_time);
+        clock_get(&start_time);
+        if (opt_pause) rv |= pause_pid(pid);                             /* maybe PTRACE_ATTACH */
+        rv |= do_trace_ptr(&context);                                    /* trace */
+        if (opt_pause) rv |= unpause_pid(pid);                           /* maybe PTRACE_DETACH */
+        if ((rv == 0 && ++n == opt_trace_limit) || (rv & 2) != 0) break; /* maybe apply trace limit */
+        clock_get(&end_time);
+        if (stop_time && clock_diff(&end_time, stop_time) >= 1) break;   /* maybe apply time limit */
         calc_sleep_time(&end_time, &start_time, &sleep_time);
-        nanosleep(&sleep_time, NULL);
+        nanosleep(&sleep_time, NULL);                                    /* sleep */
     }
 
     /* TODO proper signal handling for non-pgrep modes */
@@ -429,12 +447,31 @@ static int find_addresses(trace_target_t *target) {
     return 0;
 }
 
-static void get_clock_time(struct timespec *ts) {
+static void clock_get(struct timespec *ts) {
     if (clock_gettime(CLOCK_MONOTONIC_RAW, ts) == -1) {
         perror("clock_gettime");
         ts->tv_sec = 0;
         ts->tv_nsec = 0;
     }
+}
+
+static void clock_add(struct timespec *a, struct timespec *b, struct timespec *res) {
+    res->tv_sec = a->tv_sec + b->tv_sec;
+    res->tv_nsec = a->tv_nsec + b->tv_nsec;
+    if (res->tv_nsec >= 1000000000L) {
+        res->tv_sec += res->tv_nsec / 1000000000L;
+        res->tv_nsec = res->tv_nsec % 1000000000L;
+    }
+}
+
+static int clock_diff(struct timespec *a, struct timespec *b) {
+    if (a->tv_sec == b->tv_sec) {
+        if (a->tv_nsec == b->tv_nsec) {
+            return 0;
+        }
+        return a->tv_nsec > b->tv_nsec ? 1 : -1;
+    }
+    return a->tv_sec > b->tv_sec ? 1 : -1;
 }
 
 static void calc_sleep_time(struct timespec *end, struct timespec *start, struct timespec *sleep) {
