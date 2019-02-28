@@ -38,6 +38,20 @@ All with no changes to your application and minimal overhead.
     $ make phpspy_dynamic    # Dynamically link dependencies
     $ # or
     $ USE_ZEND=1 make ...    # Use Zend structs instead of built-in structs (requires php-dev or php-devel)
+    
+### CMake Build
+
+The CMake will update submodules and create a build of phpspy statically linked to libtermbox:
+
+    $ mkdir build
+    $ cd build
+    $ cmake .. -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release
+    $ make -j4 install
+    
+CMake Options:
+
+  * `CMAKE_BUILD_TYPE` may be `Release` or `Debug`
+  * `CMAKE_INSTALL_PREFIX` will set install prefix
 
 ### Usage
     $ ./phpspy -h
