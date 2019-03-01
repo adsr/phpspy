@@ -1,4 +1,5 @@
-#include "phpspy.h"
+#include <phpspy.h>
+#include <termbox.h>
 
 pid_t opt_pid = -1;
 char *opt_pgrep_args = NULL;
@@ -259,7 +260,9 @@ int main_pid(pid_t pid) {
 
     memset(&context, 0, sizeof(trace_context_t));
     context.target.pid = pid;
-    context.event_handler = event_handler_fout; /* TODO set based on option */
+    context.event_handler = phpspy_event_handler ? 
+                                phpspy_event_handler : event_handler_fout;
+    
     try(rv, find_addresses(&context.target));
     try(rv, context.event_handler(&context, PHPSPY_TRACE_EVENT_INIT));
 

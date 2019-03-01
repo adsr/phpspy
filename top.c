@@ -1,4 +1,5 @@
-#include "phpspy.h"
+#include <phpspy.h>
+#include <termbox.h>
 
 #define FUNC_SIZE 256
 #define BUF_SIZE 512
