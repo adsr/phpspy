@@ -25,23 +25,11 @@
 #include <unistd.h>
 #include <termbox.h>
 #include <regex.h>
-
-#ifdef USE_ZEND
-#include <main/php_config.h>
-#undef ZEND_DEBUG
-#define ZEND_DEBUG 0
-#include <main/SAPI.h>
-#undef snprintf
-#undef vsnprintf
-#undef HASH_ADD
-#else
 #include <php_structs_70.h>
 #include <php_structs_71.h>
 #include <php_structs_72.h>
 #include <php_structs_73.h>
 #include <php_structs_74.h>
-#endif
-
 #include <uthash.h>
 
 #define try(__rv, __call) do { if (((__rv) = (__call)) != 0) return (__rv); } while(0)
@@ -63,7 +51,6 @@
 #define PHPSPY_TRACE_EVENT_ERROR       8
 #define PHPSPY_TRACE_EVENT_DEINIT      9
 
-#ifndef USE_ZEND
 #define IS_UNDEF     0
 #define IS_NULL      1
 #define IS_FALSE     2
@@ -75,7 +62,6 @@
 #define IS_OBJECT    8
 #define IS_RESOURCE  9
 #define IS_REFERENCE 10
-#endif
 
 typedef struct varpeek_var_s {
     char name[PHPSPY_STR_SIZE];

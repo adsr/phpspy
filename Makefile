@@ -21,12 +21,6 @@ has_phpconf := $(shell command -v php-config                         >/dev/null 
 
 $(or $(has_pthread), $(error Need libpthread))
 
-ifdef USE_ZEND
-  $(or $(has_phpconf), $(error Need php-config))
-  phpspy_includes:=$(phpspy_includes) $$(php-config --includes)
-  phpspy_defines:=$(phpspy_defines) -DUSE_ZEND=1
-endif
-
 all: phpspy_static
 
 phpspy_static: $(wildcard *.c *.h) vendor/termbox/build/src/libtermbox.a

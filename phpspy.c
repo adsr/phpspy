@@ -50,15 +50,11 @@ static void glopeek_add(char *glospec);
 static int copy_proc_mem(trace_context_t *context, const char *what, void *raddr, void *laddr, size_t size);
 static void try_get_php_version(pid_t pid);
 
-#ifdef USE_ZEND
-static int do_trace(trace_context_t *context);
-#else
 static int do_trace_70(trace_context_t *context);
 static int do_trace_71(trace_context_t *context);
 static int do_trace_72(trace_context_t *context);
 static int do_trace_73(trace_context_t *context);
 static int do_trace_74(trace_context_t *context);
-#endif
 
 int main(int argc, char **argv) {
     int rv;
@@ -233,13 +229,8 @@ static void parse_opts(int argc, char **argv) {
             case '@': break;
             case 'v':
                 printf(
-                    "phpspy v%s USE_ZEND=%s\n",
-                    PHPSPY_VERSION,
-                    #ifdef USE_ZEND
-                    "y"
-                    #else
-                    "n"
-                    #endif
+                    "phpspy v%s\n",
+                    PHPSPY_VERSION
                 );
                 exit(0);
             case 'S': opt_pause = 1; break;
@@ -263,10 +254,6 @@ int main_pid(pid_t pid) {
     try(rv, find_addresses(&context.target));
     try(rv, context.event_handler(&context, PHPSPY_TRACE_EVENT_INIT));
 
-    #ifdef USE_ZEND
-    do_trace_ptr = do_trace;
-    #else
-
     if (strcmp(opt_phpv, "auto") == 0) {
         try_get_php_version(pid);
     }
@@ -284,7 +271,6 @@ int main_pid(pid_t pid) {
     } else {
         do_trace_ptr = do_trace_72;
     }
-    #endif
 
     stop_time = NULL;
     if (opt_time_limit_ms > 0) {
@@ -439,11 +425,7 @@ static int find_addresses(trace_target_t *target) {
     }
 
     /* TODO probably don't need zend_string_val_offset */
-    #ifdef USE_ZEND
-    zend_string_val_offset = offsetof(zend_string, val);
-    #else
     zend_string_val_offset = offsetof(zend_string_70, val);
-    #endif
     return 0;
 }
 
@@ -620,9 +602,6 @@ void try_get_php_version(pid_t pid) {
 }
 
 /* TODO figure out a way to make this cleaner */
-#ifdef USE_ZEND
-#include "phpspy_trace.c"
-#else
 #define phpv 70
 #include "phpspy_trace_tpl.c"
 #undef phpv
@@ -638,4 +617,3 @@ void try_get_php_version(pid_t pid) {
 #define phpv 74
 #include "phpspy_trace_tpl.c"
 #undef phpv
-#endif
