@@ -28,6 +28,19 @@ INSTALL (TARGETS phpspy
 INSTALL (FILES ${PROJECT_SOURCE_DIR}/phpspy.h
         DESTINATION include/phpspy)
 
+INSTALL (FILES ${PROJECT_SOURCE_DIR}/php_structs_70.h
+        DESTINATION include/phpspy)
+INSTALL (FILES ${PROJECT_SOURCE_DIR}/php_structs_71.h
+        DESTINATION include/phpspy)
+INSTALL (FILES ${PROJECT_SOURCE_DIR}/php_structs_72.h
+        DESTINATION include/phpspy)
+INSTALL (FILES ${PROJECT_SOURCE_DIR}/php_structs_73.h
+        DESTINATION include/phpspy)
+INSTALL (FILES ${PROJECT_SOURCE_DIR}/php_structs_74.h
+        DESTINATION include/phpspy)
+INSTALL (FILES ${PROJECT_SOURCE_DIR}/vendor/uthash.h
+        DESTINATION include/phpspy)
+        
 SET_TARGET_PROPERTIES(phpspy PROPERTIES 
     COMPILE_FLAGS "-std=c99 -Wall -Werror"
 )
