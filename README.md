@@ -58,16 +58,21 @@ All with no changes to your application and minimal overhead.
       -H, --rate-hz=<hz>                 Trace `hz` times per second
                                            (see also `-s`) (default: 99)
       -V, --php-version=<ver>            Set PHP version
-                                           (default: auto; supported: 70 71 72 73 74)
+                                           (default: auto;
+                                           supported: 70 71 72 73 74)
       -l, --limit=<num>                  Limit total number of traces to capture
+                                           (default: 0; 0=unlimited)
+      -i, --time-limit-ms=<ms>           Stop tracing after `ms` milliseconds
                                            (default: 0; 0=unlimited)
       -n, --max-depth=<max>              Set max stack trace depth
                                            (default: -1; -1=unlimited)
-      -r, --request-info=<opts>          Set request info parts to capture (q=query
-                                           c=cookie u=uri p=path) (capital=negation)
+      -r, --request-info=<opts>          Set request info parts to capture
+                                           (q=query c=cookie u=uri p=path
+                                           capital=negation)
                                            (default: QCUP; none)
       -m, --memory-usage                 Capture peak and current memory usage
-                                           with each trace
+                                           with each trace (requires PHP debug
+                                           symbols)
       -o, --output=<path>                Write phpspy output to `path`
                                            (default: -; -=stdout)
       -O, --child-stdout=<path>          Write child stdout to `path`
@@ -90,18 +95,19 @@ All with no changes to your application and minimal overhead.
     Experimental options:
       -S, --pause-process                Pause process while reading stacktrace
                                            (unsafe for production!)
-      -e, --peek-var=<varspec>           Peek at the contents of the variable located
+      -e, --peek-var=<varspec>           Peek at the contents of the var located
                                            at `varspec`, which has the format:
                                            <varname>@<path>:<lineno>
                                            <varname>@<path>:<start>-<end>
                                            e.g., xyz@/path/to.php:10-20
-      -g, --peek-global=<glospec>        Peek at the contents of a superglobal variable
-                                           located at `glospec`, which has the format:
-                                           <global>.<key>
+      -g, --peek-global=<glospec>        Peek at the contents of a superglobal var
+                                           located at `glospec`, which has the
+                                           format: <global>.<key>
                                            where <global> is one of:
                                            post, get, cookies, server, env, files,
                                            e.g., server.request_id
       -t, --top                          Show dynamic top-like output
+
 
 ### Example (variable peek)
 
