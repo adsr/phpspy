@@ -591,31 +591,31 @@ static int copy_proc_mem(trace_context_t *context, const char *what, void *raddr
 
 void try_get_php_version(pid_t pid) {
     char version_cmd[256];
-    char phpv_minor;
+    char phpv[4];
     FILE *pcmd;
 
     snprintf(
         version_cmd,
         sizeof(version_cmd),
-        "{ awk '/libphp7/{print $NF; exit 0} END{exit 1}' /proc/%d/maps "
-        "  || readlink -e /proc/%d/exe; } "
+        "{ echo -n /proc/%d/root/; "
+        "  awk '/libphp7/{print $NF; exit 0} END{exit 1}' /proc/%d/maps "
+        "  || readlink /proc/%d/exe; } "
         "| xargs strings "
-        "| grep -Po '(?<=X-Powered-By: PHP/7\\.)\\d'",
-        pid, pid
+        "| grep -Po '(?<=X-Powered-By: PHP/)\\d\\.\\d'",
+        pid, pid, pid
     );
 
     if ((pcmd = popen(version_cmd, "r")) == NULL) {
         perror("try_get_php_version: popen");
         return;
-    } else if (fread(&phpv_minor, sizeof(char), 1, pcmd) == 1) {
-        switch (phpv_minor) {
-            case '0': opt_phpv = "70"; break;
-            case '1': opt_phpv = "71"; break;
-            case '2': opt_phpv = "72"; break;
-            case '3': opt_phpv = "73"; break;
-            case '4': opt_phpv = "74"; break;
-            default: fprintf(stderr, "try_get_php_version: Unrecognized PHP version\n"); break;
-        }
+    } else if (fread(&phpv, sizeof(char), 3, pcmd) == 3) {
+        if      (strcmp(phpv, "7.0") == 0) opt_phpv = "70";
+        else if (strcmp(phpv, "7.1") == 0) opt_phpv = "71";
+        else if (strcmp(phpv, "7.2") == 0) opt_phpv = "72";
+        else if (strcmp(phpv, "7.3") == 0) opt_phpv = "73";
+        else if (strcmp(phpv, "7.4") == 0) opt_phpv = "74";
+        else if (strcmp(phpv, "8.0") == 0) opt_phpv = "74";
+        else fprintf(stderr, "try_get_php_version: Unrecognized PHP version\n");
     } else {
         fprintf(stderr, "try_get_php_version: Could not detect PHP version\n");
     }

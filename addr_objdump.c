@@ -1,40 +1,42 @@
 #include "phpspy.h"
 
-static int get_php_bin_path(pid_t pid, char *path);
-static int get_php_base_addr(pid_t pid, char *path, uint64_t *raddr);
-static int get_symbol_offset(char *path, const char *symbol, uint64_t *raddr);
+static int get_php_bin_path(pid_t pid, char *path_root, char *path);
+static int get_php_base_addr(pid_t pid, char *path_root, char *path, uint64_t *raddr);
+static int get_symbol_offset(char *path_root, const char *symbol, uint64_t *raddr);
 static int popen_read_line(char *buf, size_t buf_size, char *cmd_fmt, ...);
 
 int get_symbol_addr(addr_memo_t *memo, pid_t pid, const char *symbol, uint64_t *raddr) {
-    char *php_bin_path;
+    char *php_bin_path, *php_bin_path_root;
     uint64_t *php_base_addr;
     uint64_t addr_offset;
     php_bin_path = memo->php_bin_path;
+    php_bin_path_root = memo->php_bin_path_root;
     php_base_addr = &memo->php_base_addr;
-    if (*php_bin_path == '\0' && get_php_bin_path(pid, php_bin_path) != 0) {
+    if (*php_bin_path == '\0' && get_php_bin_path(pid, php_bin_path_root, php_bin_path) != 0) {
         return 1;
-    } else if (*php_base_addr == 0 && get_php_base_addr(pid, php_bin_path, php_base_addr) != 0) {
+    } else if (*php_base_addr == 0 && get_php_base_addr(pid, php_bin_path_root, php_bin_path, php_base_addr) != 0) {
         return 1;
-    } else if (get_symbol_offset(php_bin_path, symbol, &addr_offset) != 0) {
+    } else if (get_symbol_offset(php_bin_path_root, symbol, &addr_offset) != 0) {
         return 1;
     }
     *raddr = *php_base_addr + addr_offset;
     return 0;
 }
 
-static int get_php_bin_path(pid_t pid, char *path) {
+static int get_php_bin_path(pid_t pid, char *path_root, char *path) {
     char buf[PHPSPY_STR_SIZE];
     char *cmd_fmt = "awk '/libphp7/{print $NF; exit 0} END{exit 1}' /proc/%d/maps"
-        " || readlink -e /proc/%d/exe";
+        " || readlink /proc/%d/exe";
     if (popen_read_line(buf, sizeof(buf), cmd_fmt, (int)pid, (int)pid) != 0) {
         fprintf(stderr, "get_php_bin_path: Failed\n");
         return 1;
     }
+    snprintf(path_root, PHPSPY_STR_SIZE, "/proc/%d/root/%s", (int)pid, buf);
     strcpy(path, buf);
     return 0;
 }
 
-static int get_php_base_addr(pid_t pid, char *path, uint64_t *raddr) {
+static int get_php_base_addr(pid_t pid, char *path_root, char *path, uint64_t *raddr) {
     /**
      * This is very likely to be incorrect/incomplete. I thought the base
      * address from `/proc/<pid>/maps` + the symbol address from `readelf` would
@@ -54,7 +56,7 @@ static int get_php_base_addr(pid_t pid, char *path, uint64_t *raddr) {
     }
     start_addr = strtoull(buf, NULL, 16);
     cmd_fmt = "objdump -p %s | awk '/LOAD/{print $5; exit}'";
-    if (popen_read_line(buf, sizeof(buf), cmd_fmt, path) != 0) {
+    if (popen_read_line(buf, sizeof(buf), cmd_fmt, path_root) != 0) {
         fprintf(stderr, "get_php_base_addr: Failed to get virt_addr\n");
         return 1;
     }
@@ -63,10 +65,10 @@ static int get_php_base_addr(pid_t pid, char *path, uint64_t *raddr) {
     return 0;
 }
 
-static int get_symbol_offset(char *path, const char *symbol, uint64_t *raddr) {
+static int get_symbol_offset(char *path_root, const char *symbol, uint64_t *raddr) {
     char buf[PHPSPY_STR_SIZE];
     char *cmd_fmt = "objdump -Tt %s | awk '/ %s$/{print $1; exit}'";
-    if (popen_read_line(buf, sizeof(buf), cmd_fmt, path, symbol) != 0) {
+    if (popen_read_line(buf, sizeof(buf), cmd_fmt, path_root, symbol) != 0) {
         fprintf(stderr, "get_symbol_offset: Failed\n");
         return 1;
     }
