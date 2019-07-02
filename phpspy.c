@@ -185,7 +185,7 @@ static void parse_opts(int argc, char **argv) {
         { "top",                   no_argument,       NULL, 't' },
         { 0,                       0,                 0,    0   }
     };
-    while ((c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:i:n:r:mo:O:E:x:a:1f:#:@vSe:g:t", long_opts, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:i:n:r:mo:O:E:x:a:1f:F:#:@vSe:g:t", long_opts, NULL)) != -1) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
             case 'p': opt_pid = atoi(optarg); break;
