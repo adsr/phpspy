@@ -1,4 +1,4 @@
-phpspy_cflags:=-std=c99 -Wall -Wextra -pedantic -g -O3 $(CFLAGS)
+phpspy_cflags:=-std=c90 -Wall -Wextra -pedantic -g -O3 $(CFLAGS)
 phpspy_libs:=-pthread $(LDLIBS)
 phpspy_ldflags:=$(LDFLAGS)
 phpspy_includes:=-I. -I./vendor -Ivendor/termbox/src
