@@ -39,6 +39,7 @@ use strict;
 use warnings;
 
 use Getopt::Long qw(:config gnu_getopt no_ignore_case);
+use Encode qw(decode encode);
 
 # parameters
 my $help = 0;
@@ -63,6 +64,16 @@ while (defined(my $line = <>)) {
     next unless $line =~ /^(?:#|\d+) \S/;
 
     my ($depth, $func) = (split ' ', $line)[0,1];
+
+    # decode the utf-8 bytes and make them into characters
+    # and turn anything that's invalid into U+FFFD
+    $func = decode("utf-8", $func);
+
+    # Convert codepoints that break XML to ?
+    $func =~ s/[\x01-\x08\x0B-\x0C\x0E-\x1F\x7F-\x84\x86-\x9F]/\x3F/g;
+
+    # turn it back into a string
+    $func = encode("utf-8", $func);
 
     if ($depth ne '#' && $depth == 0) {
         $stacks{join(';', reverse @frames)} += 1 if @frames;
