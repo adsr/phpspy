@@ -85,7 +85,7 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "Usage:\n");
     fprintf(fp, "  phpspy [options] -p <pid>\n");
     fprintf(fp, "  phpspy [options] -P <pgrep-args>\n");
-    fprintf(fp, "  phpspy [options] -- <cmd>\n");
+    fprintf(fp, "  phpspy [options] [--] <cmd>\n");
     fprintf(fp, "\n");
     fprintf(fp, "Options:\n");
     fprintf(fp, "  -h, --help                         Show this help\n");
@@ -185,7 +185,18 @@ static void parse_opts(int argc, char **argv) {
         { "top",                   no_argument,       NULL, 't' },
         { 0,                       0,                 0,    0   }
     };
-    while ((c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:i:n:r:mo:O:E:x:a:1f:F:#:@vSe:g:t", long_opts, NULL)) != -1) {
+    /* Parse options until the first non-option argument is reached. Effectively
+     * this makes the end-of-options-delimiter (`--`) optional. The following
+     * invocations are equivalent:
+     *   phpspy --rate-hz=2 php -r 'sleep(1);'
+     *   phpspy --rate-hz=2 -- php -r 'sleep(1);'
+     */
+    optind = 1;
+    while (
+        optind < argc
+        && argv[optind][0] == '-'
+        && (c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:i:n:r:mo:O:E:x:a:1f:F:#:@vSe:g:t", long_opts, NULL)) != -1
+    ) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
             case 'p': opt_pid = atoi(optarg); break;
