@@ -152,6 +152,37 @@ void usage(FILE *fp, int exit_code) {
     exit(exit_code);
 }
 
+static long strtol_with_min_or_exit(const char* name, const char* str, int min)
+{
+    long result;
+    char *end;
+    errno = 0;
+    result = strtol(str, &end, 10);
+    if (end <= str || *end != '\0') {
+        // e.g. reject -H '', -H invalid, -H 5000suffix
+        fprintf(stderr, "Expected integer for %s, got '%s'\n", name, str);
+        usage(stderr, 1);
+    }
+    if (result < min) {
+        // e.g. reject -H 0
+        fprintf(stderr, "Expected integer >= %d for %s, got '%s'\n", min, name, str);
+        usage(stderr, 1);
+    }
+    return result;
+}
+
+static int atoi_with_min_or_exit(const char* name, const char* str, int min)
+{
+    long result = strtol_with_min_or_exit(name, str, min);
+#if LONG_MAX > INT_MAX
+    if (result > INT_MAX) {
+        fprintf(stderr, "Expected value that could fit in a C int for %s, got '%s'\n", name, str);
+        usage(stderr, 1);
+    }
+#endif
+    return (int)result;
+}
+
 static void parse_opts(int argc, char **argv) {
     int c;
     size_t i;
@@ -199,15 +230,15 @@ static void parse_opts(int argc, char **argv) {
     ) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
-            case 'p': opt_pid = atoi(optarg); break;
+            case 'p': opt_pid = atoi_with_min_or_exit("-p", optarg, 1); break;
             case 'P': opt_pgrep_args = optarg; break;
-            case 'T': opt_num_workers = atoi(optarg); break;
-            case 's': opt_sleep_ns = strtol(optarg, NULL, 10); break;
-            case 'H': opt_sleep_ns = (1000000000UL / strtol(optarg, NULL, 10)); break;
+            case 'T': opt_num_workers = atoi_with_min_or_exit("-T", optarg, 1); break;
+            case 's': opt_sleep_ns = strtol_with_min_or_exit("-s", optarg, 1); break;
+            case 'H': opt_sleep_ns = strtol_with_min_or_exit("-H", optarg, 1); break;
             case 'V': opt_phpv = optarg; break;
             case 'l': opt_trace_limit = strtoull(optarg, NULL, 10); break;
-            case 'i': opt_time_limit_ms = strtol(optarg, NULL, 10); break;
-            case 'n': opt_max_stack_depth = atoi(optarg); break;
+            case 'i': opt_time_limit_ms = strtol_with_min_or_exit("-i", optarg, 0); break;
+            case 'n': opt_max_stack_depth = atoi_with_min_or_exit("-n", optarg, -1); break;
             case 'r':
                 for (i = 0; i < strlen(optarg); i++) {
                     switch (optarg[i]) {
