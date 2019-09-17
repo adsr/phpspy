@@ -159,12 +159,12 @@ static long strtol_with_min_or_exit(const char* name, const char* str, int min)
     errno = 0;
     result = strtol(str, &end, 10);
     if (end <= str || *end != '\0') {
-        // e.g. reject -H '', -H invalid, -H 5000suffix
+        /* e.g. reject -H '', -H invalid, -H 5000suffix */
         fprintf(stderr, "Expected integer for %s, got '%s'\n", name, str);
         usage(stderr, 1);
     }
     if (result < min) {
-        // e.g. reject -H 0
+        /* e.g. reject -H 0 */
         fprintf(stderr, "Expected integer >= %d for %s, got '%s'\n", min, name, str);
         usage(stderr, 1);
     }
@@ -234,7 +234,7 @@ static void parse_opts(int argc, char **argv) {
             case 'P': opt_pgrep_args = optarg; break;
             case 'T': opt_num_workers = atoi_with_min_or_exit("-T", optarg, 1); break;
             case 's': opt_sleep_ns = strtol_with_min_or_exit("-s", optarg, 1); break;
-            case 'H': opt_sleep_ns = strtol_with_min_or_exit("-H", optarg, 1); break;
+            case 'H': opt_sleep_ns = (1000000000UL / strtol_with_min_or_exit("-H", optarg, 1)); break;
             case 'V': opt_phpv = optarg; break;
             case 'l': opt_trace_limit = strtoull(optarg, NULL, 10); break;
             case 'i': opt_time_limit_ms = strtol_with_min_or_exit("-i", optarg, 0); break;
