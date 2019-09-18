@@ -23,7 +23,6 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
-#include <termbox.h>
 #include <regex.h>
 
 #ifdef USE_ZEND
@@ -75,6 +74,12 @@
 #define IS_OBJECT    8
 #define IS_RESOURCE  9
 #define IS_REFERENCE 10
+#endif
+
+#if defined(__GNUC__) && __GNUC__ >= 4
+# define PHPSPY_API __attribute__ ((visibility("default")))
+#else
+# define PHPSPY_API
 #endif
 
 typedef struct varpeek_var_s {
@@ -177,5 +182,7 @@ extern int main_top(int argc, char **argv);
 extern void usage(FILE *fp, int exit_code);
 extern int get_symbol_addr(addr_memo_t *memo, pid_t pid, const char *symbol, uint64_t *raddr);
 extern int event_handler_fout(struct trace_context_s *context, int event_type);
+
+PHPSPY_API int (*phpspy_event_handler)(trace_context_t *, int);
 
 #endif
