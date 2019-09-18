@@ -42,11 +42,11 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
                 udata->rem_len + 1,
                 "%d %.*s%s%.*s %.*s:%d%s",
                 frame->depth,
-                (int)frame->class_len, frame->class,
-                frame->class_len > 0 ? "::" : "",
-                (int)frame->func_len, frame->func,
-                (int)frame->file_len, frame->file,
-                frame->lineno,
+                (int)frame->loc.class_len, frame->loc.class,
+                frame->loc.class_len > 0 ? "::" : "",
+                (int)frame->loc.func_len, frame->loc.func,
+                (int)frame->loc.file_len, frame->loc.file,
+                frame->loc.lineno,
                 opt_frame_delim
             );
             len = PHPSPY_MIN(udata->rem_len, len);

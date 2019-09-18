@@ -46,28 +46,28 @@ static int do_trace(trace_context_t *context) {
         try_copy_proc_mem("execute_data", remote_execute_data, &execute_data, sizeof(execute_data));
         try_copy_proc_mem("zfunc", execute_data.func, &zfunc, sizeof(zfunc));
         if (zfunc.common.function_name) {
-            try(rv, copy_zstring(context, "function_name", zfunc.common.function_name, frame->func, sizeof(frame->func), &frame->func_len));
+            try(rv, copy_zstring(context, "function_name", zfunc.common.function_name, frame->loc.func, sizeof(frame->loc.func), &frame->loc.func_len));
         } else {
-            frame->func_len = snprintf(frame->func, sizeof(frame->func), "<main>");
+            frame->loc.func_len = snprintf(frame->loc.func, sizeof(frame->loc.func), "<main>");
         }
         if (zfunc.common.scope) {
             try_copy_proc_mem("zce", zfunc.common.scope, &zce, sizeof(zce));
-            try(rv, copy_zstring(context, "class_name", zce.name, frame->class, sizeof(frame->class), &frame->class_len));
+            try(rv, copy_zstring(context, "class_name", zce.name, frame->loc.class, sizeof(frame->loc.class), &frame->loc.class_len));
         } else {
-            frame->class[0] = '\0';
-            frame->class_len = 0;
+            frame->loc.class[0] = '\0';
+            frame->loc.class_len = 0;
         }
         if (zfunc.type == 2) {
-            try(rv, copy_zstring(context, "filename", zfunc.op_array.filename, frame->file, sizeof(frame->file), &frame->file_len));
-            frame->lineno = zfunc.op_array.line_start;
+            try(rv, copy_zstring(context, "filename", zfunc.op_array.filename, frame->loc.file, sizeof(frame->loc.file), &frame->loc.file_len));
+            frame->loc.lineno = zfunc.op_array.line_start;
             /* TODO add comments */
             if (HASH_CNT(hh, varpeek_map) > 0) {
                 try_copy_proc_mem("opline", execute_data.opline, &zop, sizeof(zop));
-                varpeek_find(context, &zop, remote_execute_data, &zfunc.op_array, frame->file, frame->file_len);
+                varpeek_find(context, &zop, remote_execute_data, &zfunc.op_array, frame->loc.file, frame->loc.file_len);
             }
         } else {
-            frame->file_len = snprintf(frame->file, sizeof(frame->file), "<internal>");
-            frame->lineno = -1;
+            frame->loc.file_len = snprintf(frame->loc.file, sizeof(frame->loc.file), "<internal>");
+            frame->loc.lineno = -1;
         }
         frame->depth = depth;
         context->event_handler(context, PHPSPY_TRACE_EVENT_FRAME);
