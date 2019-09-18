@@ -95,14 +95,18 @@ typedef struct glopeek_entry_s {
     UT_hash_handle hh;
 } glopeek_entry_t;
 
-typedef struct trace_frame_s {
+typedef struct trace_loc_s {
     char func[PHPSPY_STR_SIZE];
-    char file[PHPSPY_STR_SIZE];
     char class[PHPSPY_STR_SIZE];
+    char file[PHPSPY_STR_SIZE];
     size_t func_len;
-    size_t file_len;
     size_t class_len;
+    size_t file_len;
     int lineno;
+} trace_loc_t;
+
+typedef struct trace_frame_s {
+    trace_loc_t loc;
     int depth;
 } trace_frame_t;
 
