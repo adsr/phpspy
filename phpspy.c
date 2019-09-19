@@ -25,6 +25,7 @@ char *opt_phpv = "auto";
 int opt_pause = 0;
 regex_t *opt_filter_re = NULL;
 int opt_filter_negate = 0;
+int (*opt_event_handler)(struct trace_context_s *context, int event_type) = event_handler_fout;
 
 size_t zend_string_val_offset = 0;
 int done = 0;
@@ -134,6 +135,8 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "  -v, --version                      Print phpspy version and exit\n");
     fprintf(fp, "\n");
     fprintf(fp, "Experimental options:\n");
+    fprintf(fp, "  -j, --event-handler=<handler>      Set event handler (fout, callgrind)\n");
+    fprintf(fp, "                                       (default: fout)\n");
     fprintf(fp, "  -S, --pause-process                Pause process while reading stacktrace\n");
     fprintf(fp, "                                       (unsafe for production!)\n");
     fprintf(fp, "  -e, --peek-var=<varspec>           Peek at the contents of the var located\n");
@@ -207,6 +210,7 @@ static void parse_opts(int argc, char **argv) {
         { "single-line",           no_argument,       NULL, '1' },
         { "filter",                required_argument, NULL, 'f' },
         { "filter-negate",         required_argument, NULL, 'F' },
+        { "event-handler",         required_argument, NULL, 'j' },
         { "comment",               required_argument, NULL, '#' },
         { "nothing",               no_argument,       NULL, '@' },
         { "version",               no_argument,       NULL, 'v' },
@@ -226,7 +230,7 @@ static void parse_opts(int argc, char **argv) {
     while (
         optind < argc
         && argv[optind][0] == '-'
-        && (c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:i:n:r:mo:O:E:x:a:1f:F:#:@vSe:g:t", long_opts, NULL)) != -1
+        && (c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:i:n:r:mo:O:E:x:a:1f:F:j:#:@vSe:g:t", long_opts, NULL)) != -1
     ) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
@@ -274,6 +278,16 @@ static void parse_opts(int argc, char **argv) {
                 }
                 opt_filter_negate = c == 'F' ? 1 : 0;
                 break;
+            case 'j':
+                if (strcmp(optarg, "fout") == 0) {
+                    opt_event_handler = event_handler_fout;
+                } else if (strcmp(optarg, "callgrind") == 0) {
+                    opt_event_handler = event_handler_callgrind;
+                } else {
+                    fprintf(stderr, "parse_opts: Expected 'fout' or 'callgrind' for `--event-handler`\n\n");
+                    usage(stderr, 1);
+                }
+                break;
             case '#': break;
             case '@': break;
             case 'v':
@@ -304,7 +318,7 @@ int main_pid(pid_t pid) {
 
     memset(&context, 0, sizeof(trace_context_t));
     context.target.pid = pid;
-    context.event_handler = event_handler_fout; /* TODO set based on option */
+    context.event_handler = opt_event_handler;
     try(rv, find_addresses(&context.target));
     try(rv, context.event_handler(&context, PHPSPY_TRACE_EVENT_INIT));
 
@@ -647,6 +661,7 @@ void try_get_php_version(pid_t pid) {
         pid, pid, pid
     );
 
+    phpv[0] = '\0';
     if ((pcmd = popen(version_cmd, "r")) == NULL) {
         perror("try_get_php_version: popen");
         return;

@@ -4,7 +4,7 @@ phpspy_ldflags:=$(LDFLAGS)
 phpspy_includes:=-I. -I./vendor -Ivendor/termbox/src
 phpspy_defines:=
 phpspy_tests:=$(wildcard tests/test_*.sh)
-phpspy_sources:=phpspy.c pgrep.c top.c addr_objdump.c event_fout.c
+phpspy_sources:=phpspy.c pgrep.c top.c addr_objdump.c event_fout.c event_callgrind.c
 
 termbox_inlcudes=-Ivendor/termbox/src/
 termbox_libs:=-Wl,-Bstatic -Lvendor/termbox/build/src/ -ltermbox -Wl,-Bdynamic
