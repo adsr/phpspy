@@ -181,5 +181,6 @@ extern int main_top(int argc, char **argv);
 extern void usage(FILE *fp, int exit_code);
 extern int get_symbol_addr(addr_memo_t *memo, pid_t pid, const char *symbol, uint64_t *raddr);
 extern int event_handler_fout(struct trace_context_s *context, int event_type);
+extern int event_handler_callgrind(struct trace_context_s *context, int event_type);
 
 #endif
