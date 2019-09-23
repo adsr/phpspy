@@ -191,6 +191,13 @@ All with no changes to your application and minimal overhead.
     # - - - - -
     ...
 
+### Example (docker)
+    $ docker build . -t phpspy
+    $ docker run -it --cap-add SYS_PTRACE phpspy:latest ./phpspy/phpspy -V73 -r -- php -r 'sleep(1);'
+    0 sleep <internal>:-1
+    1 <main> <internal>:-1
+    ...
+
 ### Credits
 
 * phpspy is inspired by [rbspy][0].
