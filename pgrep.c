@@ -207,10 +207,12 @@ static void *run_signal_thread(void *arg) {
         tv.tv_sec = 1;
         tv.tv_usec = 0;
         rv = select(done_pipe[0]+1, &rfds, NULL, NULL, &tv);
-    } while (rv < 1);
+    } while (rv < 1 && done == 0);
 
     /* Read pipe for fun */
-    rv = read(done_pipe[0], &signum, sizeof(int));
+    if (rv) {
+      rv = read(done_pipe[0], &signum, sizeof(int));
+    }
 
     /* Set done flag; wake up all threads */
     done = 1;
