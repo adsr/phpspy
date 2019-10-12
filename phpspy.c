@@ -368,8 +368,14 @@ int main_pid(pid_t pid) {
         nanosleep(&sleep_time, NULL);                                    /* sleep */
     }
 
-    /* TODO proper signal handling for non-pgrep modes */
     context.event_handler(&context, PHPSPY_TRACE_EVENT_DEINIT);
+
+    /* For pgrep mode, tell the main pid to exit if we went past the trace limit or time limit */
+    if ((opt_trace_limit > 0 && n >= opt_trace_limit) || (stop_time && clock_diff(&end_time, stop_time) >= 1)) {
+        write_done_pipe();
+    }
+
+    /* TODO proper signal handling for non-pgrep modes */
     return 0;
 }
 

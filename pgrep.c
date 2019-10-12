@@ -18,7 +18,7 @@ static int avail_pids_count = 0;
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t can_produce = PTHREAD_COND_INITIALIZER;
 static pthread_cond_t can_consume = PTHREAD_COND_INITIALIZER;
-static int done_pipe[2];
+static int done_pipe[2] = { -1, -1 };
 
 int main_pgrep() {
     long i;
@@ -172,16 +172,22 @@ static int block_all_signals() {
     return 0;
 }
 
-static void handle_signal(int signum) {
-    int rv;
-    fcntl(done_pipe[1], F_SETFL, O_NONBLOCK);
-    rv = write(done_pipe[1], &signum, sizeof(int));
+void write_done_pipe() {
+    int rv, ignore;
+    if (done_pipe[1] >= 0) {
+        ignore = 1;
+        rv = write(done_pipe[1], &ignore, sizeof(int));
+    }
     (void)rv;
 }
 
+static void handle_signal(int signum) {
+    (void)signum;
+    write_done_pipe();
+}
+
 static void *run_signal_thread(void *arg) {
-    int rv;
-    int signum;
+    int rv, ignore;
     fd_set rfds;
     struct timeval tv;
     struct sigaction sa;
@@ -190,6 +196,7 @@ static void *run_signal_thread(void *arg) {
 
     /* Create done_pipe */
     rv = pipe(done_pipe);
+    rv = fcntl(done_pipe[1], F_SETFL, O_NONBLOCK);
 
     /* Install signal handler */
     memset(&sa, 0, sizeof(struct sigaction));
@@ -200,7 +207,7 @@ static void *run_signal_thread(void *arg) {
     sa.sa_handler = SIG_IGN;
     sigaction(SIGPIPE, &sa, NULL);
 
-    /* Wait for write on done_pipe from handle_signal */
+    /* Wait for write on done_pipe from write_done_pipe */
     do {
         FD_ZERO(&rfds);
         FD_SET(done_pipe[0], &rfds);
@@ -210,7 +217,7 @@ static void *run_signal_thread(void *arg) {
     } while (rv < 1);
 
     /* Read pipe for fun */
-    rv = read(done_pipe[0], &signum, sizeof(int));
+    rv = read(done_pipe[0], &ignore, sizeof(int));
 
     /* Set done flag; wake up all threads */
     done = 1;
