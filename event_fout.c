@@ -2,7 +2,7 @@
 
 typedef struct event_handler_fout_udata_s {
     FILE *fout;
-    char buf[4096];
+    char buf[8192];
     char *cur;
     size_t rem_len;
 } event_handler_fout_udata_t;
