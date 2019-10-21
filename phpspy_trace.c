@@ -148,6 +148,7 @@ static int varpeek_find(trace_context_t *context, zend_op *zop, zend_execute_dat
         HASH_FIND(hh, entry->varmap, tmp, tmp_len, var);
         if (!var) continue;
         num_vars_found += 1;
+        /* See ZEND_CALL_VAR_NUM macro in php-src */
         try_copy_proc_mem("zval", ((zval*)(remote_execute_data)) + ((int)(5 + i)), &zv, sizeof(zv));
         try(rv, copy_zval(context, &zv, tmp, sizeof(tmp), &tmp_len));
         context->event.varpeek.entry = entry;
