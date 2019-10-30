@@ -35,7 +35,7 @@ static int do_trace(trace_context_t *context) {
     remote_execute_data = executor_globals.current_execute_data;
 
     /* TODO reduce number of copy calls */
-    context->event_handler(context, PHPSPY_TRACE_EVENT_STACK_BEGIN);
+    try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_STACK_BEGIN));
     while (remote_execute_data && depth != opt_max_stack_depth) { /* TODO make options struct */
         memset(&execute_data, 0, sizeof(execute_data));
         memset(&zfunc, 0, sizeof(zfunc));
@@ -70,7 +70,7 @@ static int do_trace(trace_context_t *context) {
             frame->loc.lineno = -1;
         }
         frame->depth = depth;
-        context->event_handler(context, PHPSPY_TRACE_EVENT_FRAME);
+        try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_FRAME));
         remote_execute_data = execute_data.prev_execute_data;
         depth += 1;
     }
@@ -97,7 +97,7 @@ static int do_trace(trace_context_t *context) {
         try_copy_sapi_global_field(path_translated, path);
         #undef try_copy_sapi_global_field
         request->ts = sapi_globals.global_request_time;
-        context->event_handler(context, PHPSPY_TRACE_EVENT_REQUEST);
+        try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_REQUEST));
     }
 
     if (opt_capture_mem) {
@@ -106,7 +106,7 @@ static int do_trace(trace_context_t *context) {
         try_copy_proc_mem("mm_heap", alloc_globals.mm_heap, &mm_heap, sizeof(mm_heap));
         context->event.mem.size = mm_heap.size;
         context->event.mem.peak = mm_heap.peak;
-        context->event_handler(context, PHPSPY_TRACE_EVENT_MEM);
+        try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_MEM));
     }
 
     if (HASH_CNT(hh, glopeek_map) > 0) {
@@ -120,7 +120,7 @@ static int do_trace(trace_context_t *context) {
         }
     }
 
-    context->event_handler(context, PHPSPY_TRACE_EVENT_STACK_END);
+    try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_STACK_END));
 
     return 0;
 }
