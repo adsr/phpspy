@@ -10,7 +10,7 @@ typedef struct event_handler_fout_udata_s {
 
 static int event_handler_fout_open(FILE **fout);
 
-static int event_handler_fout_snprintf(char **s, size_t *n, size_t *ret_len, const char *fmt, ...);
+static int event_handler_fout_snprintf(char **s, size_t *n, size_t *ret_len, int repl_delim, const char *fmt, ...);
 
 int event_handler_fout(struct trace_context_s *context, int event_type) {
     int rv;
@@ -46,67 +46,66 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
                 &udata->cur,
                 &udata->rem,
                 &len,
-                "%d %.*s%s%.*s %.*s:%d%s",
+                1,
+                "%d %.*s%s%.*s %.*s:%d",
                 frame->depth,
                 (int)frame->loc.class_len, frame->loc.class,
                 frame->loc.class_len > 0 ? "::" : "",
                 (int)frame->loc.func_len, frame->loc.func,
                 (int)frame->loc.file_len, frame->loc.file,
-                frame->loc.lineno,
-                opt_frame_delim
+                frame->loc.lineno
             ));
+            try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
             break;
         case PHPSPY_TRACE_EVENT_VARPEEK:
             try(rv, event_handler_fout_snprintf(
                 &udata->cur,
                 &udata->rem,
                 &len,
-                "# varpeek %s@%s = %s%s",
+                1,
+                "# varpeek %s@%s = %s",
                 context->event.varpeek.var->name,
                 context->event.varpeek.entry->filename_lineno,
-                context->event.varpeek.zval_str,
-                opt_frame_delim
+                context->event.varpeek.zval_str
             ));
+            try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
             break;
         case PHPSPY_TRACE_EVENT_GLOPEEK:
             try(rv, event_handler_fout_snprintf(
                 &udata->cur,
                 &udata->rem,
                 &len,
-                "# glopeek %s = %s%s",
+                1,
+                "# glopeek %s = %s",
                 context->event.glopeek.gentry->key,
-                context->event.glopeek.zval_str,
-                opt_frame_delim
+                context->event.glopeek.zval_str
             ));
+            try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
             break;
         case PHPSPY_TRACE_EVENT_REQUEST:
             request = &context->event.request;
-            try(rv, event_handler_fout_snprintf(
-                &udata->cur,
-                &udata->rem,
-                &len,
-                "# uri = %s%s"
-                "# path = %s%s"
-                "# qstring = %s%s"
-                "# cookie = %s%s"
-                "# ts = %f%s",
-                request->uri, opt_frame_delim,
-                request->path, opt_frame_delim,
-                request->qstring, opt_frame_delim,
-                request->cookie, opt_frame_delim,
-                request->ts, opt_frame_delim
-            ));
+            try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 1, "# uri = %s", request->uri));
+            try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
+            try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 1, "# path = %s", request->path));
+            try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
+            try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 1, "# qstring = %s", request->qstring));
+            try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
+            try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 1, "# cookie = %s", request->cookie));
+            try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
+            try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 1, "# ts = %f", request->ts));
+            try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
             break;
         case PHPSPY_TRACE_EVENT_MEM:
             try(rv, event_handler_fout_snprintf(
                 &udata->cur,
                 &udata->rem,
                 &len,
-                "# mem %lu %lu%s",
+                1,
+                "# mem %lu %lu",
                 (uint64_t)context->event.mem.size,
-                (uint64_t)context->event.mem.peak,
-                opt_frame_delim
+                (uint64_t)context->event.mem.peak
             ));
+            try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
             break;
         case PHPSPY_TRACE_EVENT_STACK_END:
             if (opt_filter_re) {
@@ -114,14 +113,8 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
                 if (opt_filter_negate == 0 && rv != 0) break;
                 if (opt_filter_negate != 0 && rv == 0) break;
             }
-            try(rv, event_handler_fout_snprintf(
-                &udata->cur,
-                &udata->rem,
-                &len,
-                "%s",
-                opt_trace_delim
-            ));
-            write_len = (udata->cur - udata->buf) - 1;
+            try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_trace_delim));
+            write_len = (udata->cur - udata->buf);
             if (write_len < 1) {
                 /* nothing to write */
             } else if (write(udata->fdout, udata->buf, write_len) != write_len) {
@@ -140,19 +133,33 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
     return 0;
 }
 
-static int event_handler_fout_snprintf(char **s, size_t *n, size_t *ret_len, const char *fmt, ...) {
-    int len;
+static int event_handler_fout_snprintf(char **s, size_t *n, size_t *ret_len, int repl_delim, const char *fmt, ...) {
+    int len, i;
     va_list vl;
+    char *c;
+
     va_start(vl, fmt);
     len = vsnprintf(*s, *n, fmt, vl);
     va_end(vl);
+
     if (len < 0 || (size_t)len >= *n) {
         fprintf(stderr, "event_handler_fout_snprintf: Not enough space in buffer; truncating\n");
         return 1;
     }
+
+    if (repl_delim) {
+        for (i = 0; i < len; i++) {
+            c = *s + i;
+            if (*c == opt_trace_delim || *c == opt_frame_delim) {
+                *c = '?';
+            }
+        }
+    }
+
     *s += len;
     *n -= len;
     *ret_len = (size_t)len;
+
     return 0;
 }
 
