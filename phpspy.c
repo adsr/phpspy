@@ -14,8 +14,8 @@ int opt_capture_req_uri = 0;
 int opt_capture_req_path = 0;
 int opt_capture_mem = 0;
 int opt_max_stack_depth = -1;
-char *opt_frame_delim = "\n";
-char *opt_trace_delim = "\n";
+char opt_frame_delim = '\n';
+char opt_trace_delim = '\n';
 uint64_t opt_trace_limit = 0;
 long opt_time_limit_ms = 0;
 char *opt_path_output = "-";
@@ -264,7 +264,7 @@ static void parse_opts(int argc, char **argv) {
             case 'E': opt_path_child_err = optarg; break;
             case 'x': opt_executor_globals_addr = strtoull(optarg, NULL, 16); break;
             case 'a': opt_sapi_globals_addr = strtoull(optarg, NULL, 16); break;
-            case '1': opt_frame_delim = "\t"; opt_trace_delim = "\n"; break;
+            case '1': opt_frame_delim = '\t'; opt_trace_delim = '\n'; break;
             case 'f':
             case 'F':
                 if (opt_filter_re) {
