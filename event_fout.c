@@ -2,17 +2,21 @@
 
 typedef struct event_handler_fout_udata_s {
     FILE *fout;
-    char buf[4096];
+    int fdout;
+    char buf[4097]; /* writes lte PIPE_BUF (4kb) are atomic (+ 1 for null char) */
     char *cur;
-    size_t rem_len;
+    size_t rem;
 } event_handler_fout_udata_t;
 
 static int event_handler_fout_open(FILE **fout);
+
+static int event_handler_fout_snprintf(char **s, size_t *n, size_t *ret_len, const char *fmt, ...);
 
 int event_handler_fout(struct trace_context_s *context, int event_type) {
     int rv;
     FILE *fout;
     size_t len;
+    ssize_t write_len;
     trace_frame_t *frame;
     trace_request_t *request;
     event_handler_fout_udata_t *udata;
@@ -27,19 +31,21 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
             try(rv, event_handler_fout_open(&fout));
             udata = calloc(1, sizeof(event_handler_fout_udata_t));
             udata->fout = fout;
+            udata->fdout = fileno(fout);
             udata->cur = udata->buf;
-            udata->rem_len = sizeof(udata->buf) - 1;
+            udata->rem = sizeof(udata->buf);
             context->event_udata = udata;
             break;
         case PHPSPY_TRACE_EVENT_STACK_BEGIN:
             udata->cur = udata->buf;
-            udata->rem_len = sizeof(udata->buf) - 1;
+            udata->rem = sizeof(udata->buf);
             break;
         case PHPSPY_TRACE_EVENT_FRAME:
             frame = &context->event.frame;
-            len = snprintf(
-                udata->cur,
-                udata->rem_len + 1,
+            try(rv, event_handler_fout_snprintf(
+                &udata->cur,
+                &udata->rem,
+                &len,
                 "%d %.*s%s%.*s %.*s:%d%s",
                 frame->depth,
                 (int)frame->loc.class_len, frame->loc.class,
@@ -48,33 +54,37 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
                 (int)frame->loc.file_len, frame->loc.file,
                 frame->loc.lineno,
                 opt_frame_delim
-            );
-            len = PHPSPY_MIN(udata->rem_len, len);
+            ));
             break;
         case PHPSPY_TRACE_EVENT_VARPEEK:
-            fprintf(
-                udata->fout,
+            try(rv, event_handler_fout_snprintf(
+                &udata->cur,
+                &udata->rem,
+                &len,
                 "# varpeek %s@%s = %s%s",
                 context->event.varpeek.var->name,
                 context->event.varpeek.entry->filename_lineno,
                 context->event.varpeek.zval_str,
                 opt_frame_delim
-            );
+            ));
             break;
         case PHPSPY_TRACE_EVENT_GLOPEEK:
-            fprintf(
-                udata->fout,
+            try(rv, event_handler_fout_snprintf(
+                &udata->cur,
+                &udata->rem,
+                &len,
                 "# glopeek %s = %s%s",
                 context->event.glopeek.gentry->key,
                 context->event.glopeek.zval_str,
                 opt_frame_delim
-            );
+            ));
             break;
         case PHPSPY_TRACE_EVENT_REQUEST:
             request = &context->event.request;
-            len = snprintf(
-                udata->cur,
-                udata->rem_len + 1,
+            try(rv, event_handler_fout_snprintf(
+                &udata->cur,
+                &udata->rem,
+                &len,
                 "# uri = %s%s"
                 "# path = %s%s"
                 "# qstring = %s%s"
@@ -85,19 +95,18 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
                 request->qstring, opt_frame_delim,
                 request->cookie, opt_frame_delim,
                 request->ts, opt_frame_delim
-            );
-            len = PHPSPY_MIN(udata->rem_len, len);
+            ));
             break;
         case PHPSPY_TRACE_EVENT_MEM:
-            len = snprintf(
-                udata->cur,
-                udata->rem_len + 1,
+            try(rv, event_handler_fout_snprintf(
+                &udata->cur,
+                &udata->rem,
+                &len,
                 "# mem %lu %lu%s",
                 (uint64_t)context->event.mem.size,
                 (uint64_t)context->event.mem.peak,
                 opt_frame_delim
-            );
-            len = PHPSPY_MIN(udata->rem_len, len);
+            ));
             break;
         case PHPSPY_TRACE_EVENT_STACK_END:
             if (opt_filter_re) {
@@ -105,12 +114,20 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
                 if (opt_filter_negate == 0 && rv != 0) break;
                 if (opt_filter_negate != 0 && rv == 0) break;
             }
-            fprintf(
-                udata->fout,
-                "%s%s",
-                udata->buf,
+            try(rv, event_handler_fout_snprintf(
+                &udata->cur,
+                &udata->rem,
+                &len,
+                "%s",
                 opt_trace_delim
-            );
+            ));
+            write_len = (udata->cur - udata->buf) - 1;
+            if (write_len < 1) {
+                /* nothing to write */
+            } else if (write(udata->fdout, udata->buf, write_len) != write_len) {
+                fprintf(stderr, "event_handler_fout: Write failed (%s)\n", errno != 0 ? strerror(errno) : "partial");
+                return 1;
+            }
             break;
         case PHPSPY_TRACE_EVENT_ERROR:
             fprintf(stderr, "%s\n", context->event.error);
@@ -120,10 +137,22 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
             free(udata);
             break;
     }
-    if (len > 0) {
-        udata->rem_len -= len;
-        udata->cur += len;
+    return 0;
+}
+
+static int event_handler_fout_snprintf(char **s, size_t *n, size_t *ret_len, const char *fmt, ...) {
+    int len;
+    va_list vl;
+    va_start(vl, fmt);
+    len = vsnprintf(*s, *n, fmt, vl);
+    va_end(vl);
+    if (len < 0 || (size_t)len >= *n) {
+        fprintf(stderr, "event_handler_fout_snprintf: Not enough space in buffer; truncating\n");
+        return 1;
     }
+    *s += len;
+    *n -= len;
+    *ret_len = (size_t)len;
     return 0;
 }
 
@@ -141,6 +170,5 @@ static int event_handler_fout_open(FILE **fout) {
         if (tfd != -1) close(tfd);
         return 1;
     }
-    setvbuf(*fout, NULL, _IOLBF, PIPE_BUF);
     return 0;
 }
