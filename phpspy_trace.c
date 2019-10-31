@@ -1,5 +1,5 @@
 #define try_copy_proc_mem(__what, __raddr, __laddr, __size) \
-    try(rv, copy_proc_mem(context, (__what), (__raddr), (__laddr), (__size)))
+    try(rv, copy_proc_mem(context->target.pid, (__what), (__raddr), (__laddr), (__size)))
 
 static int varpeek_find(trace_context_t *context, zend_op *zop, zend_execute_data *remote_execute_data, zend_op_array *op_array, char *file, int file_len);
 static int copy_zstring(trace_context_t *context, const char *what, zend_string *rzstring, char *buf, size_t buf_size, size_t *buf_len);
