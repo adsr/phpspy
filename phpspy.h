@@ -140,6 +140,7 @@ typedef struct trace_target_s {
     uint64_t sapi_globals_addr;
     uint64_t core_globals_addr;
     uint64_t alloc_globals_addr;
+    uint64_t basic_functions_module_addr;
 } trace_target_t;
 
 typedef struct trace_context_s {
@@ -163,6 +164,11 @@ typedef struct addr_memo_s {
     char php_bin_path_root[PHPSPY_STR_SIZE];
     uint64_t php_base_addr;
 } addr_memo_t;
+
+struct __attribute__((__packed__)) _zend_module_entry {
+    uint8_t pad0[88];
+    const char *version;
+};
 
 extern char *opt_pgrep_args;
 extern int done;

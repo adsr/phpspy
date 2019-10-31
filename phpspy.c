@@ -48,8 +48,8 @@ static int clock_diff(struct timespec *a, struct timespec *b);
 static void calc_sleep_time(struct timespec *end, struct timespec *start, struct timespec *sleep);
 static void varpeek_add(char *varspec);
 static void glopeek_add(char *glospec);
-static int copy_proc_mem(trace_context_t *context, const char *what, void *raddr, void *laddr, size_t size);
-static void try_get_php_version(pid_t pid);
+static int copy_proc_mem(pid_t pid, const char *what, void *raddr, void *laddr, size_t size);
+static void try_get_php_version(trace_target_t *target);
 
 #ifdef USE_ZEND
 static int do_trace(trace_context_t *context);
@@ -327,7 +327,7 @@ int main_pid(pid_t pid) {
     #else
 
     if (strcmp(opt_phpv, "auto") == 0) {
-        try_get_php_version(pid);
+        try_get_php_version(&context.target);
     }
 
     if (strcmp("70", opt_phpv) == 0) {
@@ -502,6 +502,9 @@ static int find_addresses(trace_target_t *target) {
     if (opt_capture_mem) {
         try(rv, get_symbol_addr(&memo, target->pid, "alloc_globals", &target->alloc_globals_addr));
     }
+    if (get_symbol_addr(&memo, target->pid, "basic_functions_module", &target->basic_functions_module_addr) != 0) {
+        target->basic_functions_module_addr = 0;
+    }
 
     /* TODO probably don't need zend_string_val_offset */
     #ifdef USE_ZEND
@@ -626,7 +629,7 @@ static void glopeek_add(char *glospec) {
     HASH_ADD_STR(glopeek_map, key, gentry);
 }
 
-static int copy_proc_mem(trace_context_t *context, const char *what, void *raddr, void *laddr, size_t size) {
+static int copy_proc_mem(pid_t pid, const char *what, void *raddr, void *laddr, size_t size) {
     int rv;
     struct iovec local[1];
     struct iovec remote[1];
@@ -639,7 +642,7 @@ static int copy_proc_mem(trace_context_t *context, const char *what, void *raddr
     remote[0].iov_base = raddr;
     remote[0].iov_len = size;
     rv = 0;
-    if (process_vm_readv(context->target.pid, local, 1, remote, 1, 0) == -1) {
+    if (process_vm_readv(pid, local, 1, remote, 1, 0) == -1) {
         if (errno == ESRCH) { /* No such process */
             perror("process_vm_readv");
             rv = 2; /* Return value of 2 tells main_pid to exit */
@@ -651,38 +654,53 @@ static int copy_proc_mem(trace_context_t *context, const char *what, void *raddr
     return rv;
 }
 
-void try_get_php_version(pid_t pid) {
+static void try_get_php_version(trace_target_t *target) {
+    struct _zend_module_entry basic_functions_module;
     char version_cmd[256];
     char phpv[4];
+    pid_t pid;
     FILE *pcmd;
 
-    snprintf(
-        version_cmd,
-        sizeof(version_cmd),
-        "{ echo -n /proc/%d/root/; "
-        "  awk '/libphp7/{print $NF; exit 0} END{exit 1}' /proc/%d/maps "
-        "  || readlink /proc/%d/exe; } "
-        "| xargs strings "
-        "| grep -Po '(?<=X-Powered-By: PHP/)\\d\\.\\d'",
-        pid, pid, pid
-    );
-
+    pid = target->pid;
     phpv[0] = '\0';
-    if ((pcmd = popen(version_cmd, "r")) == NULL) {
-        perror("try_get_php_version: popen");
-        return;
-    } else if (fread(&phpv, sizeof(char), 3, pcmd) == 3) {
-        if      (strcmp(phpv, "7.0") == 0) opt_phpv = "70";
-        else if (strcmp(phpv, "7.1") == 0) opt_phpv = "71";
-        else if (strcmp(phpv, "7.2") == 0) opt_phpv = "72";
-        else if (strcmp(phpv, "7.3") == 0) opt_phpv = "73";
-        else if (strcmp(phpv, "7.4") == 0) opt_phpv = "74";
-        else if (strcmp(phpv, "8.0") == 0) opt_phpv = "74";
-        else fprintf(stderr, "try_get_php_version: Unrecognized PHP version\n");
-    } else {
-        fprintf(stderr, "try_get_php_version: Could not detect PHP version\n");
+
+    /* Try reading basic_functions_module */
+    if (target->basic_functions_module_addr) {
+        if (copy_proc_mem(pid, "basic_functions_module", (void*)target->basic_functions_module_addr, &basic_functions_module, sizeof(basic_functions_module)) == 0) {
+            copy_proc_mem(pid, "basic_functions_module.version", (void*)basic_functions_module.version, phpv, 3);
+        }
     }
-    pclose(pcmd);
+
+    /* Try greping binary */
+    if (phpv[0] == '\0') {
+        snprintf(
+            version_cmd,
+            sizeof(version_cmd),
+            "{ echo -n /proc/%d/root/; "
+            "  awk '/libphp7/{print $NF; exit 0} END{exit 1}' /proc/%d/maps "
+            "  || readlink /proc/%d/exe; } "
+            "| xargs strings "
+            "| grep -Po '(?<=X-Powered-By: PHP/)\\d\\.\\d'",
+            pid, pid, pid
+        );
+        if ((pcmd = popen(version_cmd, "r")) == NULL) {
+            perror("try_get_php_version: popen");
+            return;
+        } else if (fread(&phpv, sizeof(char), 3, pcmd) != 3) {
+            fprintf(stderr, "try_get_php_version: Could not detect PHP version\n");
+            pclose(pcmd);
+            return;
+        }
+        pclose(pcmd);
+    }
+
+    if      (strncmp(phpv, "7.0", 3) == 0) opt_phpv = "70";
+    else if (strncmp(phpv, "7.1", 3) == 0) opt_phpv = "71";
+    else if (strncmp(phpv, "7.2", 3) == 0) opt_phpv = "72";
+    else if (strncmp(phpv, "7.3", 3) == 0) opt_phpv = "73";
+    else if (strncmp(phpv, "7.4", 3) == 0) opt_phpv = "74";
+    else if (strncmp(phpv, "8.0", 3) == 0) opt_phpv = "74";
+    else fprintf(stderr, "try_get_php_version: Unrecognized PHP version\n");
 }
 
 /* TODO figure out a way to make this cleaner */
