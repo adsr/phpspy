@@ -1,20 +1,18 @@
 #include "phpspy.h"
 
 typedef struct event_handler_fout_udata_s {
-    FILE *fout;
-    int fdout;
+    int fd;
     char buf[4097]; /* writes lte PIPE_BUF (4kb) are atomic (+ 1 for null char) */
     char *cur;
     size_t rem;
 } event_handler_fout_udata_t;
 
-static int event_handler_fout_open(FILE **fout);
+static int event_handler_fout_open(int *fd);
 
 static int event_handler_fout_snprintf(char **s, size_t *n, size_t *ret_len, int repl_delim, const char *fmt, ...);
 
 int event_handler_fout(struct trace_context_s *context, int event_type) {
-    int rv;
-    FILE *fout;
+    int rv, fd;
     size_t len;
     ssize_t write_len;
     trace_frame_t *frame;
@@ -28,10 +26,9 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
     len = 0;
     switch (event_type) {
         case PHPSPY_TRACE_EVENT_INIT:
-            try(rv, event_handler_fout_open(&fout));
+            try(rv, event_handler_fout_open(&fd));
             udata = calloc(1, sizeof(event_handler_fout_udata_t));
-            udata->fout = fout;
-            udata->fdout = fileno(fout);
+            udata->fd = fd;
             udata->cur = udata->buf;
             udata->rem = sizeof(udata->buf);
             context->event_udata = udata;
@@ -117,7 +114,7 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
             write_len = (udata->cur - udata->buf);
             if (write_len < 1) {
                 /* nothing to write */
-            } else if (write(udata->fdout, udata->buf, write_len) != write_len) {
+            } else if (write(udata->fd, udata->buf, write_len) != write_len) {
                 fprintf(stderr, "event_handler_fout: Write failed (%s)\n", errno != 0 ? strerror(errno) : "partial");
                 return 1;
             }
@@ -126,7 +123,7 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
             fprintf(stderr, "%s\n", context->event.error);
             break;
         case PHPSPY_TRACE_EVENT_DEINIT:
-            fclose(udata->fout);
+            close(udata->fd);
             free(udata);
             break;
     }
@@ -163,19 +160,21 @@ static int event_handler_fout_snprintf(char **s, size_t *n, size_t *ret_len, int
     return 0;
 }
 
-static int event_handler_fout_open(FILE **fout) {
+static int event_handler_fout_open(int *fd) {
     int tfd;
-    tfd = -1;
     if (strcmp(opt_path_output, "-") == 0) {
         tfd = dup(STDOUT_FILENO);
-        *fout = fdopen(tfd, "w");
+        if (tfd < 0) {
+            perror("event_handler_fout_open: dup");
+            return 1;
+        }
     } else {
-        *fout = fopen(opt_path_output, "w");
+        tfd = open(opt_path_output, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+        if (tfd < 0) {
+            perror("event_handler_fout_open: open");
+            return 1;
+        }
     }
-    if (!*fout) {
-        perror("fopen");
-        if (tfd != -1) close(tfd);
-        return 1;
-    }
+    *fd = tfd;
     return 0;
 }
