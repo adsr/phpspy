@@ -25,7 +25,7 @@ It can collect request info, memory usage, and variables:
 
 You can also use it make flamegraphs like this:
 
-![FlameGraph example](https://i.imgur.com/7DKdnmh.gif)
+![FlameGraph example](https://i.imgur.com/e6P9Arp.png)
 
 All with no changes to your application and minimal overhead.
 
