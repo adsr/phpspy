@@ -5,13 +5,23 @@ Linux 3.2+ x86_64 non-ZTS PHP 7.0+ with CLI, Apache, and FPM SAPIs.
 
 [![Build Status](https://travis-ci.org/adsr/phpspy.svg?branch=master)](https://travis-ci.org/adsr/phpspy)
 
+### Demos
+
+You can profile PHP scripts:
+
+![child](https://i.imgur.com/QE8iJLA.gif)
+
+You can attach to running PHP processes:
+
+![attach](https://i.imgur.com/HubBqo0.gif)
+
 It has a top-like mode:
 
-![top mode](https://i.imgur.com/E8QTUfE.gif)
+![top](https://i.imgur.com/Y0NJJ1C.gif)
 
-You can peek at variables at runtime:
+It can collect request info, memory usage, and variables:
 
-![varpeek](https://i.imgur.com/HlpPd0x.gif)
+![advanced](https://i.imgur.com/nlUfCWT.gif)
 
 You can also use it make flamegraphs like this:
 
@@ -44,7 +54,7 @@ All with no changes to your application and minimal overhead.
     Usage:
       phpspy [options] -p <pid>
       phpspy [options] -P <pgrep-args>
-      phpspy [options] -- <cmd>
+      phpspy [options] [--] <cmd>
 
     Options:
       -h, --help                         Show this help
@@ -93,6 +103,8 @@ All with no changes to your application and minimal overhead.
       -v, --version                      Print phpspy version and exit
 
     Experimental options:
+      -j, --event-handler=<handler>      Set event handler (fout, callgrind)
+                                           (default: fout)
       -S, --pause-process                Pause process while reading stacktrace
                                            (unsafe for production!)
       -e, --peek-var=<varspec>           Peek at the contents of the var located
@@ -108,10 +120,9 @@ All with no changes to your application and minimal overhead.
                                            e.g., server.request_id
       -t, --top                          Show dynamic top-like output
 
-
 ### Example (variable peek)
 
-    $ sudo ./phpspy -V73 -e 'i@/var/www/test/lib/test.php:12' -p $(pgrep -n httpd) | grep varpeek
+    $ sudo ./phpspy -e 'i@/var/www/test/lib/test.php:12' -p $(pgrep -n httpd) | grep varpeek
     # varpeek i@/var/www/test/lib/test.php:12 = 42
     # varpeek i@/var/www/test/lib/test.php:12 = 42
     # varpeek i@/var/www/test/lib/test.php:12 = 43
@@ -120,7 +131,7 @@ All with no changes to your application and minimal overhead.
 
 ### Example (pgrep daemon mode)
 
-    $ sudo ./phpspy -V73 -H1 -T4 -P '-x php'
+    $ sudo ./phpspy -H1 -T4 -P '-x php'
     0 proc_open <internal>:-1
     1 system_with_timeout /home/adam/php-src/run-tests.php:1137
     2 run_test /home/adam/php-src/run-tests.php:1937
