@@ -25,6 +25,7 @@ char *opt_phpv = "auto";
 int opt_pause = 0;
 regex_t *opt_filter_re = NULL;
 int opt_filter_negate = 0;
+int opt_collect_info = 0;
 int (*opt_event_handler)(struct trace_context_s *context, int event_type) = event_handler_fout;
 
 size_t zend_string_val_offset = 0;
@@ -151,6 +152,7 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "                                       post, get, cookies, server, env, files,\n");
     fprintf(fp, "                                       e.g., server.request_id\n");
     fprintf(fp, "  -t, --top                          Show dynamic top-like output\n");
+    fprintf(fp, "  -d, --display-collect-info         Include info about the trace collection (timestamp, pid) \n");
     cleanup();
     exit(exit_code);
 }
@@ -218,6 +220,7 @@ static void parse_opts(int argc, char **argv) {
         { "peek-var",              required_argument, NULL, 'e' },
         { "peek-global",           required_argument, NULL, 'g' },
         { "top",                   no_argument,       NULL, 't' },
+	{ "display-collect-info",  no_argument,       NULL, 'd' },
         { 0,                       0,                 0,    0   }
     };
     /* Parse options until the first non-option argument is reached. Effectively
@@ -230,7 +233,7 @@ static void parse_opts(int argc, char **argv) {
     while (
         optind < argc
         && argv[optind][0] == '-'
-        && (c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:i:n:r:mo:O:E:x:a:1f:F:j:#:@vSe:g:t", long_opts, NULL)) != -1
+        && (c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:i:n:r:mo:O:E:x:a:1f:F:j:#:@vSe:g:t:d", long_opts, NULL)) != -1
     ) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
@@ -305,6 +308,7 @@ static void parse_opts(int argc, char **argv) {
             case 'e': varpeek_add(optarg); break;
             case 'g': glopeek_add(optarg); break;
             case 't': opt_top_mode = 1; break;
+	    case 'd': opt_collect_info = 1; break;
         }
     }
 }

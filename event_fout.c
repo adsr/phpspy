@@ -7,6 +7,8 @@ typedef struct event_handler_fout_udata_s {
     size_t rem;
 } event_handler_fout_udata_t;
 
+struct timeval  tv;
+
 static int event_handler_fout_open(int *fd);
 
 static int event_handler_fout_snprintf(char **s, size_t *n, size_t *ret_len, int repl_delim, const char *fmt, ...);
@@ -110,7 +112,16 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
                 if (opt_filter_negate == 0 && rv != 0) break;
                 if (opt_filter_negate != 0 && rv == 0) break;
             }
-            try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_trace_delim));
+
+	    if (opt_collect_info) {
+		gettimeofday(&tv, NULL);
+            	try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 1, "# collected_at = %f", (double) tv.tv_sec + (double) tv.tv_usec / 1000000));
+            	try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
+		try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 1, "# pid = %d", context->target.pid));
+            	try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
+	    }
+
+	    try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_trace_delim));
             write_len = (udata->cur - udata->buf);
             if (write_len < 1) {
                 /* nothing to write */

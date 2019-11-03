@@ -119,6 +119,7 @@ All with no changes to your application and minimal overhead.
                                            post, get, cookies, server, env, files,
                                            e.g., server.request_id
       -t, --top                          Show dynamic top-like output
+      -d, --display-collect-info         Include info about the trace collection (timestamp, pid)
 
 ### Example (variable peek)
 
