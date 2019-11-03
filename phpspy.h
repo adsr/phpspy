@@ -179,6 +179,8 @@ extern char opt_trace_delim;
 extern char *opt_path_output;
 extern regex_t *opt_filter_re;
 extern int opt_filter_negate;
+extern int opt_verbose_fields_pid;
+extern int opt_verbose_fields_ts;
 
 extern int main_pgrep();
 extern int main_pid(pid_t pid);
