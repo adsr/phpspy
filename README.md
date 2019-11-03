@@ -97,6 +97,10 @@ All with no changes to your application and minimal overhead.
       -f, --filter=<regex>               Filter output by POSIX regex
                                            (default: none)
       -F, --filter-negate=<regex>        Same as `-f` except negated
+      -d, --verbose-fields=<opts>        Set verbose output fields
+                                           (p=pid t=timestamp
+                                           capital=negation)
+                                           (default: PT; none)
       -#, --comment=<any>                Ignored; intended for self-documenting
                                            commands
       -@, --nothing                      Ignored
