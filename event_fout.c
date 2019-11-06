@@ -7,7 +7,6 @@ typedef struct event_handler_fout_udata_s {
     size_t rem;
 } event_handler_fout_udata_t;
 
-struct timeval  tv;
 
 static int event_handler_fout_open(int *fd);
 
@@ -20,6 +19,7 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
     trace_frame_t *frame;
     trace_request_t *request;
     event_handler_fout_udata_t *udata;
+    struct timeval tv;
 
     udata = (event_handler_fout_udata_t*)context->event_udata;
     if (!udata && event_type != PHPSPY_TRACE_EVENT_INIT) {
@@ -113,22 +113,27 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
                 if (opt_filter_negate != 0 && rv == 0) break;
             }
 
-	    if (opt_collect_info) {
-		gettimeofday(&tv, NULL);
-            	try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 1, "# collected_at = %f", (double) tv.tv_sec + (double) tv.tv_usec / 1000000));
-            	try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
-		try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 1, "# pid = %d", context->target.pid));
-            	try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
-	    }
+            if (opt_verbose_fields_ts) {
+                gettimeofday(&tv, NULL);
+                try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 1, "# trace_ts = %f", (double)(tv.tv_sec + tv.tv_usec / 1000000.0)));
+                try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
+            }
 
-	    try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_trace_delim));
+            if (opt_verbose_fields_pid) {
+                try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 1, "# pid = %d", context->target.pid));
+                try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
+            }
+
+            try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_trace_delim));
             write_len = (udata->cur - udata->buf);
+
             if (write_len < 1) {
                 /* nothing to write */
             } else if (write(udata->fd, udata->buf, write_len) != write_len) {
                 fprintf(stderr, "event_handler_fout: Write failed (%s)\n", errno != 0 ? strerror(errno) : "partial");
                 return 1;
             }
+
             break;
         case PHPSPY_TRACE_EVENT_ERROR:
             fprintf(stderr, "%s\n", context->event.error);
