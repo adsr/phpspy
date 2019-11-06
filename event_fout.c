@@ -7,7 +7,6 @@ typedef struct event_handler_fout_udata_s {
     size_t rem;
 } event_handler_fout_udata_t;
 
-
 static int event_handler_fout_open(int *fd);
 
 static int event_handler_fout_snprintf(char **s, size_t *n, size_t *ret_len, int repl_delim, const char *fmt, ...);
