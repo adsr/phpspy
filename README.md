@@ -13,7 +13,9 @@ You can profile PHP scripts:
 
 You can attach to running PHP processes:
 
-![attach](https://i.imgur.com/HubBqo0.gif)
+![attach cli](https://i.imgur.com/HubBqo0.gif)
+
+![attach httpd](https://i.imgur.com/KVY3KXq.gif)
 
 It has a top-like mode:
 
