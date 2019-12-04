@@ -25,6 +25,7 @@
 #include <unistd.h>
 #include <termbox.h>
 #include <regex.h>
+#include <uthash.h>
 
 #ifdef USE_ZEND
 #include <main/php_config.h>
@@ -42,11 +43,9 @@
 #include <php_structs_74.h>
 #endif
 
-#include <uthash.h>
-
 #define try(__rv, __call) do { if (((__rv) = (__call)) != 0) return (__rv); } while(0)
 
-#define PHPSPY_VERSION "0.4"
+#define PHPSPY_VERSION "0.5.0"
 #define PHPSPY_MIN(a, b) ((a) < (b) ? (a) : (b))
 #define PHPSPY_MAX(a, b) ((a) > (b) ? (a) : (b))
 #define PHPSPY_STR_SIZE 256
