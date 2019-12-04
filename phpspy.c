@@ -694,7 +694,7 @@ static void try_get_php_version(trace_target_t *target) {
             version_cmd,
             sizeof(version_cmd),
             "{ echo -n /proc/%d/root/; "
-            "  awk '/libphp7/{print $NF; exit 0} END{exit 1}' /proc/%d/maps "
+            "  awk '/libphp[78]/{print $NF; exit 0} END{exit 1}' /proc/%d/maps "
             "  || readlink /proc/%d/exe; } "
             "| xargs strings "
             "| grep -Po '(?<=X-Powered-By: PHP/)\\d\\.\\d'",
