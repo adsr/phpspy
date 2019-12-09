@@ -171,30 +171,24 @@ All with no changes to your application and minimal overhead.
 
 ### Example (cli child)
 
-    $ sudo ./phpspy -r -- php -r 'usleep(100000);'
+    $ ./phpspy -- php -r 'usleep(100000);'
     0 usleep <internal>:-1
     1 <main> <internal>:-1
-    # 1535179291.009094 - - Standard input code -
 
     0 usleep <internal>:-1
     1 <main> <internal>:-1
-    # 1535179291.009094 - - Standard input code -
 
     0 usleep <internal>:-1
     1 <main> <internal>:-1
-    # 1535179291.009094 - - Standard input code -
 
     0 usleep <internal>:-1
     1 <main> <internal>:-1
-    # 1535179291.009094 - - Standard input code -
 
     0 usleep <internal>:-1
     1 <main> <internal>:-1
-    # 1535179291.009094 - - Standard input code -
 
     0 usleep <internal>:-1
     1 <main> <internal>:-1
-    # 1535179291.009094 - - Standard input code -
 
     process_vm_readv: No such process
 
@@ -205,7 +199,6 @@ All with no changes to your application and minimal overhead.
     $ sudo ./phpspy -p 28586
     0 sleep <internal>:-1
     1 <main> <internal>:-1
-    # - - - - -
     ...
 
 ### Credits
