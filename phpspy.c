@@ -35,7 +35,8 @@ int (*do_trace_ptr)(trace_context_t *context) = NULL;
 varpeek_entry_t *varpeek_map = NULL;
 glopeek_entry_t *glopeek_map = NULL;
 regex_t filter_re;
-
+int fd_stderr;
+int fd_stderr_orig;
 
 static void parse_opts(int argc, char **argv);
 static int main_fork(int argc, char **argv);
@@ -52,6 +53,8 @@ static void varpeek_add(char *varspec);
 static void glopeek_add(char *glospec);
 static int copy_proc_mem(pid_t pid, const char *what, void *raddr, void *laddr, size_t size);
 static void try_get_php_version(trace_target_t *target);
+static void stderr_disable();
+static void stderr_enable();
 
 #ifdef USE_ZEND
 static int do_trace(trace_context_t *context);
@@ -519,9 +522,12 @@ static int find_addresses(trace_target_t *target) {
     if (opt_capture_mem) {
         try(rv, get_symbol_addr(&memo, target->pid, "alloc_globals", &target->alloc_globals_addr));
     }
+
+    stderr_disable();
     if (get_symbol_addr(&memo, target->pid, "basic_functions_module", &target->basic_functions_module_addr) != 0) {
         target->basic_functions_module_addr = 0;
     }
+    stderr_enable();
 
     /* TODO probably don't need zend_string_val_offset */
     #ifdef USE_ZEND
@@ -718,6 +724,22 @@ static void try_get_php_version(trace_target_t *target) {
     else if (strncmp(phpv, "7.4", 3) == 0) opt_phpv = "74";
     else if (strncmp(phpv, "8.0", 3) == 0) opt_phpv = "74";
     else fprintf(stderr, "try_get_php_version: Unrecognized PHP version\n");
+}
+
+static void stderr_disable() {
+    int fd_stderr_null;
+    fflush(stderr);
+    fd_stderr = fileno(stderr);
+    fd_stderr_orig = dup(fd_stderr);
+    fd_stderr_null = open("/dev/null", O_WRONLY);
+    dup2(fd_stderr_null, fd_stderr);
+    close(fd_stderr_null);
+}
+
+static void stderr_enable() {
+    fflush(stderr);
+    dup2(fd_stderr_orig, fd_stderr);
+    close(fd_stderr_orig);
 }
 
 /* TODO figure out a way to make this cleaner */
