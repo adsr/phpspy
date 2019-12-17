@@ -39,8 +39,9 @@ All with no changes to your application and minimal overhead.
     $ cd phpspy
     $ make
     ...
-    $ sudo ./phpspy -l 1000 -p $(pgrep -n httpd) | ./stackcollapse-phpspy.pl | ./vendor/flamegraph.pl > flame.svg
+    $ sudo ./phpspy --limit=1000 --pid=$(pgrep -n httpd) >traces
     ...
+    $ ./stackcollapse-phpspy.pl <traces | ./vendor/flamegraph.pl >flame.svg
     $ google-chrome flame.svg # View flame.svg in browser
 
 ### Build options
