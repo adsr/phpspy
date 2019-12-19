@@ -111,7 +111,7 @@ int event_handler_callgrind(struct trace_context_s *context, int event_type) {
             udata->self_len = 0;
             break;
         case PHPSPY_TRACE_EVENT_ERROR:
-            fprintf(stderr, "%s\n", context->event.error);
+            log_error("%s\n", context->event.error);
             break;
         case PHPSPY_TRACE_EVENT_DEINIT:
             callgrind_dump(udata);
@@ -124,7 +124,7 @@ int event_handler_callgrind(struct trace_context_s *context, int event_type) {
 
 static void callgrind_ingest_frame(callgrind_udata_t *udata, struct trace_context_s *context) {
     if (udata->self_len >= MAX_STACK_DEPTH) {
-        fprintf(stderr, "callgrind_ingest_frame: Exceeded max stack depth (%d); truncating\n", MAX_STACK_DEPTH);
+        log_error("callgrind_ingest_frame: Exceeded max stack depth (%d); truncating\n", MAX_STACK_DEPTH);
         return;
     }
     memcpy(&udata->self[udata->self_len], &context->event.frame.loc, sizeof(trace_loc_t));
@@ -143,7 +143,7 @@ static void callgrind_sprint_loc(char *str, trace_loc_t *loc) {
         loc->lineno
     );
     if (len >= PHPSPY_STR_SIZE) {
-        fprintf(stderr, "callgrind_sprint_loc: Exceeded max loc len (%d); truncating\n", PHPSPY_STR_SIZE);
+        log_error("callgrind_sprint_loc: Exceeded max loc len (%d); truncating\n", PHPSPY_STR_SIZE);
     }
 }
 
