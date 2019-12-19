@@ -49,7 +49,7 @@ int main_top(int argc, char **argv) {
 
     if (opt_pid == -1 && opt_pgrep_args == NULL && optind >= argc) {
         /* TODO DRY with main() */
-        fprintf(stderr, "Expected pid (-p), pgrep (-P), or command\n\n");
+        log_error("Expected pid (-p), pgrep (-P), or command\n\n");
         usage(stderr, 1);
         return 1;
     }

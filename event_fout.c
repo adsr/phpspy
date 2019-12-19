@@ -129,13 +129,13 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
             if (write_len < 1) {
                 /* nothing to write */
             } else if (write(udata->fd, udata->buf, write_len) != write_len) {
-                fprintf(stderr, "event_handler_fout: Write failed (%s)\n", errno != 0 ? strerror(errno) : "partial");
+                log_error("event_handler_fout: Write failed (%s)\n", errno != 0 ? strerror(errno) : "partial");
                 return 1;
             }
 
             break;
         case PHPSPY_TRACE_EVENT_ERROR:
-            fprintf(stderr, "%s\n", context->event.error);
+            log_error("%s\n", context->event.error);
             break;
         case PHPSPY_TRACE_EVENT_DEINIT:
             close(udata->fd);
@@ -155,7 +155,7 @@ static int event_handler_fout_snprintf(char **s, size_t *n, size_t *ret_len, int
     va_end(vl);
 
     if (len < 0 || (size_t)len >= *n) {
-        fprintf(stderr, "event_handler_fout_snprintf: Not enough space in buffer; truncating\n");
+        log_error("event_handler_fout_snprintf: Not enough space in buffer; truncating\n");
         return 1;
     }
 

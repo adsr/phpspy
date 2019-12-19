@@ -24,7 +24,7 @@ int main_pgrep() {
     long i;
 
     if (opt_num_workers < 1) {
-        fprintf(stderr, "Expected max concurrent workers (-T) > 0\n");
+        log_error("Expected max concurrent workers (-T) > 0\n");
         exit(1);
     }
 
@@ -46,7 +46,7 @@ int main_pgrep() {
 
     deinit_work_threads();
 
-    fprintf(stderr, "main_pgrep finished gracefully\n");
+    log_error("main_pgrep finished gracefully\n");
     return 0;
 }
 

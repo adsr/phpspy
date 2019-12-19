@@ -35,7 +35,7 @@ int (*do_trace_ptr)(trace_context_t *context) = NULL;
 varpeek_entry_t *varpeek_map = NULL;
 glopeek_entry_t *glopeek_map = NULL;
 regex_t filter_re;
-
+int log_error_enabled = 1;
 
 static void parse_opts(int argc, char **argv);
 static int main_fork(int argc, char **argv);
@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
     } else if (optind < argc) {
         rv = main_fork(argc, argv);
     } else {
-        fprintf(stderr, "Expected pid (-p), pgrep (-P), or command\n\n");
+        log_error("Expected pid (-p), pgrep (-P), or command\n\n");
         usage(stderr, 1);
         rv = 1;
     }
@@ -169,12 +169,12 @@ static long strtol_with_min_or_exit(const char* name, const char* str, int min)
     result = strtol(str, &end, 10);
     if (end <= str || *end != '\0') {
         /* e.g. reject -H '', -H invalid, -H 5000suffix */
-        fprintf(stderr, "Expected integer for %s, got '%s'\n", name, str);
+        log_error("Expected integer for %s, got '%s'\n", name, str);
         usage(stderr, 1);
     }
     if (result < min) {
         /* e.g. reject -H 0 */
-        fprintf(stderr, "Expected integer >= %d for %s, got '%s'\n", min, name, str);
+        log_error("Expected integer >= %d for %s, got '%s'\n", min, name, str);
         usage(stderr, 1);
     }
     return result;
@@ -185,7 +185,7 @@ static int atoi_with_min_or_exit(const char* name, const char* str, int min)
     long result = strtol_with_min_or_exit(name, str, min);
 #if LONG_MAX > INT_MAX
     if (result > INT_MAX) {
-        fprintf(stderr, "Expected value that could fit in a C int for %s, got '%s'\n", name, str);
+        log_error("Expected value that could fit in a C int for %s, got '%s'\n", name, str);
         usage(stderr, 1);
     }
 #endif
@@ -280,7 +280,7 @@ static void parse_opts(int argc, char **argv) {
                 if (regcomp(&filter_re, optarg, REG_EXTENDED | REG_NOSUB | REG_NEWLINE) == 0) {
                     opt_filter_re = &filter_re;
                 } else {
-                    fprintf(stderr, "parse_opts: Failed to compile filter regex\n\n"); /* TODO regerror */
+                    log_error("parse_opts: Failed to compile filter regex\n\n"); /* TODO regerror */
                     usage(stderr, 1);
                 }
                 opt_filter_negate = c == 'F' ? 1 : 0;
@@ -301,7 +301,7 @@ static void parse_opts(int argc, char **argv) {
                 } else if (strcmp(optarg, "callgrind") == 0) {
                     opt_event_handler = event_handler_callgrind;
                 } else {
-                    fprintf(stderr, "parse_opts: Expected 'fout' or 'callgrind' for `--event-handler`\n\n");
+                    log_error("parse_opts: Expected 'fout' or 'callgrind' for `--event-handler`\n\n");
                     usage(stderr, 1);
                 }
                 break;
@@ -414,7 +414,7 @@ static int main_fork(int argc, char **argv) {
     }
     waitpid(fork_pid, &status, 0);
     if (!WIFSTOPPED(status) || WSTOPSIG(status) != SIGTRAP) {
-        fprintf(stderr, "main_fork: Expected SIGTRAP from child\n");
+        log_error("main_fork: Expected SIGTRAP from child\n");
     }
     ptrace(PTRACE_DETACH, fork_pid, NULL, NULL);
     rv = main_pid(fork_pid);
@@ -519,9 +519,11 @@ static int find_addresses(trace_target_t *target) {
     if (opt_capture_mem) {
         try(rv, get_symbol_addr(&memo, target->pid, "alloc_globals", &target->alloc_globals_addr));
     }
+    log_error_enabled = 0;
     if (get_symbol_addr(&memo, target->pid, "basic_functions_module", &target->basic_functions_module_addr) != 0) {
         target->basic_functions_module_addr = 0;
     }
+    log_error_enabled = 1;
 
     /* TODO probably don't need zend_string_val_offset */
     #ifdef USE_ZEND
@@ -569,7 +571,7 @@ static void calc_sleep_time(struct timespec *end, struct timespec *start, struct
         sleep_ns = opt_sleep_ns - (end_ns - start_ns);
     }
     if (sleep_ns < 0) {
-        fprintf(stderr, "calc_sleep_time: Expected sleep_ns>0; decrease sample rate\n");
+        log_error("calc_sleep_time: Expected sleep_ns>0; decrease sample rate\n");
         sleep_ns = 0;
     }
     if (sleep_ns < 1000000000L) {
@@ -593,7 +595,7 @@ static void varpeek_add(char *varspec) {
     colon = strrchr(varspec, ':');
     dash = strrchr(varspec, '-');
     if (!at_sign || !colon) {
-        fprintf(stderr, "varpeek_add: Malformed varspec: %s\n\n", varspec);
+        log_error("varpeek_add: Malformed varspec: %s\n\n", varspec);
         usage(stderr, 1);
     }
     line_start = strtoul(colon+1, NULL, 10);
@@ -618,7 +620,7 @@ static void glopeek_add(char *glospec) {
     glopeek_entry_t *gentry;
     dot = strchr(glospec, '.');
     if (!dot) {
-        fprintf(stderr, "glopeek_add: Malformed glospec: %s\n\n", glospec);
+        log_error("glopeek_add: Malformed glospec: %s\n\n", glospec);
         usage(stderr, 1);
     }
     HASH_FIND_STR(glopeek_map, glospec, gentry);
@@ -636,7 +638,7 @@ static void glopeek_add(char *glospec) {
     } else if (strncmp("files.", glospec, dot-glospec) == 0) {
         index = 5;
     } else {
-        fprintf(stderr, "glopeek_add: Invalid global: %s\n\n", glospec);
+        log_error("glopeek_add: Invalid global: %s\n\n", glospec);
         usage(stderr, 1);
     }
     gentry = calloc(1, sizeof(glopeek_entry_t));
@@ -651,7 +653,7 @@ static int copy_proc_mem(pid_t pid, const char *what, void *raddr, void *laddr, 
     struct iovec local[1];
     struct iovec remote[1];
     if (raddr == NULL) {
-        fprintf(stderr, "copy_proc_mem: Not copying %s; raddr is NULL\n", what);
+        log_error("copy_proc_mem: Not copying %s; raddr is NULL\n", what);
         return 1;
     }
     local[0].iov_base = laddr;
@@ -664,7 +666,7 @@ static int copy_proc_mem(pid_t pid, const char *what, void *raddr, void *laddr, 
             perror("process_vm_readv");
             rv = 2; /* Return value of 2 tells main_pid to exit */
         } else {
-            fprintf(stderr, "copy_proc_mem: Failed to copy %s; err=%s raddr=%p size=%lu\n", what, strerror(errno), raddr, size);
+            log_error("copy_proc_mem: Failed to copy %s; err=%s raddr=%p size=%lu\n", what, strerror(errno), raddr, size);
             rv = 1;
         }
     }
@@ -704,7 +706,7 @@ static void try_get_php_version(trace_target_t *target) {
             perror("try_get_php_version: popen");
             return;
         } else if (fread(&phpv, sizeof(char), 3, pcmd) != 3) {
-            fprintf(stderr, "try_get_php_version: Could not detect PHP version\n");
+            log_error("try_get_php_version: Could not detect PHP version\n");
             pclose(pcmd);
             return;
         }
@@ -717,7 +719,15 @@ static void try_get_php_version(trace_target_t *target) {
     else if (strncmp(phpv, "7.3", 3) == 0) opt_phpv = "73";
     else if (strncmp(phpv, "7.4", 3) == 0) opt_phpv = "74";
     else if (strncmp(phpv, "8.0", 3) == 0) opt_phpv = "74";
-    else fprintf(stderr, "try_get_php_version: Unrecognized PHP version\n");
+    else log_error("try_get_php_version: Unrecognized PHP version\n");
+}
+
+void log_error(const char *fmt, ...) {
+    va_list args;
+    if (log_error_enabled) {
+        va_start(args, fmt);
+        vfprintf(stderr, fmt, args);
+    }
 }
 
 /* TODO figure out a way to make this cleaner */

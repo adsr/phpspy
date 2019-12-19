@@ -28,7 +28,7 @@ static int get_php_bin_path(pid_t pid, char *path_root, char *path) {
     char *cmd_fmt = "awk '/libphp[78]/{print $NF; exit 0} END{exit 1}' /proc/%d/maps"
         " || readlink /proc/%d/exe";
     if (popen_read_line(buf, sizeof(buf), cmd_fmt, (int)pid, (int)pid) != 0) {
-        fprintf(stderr, "get_php_bin_path: Failed\n");
+        log_error("get_php_bin_path: Failed\n");
         return 1;
     }
     snprintf(path_root, PHPSPY_STR_SIZE, "/proc/%d/root/%s", (int)pid, buf);
@@ -51,13 +51,13 @@ static int get_php_base_addr(pid_t pid, char *path_root, char *path, uint64_t *r
     uint64_t virt_addr;
     char *cmd_fmt = "grep -m1 ' %s$' /proc/%d/maps";
     if (popen_read_line(buf, sizeof(buf), cmd_fmt, path, (int)pid) != 0) {
-        fprintf(stderr, "get_php_base_addr: Failed to get start_addr\n");
+        log_error("get_php_base_addr: Failed to get start_addr\n");
         return 1;
     }
     start_addr = strtoull(buf, NULL, 16);
     cmd_fmt = "objdump -p %s | awk '/LOAD/{print $5; exit}'";
     if (popen_read_line(buf, sizeof(buf), cmd_fmt, path_root) != 0) {
-        fprintf(stderr, "get_php_base_addr: Failed to get virt_addr\n");
+        log_error("get_php_base_addr: Failed to get virt_addr\n");
         return 1;
     }
     virt_addr = strtoull(buf, NULL, 16);
@@ -69,7 +69,7 @@ static int get_symbol_offset(char *path_root, const char *symbol, uint64_t *radd
     char buf[PHPSPY_STR_SIZE];
     char *cmd_fmt = "objdump -Tt %s | awk '/ %s$/{print $1; exit}'";
     if (popen_read_line(buf, sizeof(buf), cmd_fmt, path_root, symbol) != 0) {
-        fprintf(stderr, "get_symbol_offset: Failed\n");
+        log_error("get_symbol_offset: Failed\n");
         return 1;
     }
     *raddr = strtoull(buf, NULL, 16);
@@ -89,7 +89,7 @@ static int popen_read_line(char *buf, size_t buf_size, char *cmd_fmt, ...) {
         return 1;
     }
     if (fgets(buf, buf_size-1, fp) == NULL) {
-        fprintf(stderr, "popen_read_line: No stdout; cmd=%s\n", cmd);
+        log_error("popen_read_line: No stdout; cmd=%s\n", cmd);
         pclose(fp);
         return 1;
     }
@@ -99,7 +99,7 @@ static int popen_read_line(char *buf, size_t buf_size, char *cmd_fmt, ...) {
         --buf_len;
     }
     if (buf_len < 1) {
-        fprintf(stderr, "popen_read_line: Expected strlen(buf)>0; cmd=%s\n", cmd);
+        log_error("popen_read_line: Expected strlen(buf)>0; cmd=%s\n", cmd);
         return 1;
     }
     buf[buf_len] = '\0';
