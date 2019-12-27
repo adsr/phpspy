@@ -43,13 +43,19 @@
 #include <php_structs_74.h>
 #endif
 
-#define try(__rv, __call) do { if (((__rv) = (__call)) != 0) return (__rv); } while(0)
+#define try(__rv, __call)       do { if (((__rv) = (__call)) != 0) return (__rv); } while(0)
+#define try_break(__rv, __call) do { if (((__rv) = (__call)) != 0) break;         } while(0)
 
 #define PHPSPY_VERSION "0.5.0"
 #define PHPSPY_MIN(a, b) ((a) < (b) ? (a) : (b))
 #define PHPSPY_MAX(a, b) ((a) > (b) ? (a) : (b))
 #define PHPSPY_STR_SIZE 256
 #define PHPSPY_MAX_BUCKETS 256
+
+#define PHPSPY_OK           0
+#define PHPSPY_ERR          1
+#define PHPSPY_ERR_PID_DEAD 2
+#define PHPSPY_ERR_BUF_FULL 4
 
 #define PHPSPY_TRACE_EVENT_INIT        0
 #define PHPSPY_TRACE_EVENT_STACK_BEGIN 1
@@ -150,7 +156,6 @@ typedef struct trace_context_s {
         trace_mem_t mem;
         trace_varpeek_t varpeek;
         trace_glopeek_t glopeek;
-        char error[PHPSPY_STR_SIZE];
     } event;
     void *event_udata;
     int (*event_handler)(struct trace_context_s *context, int event_type);
@@ -180,6 +185,7 @@ extern regex_t *opt_filter_re;
 extern int opt_filter_negate;
 extern int opt_verbose_fields_pid;
 extern int opt_verbose_fields_ts;
+extern int opt_continue_on_error;
 
 extern int main_pgrep();
 extern int main_pid(pid_t pid);

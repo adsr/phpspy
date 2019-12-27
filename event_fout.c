@@ -7,14 +7,13 @@ typedef struct event_handler_fout_udata_s {
     size_t rem;
 } event_handler_fout_udata_t;
 
-static int event_handler_fout_open(int *fd);
-
+static int event_handler_fout_write(event_handler_fout_udata_t *udata);
 static int event_handler_fout_snprintf(char **s, size_t *n, size_t *ret_len, int repl_delim, const char *fmt, ...);
+static int event_handler_fout_open(int *fd);
 
 int event_handler_fout(struct trace_context_s *context, int event_type) {
     int rv, fd;
     size_t len;
-    ssize_t write_len;
     trace_frame_t *frame;
     trace_request_t *request;
     event_handler_fout_udata_t *udata;
@@ -22,7 +21,7 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
 
     udata = (event_handler_fout_udata_t*)context->event_udata;
     if (!udata && event_type != PHPSPY_TRACE_EVENT_INIT) {
-        return 1;
+        return PHPSPY_ERR;
     }
     len = 0;
     switch (event_type) {
@@ -106,43 +105,49 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
             try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
             break;
         case PHPSPY_TRACE_EVENT_STACK_END:
+            if (udata->cur == udata->buf) {
+                /* buffer is empty */
+                break;
+            }
             if (opt_filter_re) {
                 rv = regexec(opt_filter_re, udata->buf, 0, NULL, 0);
                 if (opt_filter_negate == 0 && rv != 0) break;
                 if (opt_filter_negate != 0 && rv == 0) break;
             }
-
-            if (opt_verbose_fields_ts) {
-                gettimeofday(&tv, NULL);
-                try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 1, "# trace_ts = %f", (double)(tv.tv_sec + tv.tv_usec / 1000000.0)));
-                try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
-            }
-
-            if (opt_verbose_fields_pid) {
-                try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 1, "# pid = %d", context->target.pid));
-                try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
-            }
-
-            try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_trace_delim));
-            write_len = (udata->cur - udata->buf);
-
-            if (write_len < 1) {
-                /* nothing to write */
-            } else if (write(udata->fd, udata->buf, write_len) != write_len) {
-                log_error("event_handler_fout: Write failed (%s)\n", errno != 0 ? strerror(errno) : "partial");
-                return 1;
-            }
-
-            break;
-        case PHPSPY_TRACE_EVENT_ERROR:
-            log_error("%s\n", context->event.error);
+            do {
+                if (opt_verbose_fields_ts) {
+                    gettimeofday(&tv, NULL);
+                    try_break(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 1, "# trace_ts = %f", (double)(tv.tv_sec + tv.tv_usec / 1000000.0)));
+                    try_break(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
+                }
+                if (opt_verbose_fields_pid) {
+                    try_break(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 1, "# pid = %d", context->target.pid));
+                    try_break(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
+                }
+                try_break(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_trace_delim));
+            } while (0);
+            try(rv, event_handler_fout_write(udata));
             break;
         case PHPSPY_TRACE_EVENT_DEINIT:
             close(udata->fd);
             free(udata);
             break;
     }
-    return 0;
+    return PHPSPY_OK;
+}
+
+static int event_handler_fout_write(event_handler_fout_udata_t *udata) {
+    ssize_t write_len;
+    write_len = (udata->cur - udata->buf);
+
+    if (write_len < 1) {
+        /* nothing to write */
+    } else if (write(udata->fd, udata->buf, write_len) != write_len) {
+        log_error("event_handler_fout: Write failed (%s)\n", errno != 0 ? strerror(errno) : "partial");
+        return PHPSPY_ERR;
+    }
+
+    return PHPSPY_OK;
 }
 
 static int event_handler_fout_snprintf(char **s, size_t *n, size_t *ret_len, int repl_delim, const char *fmt, ...) {
@@ -156,7 +161,7 @@ static int event_handler_fout_snprintf(char **s, size_t *n, size_t *ret_len, int
 
     if (len < 0 || (size_t)len >= *n) {
         log_error("event_handler_fout_snprintf: Not enough space in buffer; truncating\n");
-        return 1;
+        return PHPSPY_ERR | PHPSPY_ERR_BUF_FULL;
     }
 
     if (repl_delim) {
@@ -172,7 +177,7 @@ static int event_handler_fout_snprintf(char **s, size_t *n, size_t *ret_len, int
     *n -= len;
     *ret_len = (size_t)len;
 
-    return 0;
+    return PHPSPY_OK;
 }
 
 static int event_handler_fout_open(int *fd) {
@@ -181,15 +186,15 @@ static int event_handler_fout_open(int *fd) {
         tfd = dup(STDOUT_FILENO);
         if (tfd < 0) {
             perror("event_handler_fout_open: dup");
-            return 1;
+            return PHPSPY_ERR;
         }
     } else {
         tfd = open(opt_path_output, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
         if (tfd < 0) {
             perror("event_handler_fout_open: open");
-            return 1;
+            return PHPSPY_ERR;
         }
     }
     *fd = tfd;
-    return 0;
+    return PHPSPY_OK;
 }

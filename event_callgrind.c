@@ -110,9 +110,6 @@ int event_handler_callgrind(struct trace_context_s *context, int event_type) {
             udata->prev_len = udata->self_len;
             udata->self_len = 0;
             break;
-        case PHPSPY_TRACE_EVENT_ERROR:
-            log_error("%s\n", context->event.error);
-            break;
         case PHPSPY_TRACE_EVENT_DEINIT:
             callgrind_dump(udata);
             callgrind_free(udata);

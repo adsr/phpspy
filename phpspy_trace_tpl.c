@@ -18,10 +18,15 @@
 #define zval                  concat2(zval_,                  phpv)
 
 #define do_trace              concat2(do_trace_,              phpv)
-#define copy_zarray           concat2(copy_zarray_,           phpv)
+#define copy_executor_globals concat2(copy_executor_globals_, phpv)
+#define copy_stack            concat2(copy_stack_,            phpv)
+#define copy_request_info     concat2(copy_request_info_,     phpv)
+#define copy_memory_info      concat2(copy_memory_info_,      phpv)
+#define copy_globals          concat2(copy_globals_,          phpv)
+#define copy_locals           concat2(copy_locals_,           phpv)
 #define copy_zstring          concat2(copy_zstring_,          phpv)
 #define copy_zval             concat2(copy_zval_,             phpv)
-#define varpeek_find          concat2(varpeek_find_,          phpv)
+#define copy_zarray           concat2(copy_zarray_,           phpv)
 
 #include "phpspy_trace.c"
 
