@@ -28,6 +28,7 @@ int opt_filter_negate = 0;
 int opt_verbose_fields_pid = 0;
 int opt_verbose_fields_ts = 0;
 int (*opt_event_handler)(struct trace_context_s *context, int event_type) = event_handler_fout;
+int opt_continue_on_error = 0;
 
 size_t zend_string_val_offset = 0;
 int done = 0;
@@ -135,6 +136,8 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "                                       (p=pid t=timestamp\n");
     fprintf(fp, "                                       capital=negation)\n");
     fprintf(fp, "                                       (default: PT; none)\n");
+    fprintf(fp, "  -c, --continue-on-error            Attempt to continue tracing after\n");
+    fprintf(fp, "                                       encountering an error\n");
     fprintf(fp, "  -#, --comment=<any>                Ignored; intended for self-documenting\n");
     fprintf(fp, "                                       commands\n");
     fprintf(fp, "  -@, --nothing                      Ignored\n");
@@ -217,6 +220,7 @@ static void parse_opts(int argc, char **argv) {
         { "filter",                required_argument, NULL, 'f' },
         { "filter-negate",         required_argument, NULL, 'F' },
         { "verbose-fields",        required_argument, NULL, 'd' },
+        { "continue-on-error",     no_argument,       NULL, 'c' },
         { "event-handler",         required_argument, NULL, 'j' },
         { "comment",               required_argument, NULL, '#' },
         { "nothing",               no_argument,       NULL, '@' },
@@ -237,7 +241,7 @@ static void parse_opts(int argc, char **argv) {
     while (
         optind < argc
         && argv[optind][0] == '-'
-        && (c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:i:n:r:mo:O:E:x:a:1f:F:d:j:#:@vSe:g:t", long_opts, NULL)) != -1
+        && (c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:i:n:r:mo:O:E:x:a:1f:F:d:cj:#:@vSe:g:t", long_opts, NULL)) != -1
     ) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
@@ -295,6 +299,7 @@ static void parse_opts(int argc, char **argv) {
                     }
                 }
                 break;
+            case 'c': opt_continue_on_error = 1; break;
             case 'j':
                 if (strcmp(optarg, "fout") == 0) {
                     opt_event_handler = event_handler_fout;
@@ -327,7 +332,7 @@ static void parse_opts(int argc, char **argv) {
 }
 
 int main_pid(pid_t pid) {
-    int rv;
+    int rv, hit_limit;
     uint64_t n;
     trace_context_t context;
     struct timespec start_time, end_time, sleep_time, _stop_time, limit_time;
@@ -372,28 +377,34 @@ int main_pid(pid_t pid) {
     }
 
     n = 0;
+    hit_limit = 0;
     while (!done) {
         rv = 0;
         clock_get(&start_time);
-        if (opt_pause) rv |= pause_pid(pid);                             /* maybe PTRACE_ATTACH */
-        rv |= do_trace_ptr(&context);                                    /* trace */
-        if (opt_pause) rv |= unpause_pid(pid);                           /* maybe PTRACE_DETACH */
-        if ((rv == 0 && ++n == opt_trace_limit) || (rv & 2) != 0) break; /* maybe apply trace limit */
+        if (opt_pause) rv |= pause_pid(pid);                            /* maybe PTRACE_ATTACH */
+        rv |= do_trace_ptr(&context);                                   /* trace */
+        if (opt_pause) rv |= unpause_pid(pid);                          /* maybe PTRACE_DETACH */
+        if ((rv == PHPSPY_OK && ++n == opt_trace_limit)) {              /* maybe apply trace limit */
+            hit_limit = 1;
+            break;
+        }
+        if ((rv & PHPSPY_ERR_PID_DEAD) != 0) break;                     /* bail if pid died */
         clock_get(&end_time);
-        if (stop_time && clock_diff(&end_time, stop_time) >= 1) break;   /* maybe apply time limit */
+        if (stop_time && clock_diff(&end_time, stop_time) >= 1) {       /* maybe apply time limit */
+            hit_limit = 1;
+            break;
+        }
         calc_sleep_time(&end_time, &start_time, &sleep_time);
-        nanosleep(&sleep_time, NULL);                                    /* sleep */
+        nanosleep(&sleep_time, NULL);                                   /* sleep */
     }
 
     context.event_handler(&context, PHPSPY_TRACE_EVENT_DEINIT);
 
     /* For pgrep mode, tell the main pid to exit if we went past the trace limit or time limit */
-    if ((opt_trace_limit > 0 && n >= opt_trace_limit) || (stop_time && clock_diff(&end_time, stop_time) >= 1)) {
-        write_done_pipe();
-    }
+    if (hit_limit) write_done_pipe();
 
     /* TODO proper signal handling for non-pgrep modes */
-    return 0;
+    return PHPSPY_OK;
 }
 
 static int main_fork(int argc, char **argv) {
@@ -451,13 +462,13 @@ static int pause_pid(pid_t pid) {
     if (ptrace(PTRACE_ATTACH, pid, 0, 0) == -1) {
         rv = errno;
         perror("ptrace");
-        return rv == ESRCH ? 2 : 1;
+        return PHPSPY_ERR + (rv == ESRCH ? PHPSPY_ERR_PID_DEAD : 0);
     }
     if (waitpid(pid, NULL, 0) < 0) {
         perror("waitpid");
-        return 1;
+        return PHPSPY_ERR;
     }
-    return 0;
+    return PHPSPY_OK;
 }
 
 static int unpause_pid(pid_t pid) {
@@ -465,9 +476,9 @@ static int unpause_pid(pid_t pid) {
     if (ptrace(PTRACE_DETACH, pid, 0, 0) == -1) {
         rv = errno;
         perror("ptrace");
-        return rv == ESRCH ? 2 : 1;
+        return PHPSPY_ERR + (rv == ESRCH ? PHPSPY_ERR_PID_DEAD : 0);
     }
-    return 0;
+    return PHPSPY_OK;
 }
 
 static void redirect_child_stdio(int proc_fd, char *opt_path) {
@@ -531,7 +542,7 @@ static int find_addresses(trace_target_t *target) {
     #else
     zend_string_val_offset = offsetof(zend_string_70, val);
     #endif
-    return 0;
+    return PHPSPY_OK;
 }
 
 static void clock_get(struct timespec *ts) {
@@ -649,28 +660,29 @@ static void glopeek_add(char *glospec) {
 }
 
 static int copy_proc_mem(pid_t pid, const char *what, void *raddr, void *laddr, size_t size) {
-    int rv;
     struct iovec local[1];
     struct iovec remote[1];
+
     if (raddr == NULL) {
         log_error("copy_proc_mem: Not copying %s; raddr is NULL\n", what);
-        return 1;
+        return PHPSPY_ERR;
     }
+
     local[0].iov_base = laddr;
     local[0].iov_len = size;
     remote[0].iov_base = raddr;
     remote[0].iov_len = size;
-    rv = 0;
+
     if (process_vm_readv(pid, local, 1, remote, 1, 0) == -1) {
         if (errno == ESRCH) { /* No such process */
             perror("process_vm_readv");
-            rv = 2; /* Return value of 2 tells main_pid to exit */
-        } else {
-            log_error("copy_proc_mem: Failed to copy %s; err=%s raddr=%p size=%lu\n", what, strerror(errno), raddr, size);
-            rv = 1;
+            return PHPSPY_ERR | PHPSPY_ERR_PID_DEAD;
         }
+        log_error("copy_proc_mem: Failed to copy %s; err=%s raddr=%p size=%lu\n", what, strerror(errno), raddr, size);
+        return PHPSPY_ERR;
     }
-    return rv;
+
+    return PHPSPY_OK;
 }
 
 static void try_get_php_version(trace_target_t *target) {

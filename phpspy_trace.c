@@ -1,48 +1,93 @@
 #define try_copy_proc_mem(__what, __raddr, __laddr, __size) \
     try(rv, copy_proc_mem(context->target.pid, (__what), (__raddr), (__laddr), (__size)))
 
-static int varpeek_find(trace_context_t *context, zend_op *zop, zend_execute_data *remote_execute_data, zend_op_array *op_array, char *file, int file_len);
+static int copy_executor_globals(trace_context_t *context, zend_executor_globals *executor_globals);
+static int copy_stack(trace_context_t *context, zend_execute_data *remote_execute_data, int *depth);
+static int copy_request_info(trace_context_t *context);
+static int copy_memory_info(trace_context_t *context);
+static int copy_globals(trace_context_t *context);
+static int copy_locals(trace_context_t *context, zend_op *zop, zend_execute_data *remote_execute_data, zend_op_array *op_array, char *file, int file_len);
 static int copy_zstring(trace_context_t *context, const char *what, zend_string *rzstring, char *buf, size_t buf_size, size_t *buf_len);
 static int copy_zval(trace_context_t *context, zval *local_zval, char *buf, size_t buf_size, size_t *buf_len);
 static int copy_zarray(trace_context_t *context, zend_array *local_arr, char *buf, size_t buf_size, size_t *buf_len, char *single_key);
 
 static int do_trace(trace_context_t *context) {
-    int depth;
-    int rv;
-    zend_execute_data *remote_execute_data;
+    int rv, depth;
     zend_executor_globals executor_globals;
-    zend_alloc_globals alloc_globals;
+
+    try(rv, copy_executor_globals(context, &executor_globals));
+    try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_STACK_BEGIN));
+
+    rv = PHPSPY_OK;
+    do {
+        #define maybe_break_on_err() do {                   \
+            if ((rv & PHPSPY_ERR_PID_DEAD) != 0) {          \
+                break;                                      \
+            } else if ((rv & PHPSPY_ERR_BUF_FULL) != 0) {   \
+                break;                                      \
+            } else if (!opt_continue_on_error) {            \
+                break;                                      \
+            }                                               \
+        } while(0)
+
+        rv |= copy_stack(context, executor_globals.current_execute_data, &depth);
+        maybe_break_on_err();
+        if (depth < 1) break;
+
+        if (opt_capture_req) {
+            rv |= copy_request_info(context);
+            maybe_break_on_err();
+        }
+
+        if (opt_capture_mem) {
+            rv |= copy_memory_info(context);
+            maybe_break_on_err();
+        }
+
+        if (HASH_CNT(hh, glopeek_map) > 0) {
+            rv |= copy_globals(context);
+            maybe_break_on_err();
+        }
+
+        #undef maybe_break_on_err
+    } while (0);
+
+    if (rv == PHPSPY_OK || opt_continue_on_error) {
+        try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_STACK_END));
+    }
+
+    return PHPSPY_OK;
+}
+
+static int copy_executor_globals(trace_context_t *context, zend_executor_globals *executor_globals) {
+    int rv;
+    executor_globals->current_execute_data = NULL;
+    try_copy_proc_mem("executor_globals", (void*)context->target.executor_globals_addr, executor_globals, sizeof(*executor_globals));
+    return PHPSPY_OK;
+}
+
+static int copy_stack(trace_context_t *context, zend_execute_data *remote_execute_data, int *depth) {
+    int rv;
     zend_execute_data execute_data;
-    zend_mm_heap mm_heap;
-    zend_class_entry zce;
     zend_function zfunc;
     zend_string zstring;
+    zend_class_entry zce;
     zend_op zop;
-    sapi_globals_struct sapi_globals;
-    php_core_globals core_globals;
     trace_target_t *target;
     trace_frame_t *frame;
-    trace_request_t *request;
-    glopeek_entry_t *gentry, *gentry_tmp;
 
     target = &context->target;
     frame = &context->event.frame;
+    *depth = 0;
 
-    depth = 0;
-
-    executor_globals.current_execute_data = NULL;
-    try_copy_proc_mem("executor_globals", (void*)target->executor_globals_addr, &executor_globals, sizeof(executor_globals));
-    remote_execute_data = executor_globals.current_execute_data;
-
-    /* TODO reduce number of copy calls */
-    try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_STACK_BEGIN));
-    while (remote_execute_data && depth != opt_max_stack_depth) { /* TODO make options struct */
+    while (remote_execute_data && *depth != opt_max_stack_depth) { /* TODO make options struct */
         memset(&execute_data, 0, sizeof(execute_data));
         memset(&zfunc, 0, sizeof(zfunc));
         memset(&zstring, 0, sizeof(zstring));
         memset(&zce, 0, sizeof(zce));
         memset(&zop, 0, sizeof(zop));
 
+        /* TODO reduce number of copy calls */
         try_copy_proc_mem("execute_data", remote_execute_data, &execute_data, sizeof(execute_data));
         try_copy_proc_mem("zfunc", execute_data.func, &zfunc, sizeof(zfunc));
         if (zfunc.common.function_name) {
@@ -62,70 +107,96 @@ static int do_trace(trace_context_t *context) {
             frame->loc.lineno = zfunc.op_array.line_start;
             /* TODO add comments */
             if (HASH_CNT(hh, varpeek_map) > 0) {
-                try_copy_proc_mem("opline", execute_data.opline, &zop, sizeof(zop));
-                varpeek_find(context, &zop, remote_execute_data, &zfunc.op_array, frame->loc.file, frame->loc.file_len);
+                if (copy_proc_mem(target->pid, "opline", execute_data.opline, &zop, sizeof(zop)) == PHPSPY_OK) {
+                    copy_locals(context, &zop, remote_execute_data, &zfunc.op_array, frame->loc.file, frame->loc.file_len);
+                }
             }
         } else {
             frame->loc.file_len = snprintf(frame->loc.file, sizeof(frame->loc.file), "<internal>");
             frame->loc.lineno = -1;
         }
-        frame->depth = depth;
+        frame->depth = *depth;
         try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_FRAME));
         remote_execute_data = execute_data.prev_execute_data;
-        depth += 1;
+        *depth += 1;
     }
 
-    if (depth < 1) {
-        return 1;
-    }
-
-    if (opt_capture_req) {
-        memset(&sapi_globals, 0, sizeof(sapi_globals));
-        request = &context->event.request;
-        try_copy_proc_mem("sapi_globals", (void*)target->sapi_globals_addr, &sapi_globals, sizeof(sapi_globals));
-        #define try_copy_sapi_global_field(__field, __local) do {                                                   \
-            if ((opt_capture_req_ ## __local) && sapi_globals.request_info.__field) {                               \
-                try_copy_proc_mem(#__field, sapi_globals.request_info.__field, request->__local, PHPSPY_STR_SIZE);  \
-            } else {                                                                                                \
-                request->__local[0] = '-';                                                                          \
-                request->__local[1] = '\0';                                                                         \
-            }                                                                                                       \
-        } while (0)
-        try_copy_sapi_global_field(query_string, qstring);
-        try_copy_sapi_global_field(cookie_data, cookie);
-        try_copy_sapi_global_field(request_uri, uri);
-        try_copy_sapi_global_field(path_translated, path);
-        #undef try_copy_sapi_global_field
-        request->ts = sapi_globals.global_request_time;
-        try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_REQUEST));
-    }
-
-    if (opt_capture_mem) {
-        memset(&mm_heap, 0, sizeof(mm_heap));
-        try_copy_proc_mem("alloc_globals", (void*)target->alloc_globals_addr, &alloc_globals, sizeof(alloc_globals));
-        try_copy_proc_mem("mm_heap", alloc_globals.mm_heap, &mm_heap, sizeof(mm_heap));
-        context->event.mem.size = mm_heap.size;
-        context->event.mem.peak = mm_heap.peak;
-        try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_MEM));
-    }
-
-    if (HASH_CNT(hh, glopeek_map) > 0) {
-        memset(&core_globals, 0, sizeof(php_core_globals));
-        try_copy_proc_mem("core_globals", (void*)target->core_globals_addr, &core_globals, sizeof(core_globals));
-        HASH_ITER(hh, glopeek_map, gentry, gentry_tmp) {
-            try(rv, copy_zarray(context, core_globals.http_globals[gentry->index].value.arr, context->buf, sizeof(context->buf), &context->buf_len, gentry->varname));
-            context->event.glopeek.gentry = gentry;
-            context->event.glopeek.zval_str = context->buf;
-            try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_GLOPEEK));
-        }
-    }
-
-    try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_STACK_END));
-
-    return 0;
+    return PHPSPY_OK;
 }
 
-static int varpeek_find(trace_context_t *context, zend_op *zop, zend_execute_data *remote_execute_data, zend_op_array *op_array, char *file, int file_len) {
+static int copy_request_info(trace_context_t *context) {
+    int rv;
+    sapi_globals_struct sapi_globals;
+    trace_target_t *target;
+    trace_request_t *request;
+
+    memset(&sapi_globals, 0, sizeof(sapi_globals));
+    request = &context->event.request;
+    target = &context->target;
+
+    try_copy_proc_mem("sapi_globals", (void*)target->sapi_globals_addr, &sapi_globals, sizeof(sapi_globals));
+    #define try_copy_sapi_global_field(__field, __local) do {                                                   \
+        if ((opt_capture_req_ ## __local) && sapi_globals.request_info.__field) {                               \
+            try_copy_proc_mem(#__field, sapi_globals.request_info.__field, request->__local, PHPSPY_STR_SIZE);  \
+        } else {                                                                                                \
+            request->__local[0] = '-';                                                                          \
+            request->__local[1] = '\0';                                                                         \
+        }                                                                                                       \
+    } while (0)
+    try_copy_sapi_global_field(query_string, qstring);
+    try_copy_sapi_global_field(cookie_data, cookie);
+    try_copy_sapi_global_field(request_uri, uri);
+    try_copy_sapi_global_field(path_translated, path);
+    #undef try_copy_sapi_global_field
+
+    request->ts = sapi_globals.global_request_time;
+
+    try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_REQUEST));
+
+    return PHPSPY_OK;
+}
+
+static int copy_memory_info(trace_context_t *context) {
+    int rv;
+    zend_mm_heap mm_heap;
+    zend_alloc_globals alloc_globals;
+    trace_target_t *target;
+
+    memset(&mm_heap, 0, sizeof(mm_heap));
+    alloc_globals.mm_heap = NULL;
+    target = &context->target;
+
+    try_copy_proc_mem("alloc_globals", (void*)target->alloc_globals_addr, &alloc_globals, sizeof(alloc_globals));
+    try_copy_proc_mem("mm_heap", alloc_globals.mm_heap, &mm_heap, sizeof(mm_heap));
+    context->event.mem.size = mm_heap.size;
+    context->event.mem.peak = mm_heap.peak;
+
+    try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_MEM));
+
+    return PHPSPY_OK;
+}
+
+static int copy_globals(trace_context_t *context) {
+    int rv;
+    php_core_globals core_globals;
+    glopeek_entry_t *gentry, *gentry_tmp;
+    trace_target_t *target;
+
+    memset(&core_globals, 0, sizeof(php_core_globals));
+    target = &context->target;
+
+    try_copy_proc_mem("core_globals", (void*)target->core_globals_addr, &core_globals, sizeof(core_globals));
+    HASH_ITER(hh, glopeek_map, gentry, gentry_tmp) {
+        try(rv, copy_zarray(context, core_globals.http_globals[gentry->index].value.arr, context->buf, sizeof(context->buf), &context->buf_len, gentry->varname));
+        context->event.glopeek.gentry = gentry;
+        context->event.glopeek.zval_str = context->buf;
+        try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_GLOPEEK));
+    }
+
+    return PHPSPY_OK;
+}
+
+static int copy_locals(trace_context_t *context, zend_op *zop, zend_execute_data *remote_execute_data, zend_op_array *op_array, char *file, int file_len) {
     int rv, i, num_vars_found, num_vars_peeking;
     char tmp[PHPSPY_STR_SIZE];
     size_t tmp_len;
@@ -137,7 +208,7 @@ static int varpeek_find(trace_context_t *context, zend_op *zop, zend_execute_dat
 
     snprintf(varpeek_key, sizeof(varpeek_key), "%.*s:%d", file_len, file, zop->lineno);
     HASH_FIND_STR(varpeek_map, varpeek_key, entry);
-    if (!entry) return 0;
+    if (!entry) return PHPSPY_OK;
 
     num_vars_found = 0;
     num_vars_peeking = HASH_CNT(hh, entry->varmap);
@@ -158,7 +229,7 @@ static int varpeek_find(trace_context_t *context, zend_op *zop, zend_execute_dat
         if (num_vars_found >= num_vars_peeking) break;
     }
 
-    return 0;
+    return PHPSPY_OK;
 }
 
 static int copy_zstring(trace_context_t *context, const char *what, zend_string *rzstring, char *buf, size_t buf_size, size_t *buf_len) {
@@ -170,7 +241,7 @@ static int copy_zstring(trace_context_t *context, const char *what, zend_string 
     *buf_len = PHPSPY_MIN(lzstring.len, PHPSPY_MAX(1, buf_size)-1);
     try_copy_proc_mem(what, ((char*)rzstring) + zend_string_val_offset, buf, *buf_len);
     *(buf + (int)*buf_len) = '\0';
-    return 0;
+    return PHPSPY_OK;
 }
 
 static int copy_zval(trace_context_t *context, zval *local_zval, char *buf, size_t buf_size, size_t *buf_len) {
@@ -195,9 +266,9 @@ static int copy_zval(trace_context_t *context, zval *local_zval, char *buf, size
         default:
             /* TODO handle other zval types */
             /* fprintf(context->fout, "value not supported, found type: %d\n", type); */
-            return 1;
+            return PHPSPY_ERR;
     }
-    return 0;
+    return PHPSPY_OK;
 }
 
 static int copy_zarray(trace_context_t *context, zend_array *local_arr, char *buf, size_t buf_size, size_t *buf_len, char *single_key) {
@@ -225,7 +296,7 @@ static int copy_zarray(trace_context_t *context, zend_array *local_arr, char *bu
             }
             try(rv, copy_zval(context, &buckets[i].val, buf, buf_size, &tmp_len));
             *buf_len = (size_t)(buf - obuf);
-            return 0;
+            return PHPSPY_OK;
         } else {
             if (buckets[i].key != 0) {
                 try(rv, copy_zstring(context, "array_key", buckets[i].key, buf, buf_size, &tmp_len));
@@ -249,8 +320,8 @@ static int copy_zarray(trace_context_t *context, zend_array *local_arr, char *bu
     }
 
     /* If we get here when looking for a single_key, we have lost */
-    if (single_key) return 1;
+    if (single_key) return PHPSPY_ERR;
 
     *buf_len = (size_t)(buf - obuf);
-    return 0;
+    return PHPSPY_OK;
 }
