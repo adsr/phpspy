@@ -29,6 +29,7 @@ int opt_verbose_fields_pid = 0;
 int opt_verbose_fields_ts = 0;
 int (*opt_event_handler)(struct trace_context_s *context, int event_type) = event_handler_fout;
 int opt_continue_on_error = 0;
+int opt_fout_buffer_size = 4096;
 
 size_t zend_string_val_offset = 0;
 int done = 0;
@@ -94,8 +95,8 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "Options:\n");
     fprintf(fp, "  -h, --help                         Show this help\n");
     fprintf(fp, "  -p, --pid=<pid>                    Trace PHP process at `pid`\n");
-    fprintf(fp, "  -P, --pgrep=<args>                 Concurrently trace processes that match\n");
-    fprintf(fp, "                                       pgrep `args` (see also `-T`)\n");
+    fprintf(fp, "  -P, --pgrep=<args>                 Concurrently trace processes that\n");
+    fprintf(fp, "                                       match pgrep `args` (see also `-T`)\n");
     fprintf(fp, "  -T, --threads=<num>                Set number of threads to use with `-P`\n");
     fprintf(fp, "                                       (default: %d)\n", opt_num_workers);
     fprintf(fp, "  -s, --sleep-ns=<ns>                Sleep `ns` nanoseconds between traces\n");
@@ -116,8 +117,8 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "                                       capital=negation)\n");
     fprintf(fp, "                                       (default: QCUP; none)\n");
     fprintf(fp, "  -m, --memory-usage                 Capture peak and current memory usage\n");
-    fprintf(fp, "                                       with each trace (requires PHP debug\n");
-    fprintf(fp, "                                       symbols)\n");
+    fprintf(fp, "                                       with each trace (requires target PHP\n");
+    fprintf(fp, "                                       process to have debug symbols)\n");
     fprintf(fp, "  -o, --output=<path>                Write phpspy output to `path`\n");
     fprintf(fp, "                                       (default: %s; -=stdout)\n", opt_path_output);
     fprintf(fp, "  -O, --child-stdout=<path>          Write child stdout to `path`\n");
@@ -129,6 +130,13 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "  -a, --addr-sapi-globals=<hex>      Set address of sapi_globals in hex\n");
     fprintf(fp, "                                       (default: %lu; 0=find dynamically)\n", opt_executor_globals_addr);
     fprintf(fp, "  -1, --single-line                  Output in single-line mode\n");
+    fprintf(fp, "  -b, --buffer-size=<size>           Set output buffer size to `size`.\n");
+    fprintf(fp, "                                       Note: In `-P` mode, setting this\n");
+    fprintf(fp, "                                       above PIPE_BUF (4096) may lead to\n");
+    fprintf(fp, "                                       interlaced writes across threads.\n");
+    fprintf(fp, "                                       (default: %d)\n", opt_fout_buffer_size);
+    fprintf(fp, "  -f, --filter=<regex>               Filter output by POSIX regex\n");
+    fprintf(fp, "                                       (default: none)\n");
     fprintf(fp, "  -f, --filter=<regex>               Filter output by POSIX regex\n");
     fprintf(fp, "                                       (default: none)\n");
     fprintf(fp, "  -F, --filter-negate=<regex>        Same as `-f` except negated\n");
@@ -153,19 +161,18 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "                                       <varname>@<path>:<lineno>\n");
     fprintf(fp, "                                       <varname>@<path>:<start>-<end>\n");
     fprintf(fp, "                                       e.g., xyz@/path/to.php:10-20\n");
-    fprintf(fp, "  -g, --peek-global=<glospec>        Peek at the contents of a superglobal var\n");
-    fprintf(fp, "                                       located at `glospec`, which has the\n");
-    fprintf(fp, "                                       format: <global>.<key>\n");
+    fprintf(fp, "  -g, --peek-global=<glospec>        Peek at the contents of a superglobal\n");
+    fprintf(fp, "                                       var located at `glospec`, which has\n");
+    fprintf(fp, "                                       the format: <global>.<key>\n");
     fprintf(fp, "                                       where <global> is one of:\n");
-    fprintf(fp, "                                       post, get, cookies, server, env, files,\n");
-    fprintf(fp, "                                       e.g., server.request_id\n");
+    fprintf(fp, "                                       post, get, cookies, server, env,\n");
+    fprintf(fp, "                                       files, e.g., server.request_id\n");
     fprintf(fp, "  -t, --top                          Show dynamic top-like output\n");
     cleanup();
     exit(exit_code);
 }
 
-static long strtol_with_min_or_exit(const char* name, const char* str, int min)
-{
+static long strtol_with_min_or_exit(const char *name, const char *str, int min) {
     long result;
     char *end;
     errno = 0;
@@ -183,15 +190,14 @@ static long strtol_with_min_or_exit(const char* name, const char* str, int min)
     return result;
 }
 
-static int atoi_with_min_or_exit(const char* name, const char* str, int min)
-{
+static int atoi_with_min_or_exit(const char *name, const char *str, int min) {
     long result = strtol_with_min_or_exit(name, str, min);
-#if LONG_MAX > INT_MAX
+    #if LONG_MAX > INT_MAX
     if (result > INT_MAX) {
         log_error("Expected value that could fit in a C int for %s, got '%s'\n", name, str);
         usage(stderr, 1);
     }
-#endif
+    #endif
     return (int)result;
 }
 
@@ -217,6 +223,7 @@ static void parse_opts(int argc, char **argv) {
         { "addr-executor-globals", required_argument, NULL, 'x' },
         { "addr-sapi-globals",     required_argument, NULL, 'a' },
         { "single-line",           no_argument,       NULL, '1' },
+        { "buffer-size",           required_argument, NULL, 'b' },
         { "filter",                required_argument, NULL, 'f' },
         { "filter-negate",         required_argument, NULL, 'F' },
         { "verbose-fields",        required_argument, NULL, 'd' },
@@ -241,7 +248,7 @@ static void parse_opts(int argc, char **argv) {
     while (
         optind < argc
         && argv[optind][0] == '-'
-        && (c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:i:n:r:mo:O:E:x:a:1f:F:d:cj:#:@vSe:g:t", long_opts, NULL)) != -1
+        && (c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:i:n:r:mo:O:E:x:a:1b:f:F:d:cj:#:@vSe:g:t", long_opts, NULL)) != -1
     ) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
@@ -276,6 +283,7 @@ static void parse_opts(int argc, char **argv) {
             case 'x': opt_executor_globals_addr = strtoull(optarg, NULL, 16); break;
             case 'a': opt_sapi_globals_addr = strtoull(optarg, NULL, 16); break;
             case '1': opt_frame_delim = '\t'; opt_trace_delim = '\n'; break;
+            case 'b': opt_fout_buffer_size = atoi_with_min_or_exit("-b", optarg, 1); break;
             case 'f':
             case 'F':
                 if (opt_filter_re) {

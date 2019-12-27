@@ -2,8 +2,9 @@
 
 typedef struct event_handler_fout_udata_s {
     int fd;
-    char buf[4097]; /* writes lte PIPE_BUF (4kb) are atomic (+ 1 for null char) */
+    char *buf;
     char *cur;
+    size_t buf_size;
     size_t rem;
 } event_handler_fout_udata_t;
 
@@ -29,13 +30,16 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
             try(rv, event_handler_fout_open(&fd));
             udata = calloc(1, sizeof(event_handler_fout_udata_t));
             udata->fd = fd;
+            udata->buf_size = opt_fout_buffer_size + 1; /* + 1 for null char */
+            udata->buf = malloc(udata->buf_size);
             udata->cur = udata->buf;
-            udata->rem = sizeof(udata->buf);
+            udata->rem = udata->buf_size;
             context->event_udata = udata;
             break;
         case PHPSPY_TRACE_EVENT_STACK_BEGIN:
             udata->cur = udata->buf;
-            udata->rem = sizeof(udata->buf);
+            udata->cur[0] = '\0';
+            udata->rem = udata->buf_size;
             break;
         case PHPSPY_TRACE_EVENT_FRAME:
             frame = &context->event.frame;
@@ -130,6 +134,7 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
             break;
         case PHPSPY_TRACE_EVENT_DEINIT:
             close(udata->fd);
+            free(udata->buf);
             free(udata);
             break;
     }
@@ -165,7 +170,7 @@ static int event_handler_fout_snprintf(char **s, size_t *n, size_t *ret_len, int
     }
 
     if (repl_delim) {
-        for (i = 0; i < len; i++) {
+        for (i = 0; i < len; i++) { /* TODO optimize */
             c = *s + i;
             if (*c == opt_trace_delim || *c == opt_frame_delim) {
                 *c = '?';
