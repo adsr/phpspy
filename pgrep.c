@@ -37,6 +37,10 @@ int main_pgrep() {
         pthread_create(&work_threads[i], NULL, run_work_thread, (void*)i);
     }
 
+    if (opt_time_limit_ms > 0) {
+        alarm(PHPSPY_MAX(1, opt_time_limit_ms / 1000));
+    }
+
     pgrep_for_pids();
 
     for (i = 0; i < opt_num_workers; i++) {
@@ -204,6 +208,7 @@ static void *run_signal_thread(void *arg) {
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
     sigaction(SIGHUP, &sa, NULL);
+    sigaction(SIGALRM, &sa, NULL);
     sa.sa_handler = SIG_IGN;
     sigaction(SIGPIPE, &sa, NULL);
 

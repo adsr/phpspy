@@ -187,6 +187,7 @@ extern int opt_verbose_fields_pid;
 extern int opt_verbose_fields_ts;
 extern int opt_continue_on_error;
 extern int opt_fout_buffer_size;
+extern long opt_time_limit_ms;
 
 extern int main_pgrep();
 extern int main_pid(pid_t pid);

@@ -38,6 +38,8 @@ varpeek_entry_t *varpeek_map = NULL;
 glopeek_entry_t *glopeek_map = NULL;
 regex_t filter_re;
 int log_error_enabled = 1;
+int in_pgrep_mode = 0;
+uint64_t trace_count = 0;
 
 static void parse_opts(int argc, char **argv);
 static int main_fork(int argc, char **argv);
@@ -74,6 +76,7 @@ int main(int argc, char **argv) {
     } else if (opt_pid != -1) {
         rv = main_pid(opt_pid);
     } else if (opt_pgrep_args != NULL) {
+        in_pgrep_mode = 1;
         rv = main_pgrep();
     } else if (optind < argc) {
         rv = main_fork(argc, argv);
@@ -107,8 +110,10 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "                                       (default: %s;\n", opt_phpv);
     fprintf(fp, "                                       supported: 70 71 72 73 74)\n");
     fprintf(fp, "  -l, --limit=<num>                  Limit total number of traces to capture\n");
+    fprintf(fp, "                                       (approximate limit in pgrep mode)\n");
     fprintf(fp, "                                       (default: %lu; 0=unlimited)\n", opt_trace_limit);
     fprintf(fp, "  -i, --time-limit-ms=<ms>           Stop tracing after `ms` milliseconds\n");
+    fprintf(fp, "                                       (second granularity in pgrep mode)\n");
     fprintf(fp, "                                       (default: %lu; 0=unlimited)\n", opt_time_limit_ms);
     fprintf(fp, "  -n, --max-depth=<max>              Set max stack trace depth\n");
     fprintf(fp, "                                       (default: %d; -1=unlimited)\n", opt_max_stack_depth);
@@ -340,8 +345,7 @@ static void parse_opts(int argc, char **argv) {
 }
 
 int main_pid(pid_t pid) {
-    int rv, hit_limit;
-    uint64_t n;
+    int rv;
     trace_context_t context;
     struct timespec start_time, end_time, sleep_time, _stop_time, limit_time;
     struct timespec *stop_time;
@@ -375,8 +379,11 @@ int main_pid(pid_t pid) {
     }
     #endif
 
+    /* calc stop_time */
     stop_time = NULL;
-    if (opt_time_limit_ms > 0) {
+    if (in_pgrep_mode) {
+        /* in pgrep mode, we use a SIGALRM (see main_pgrep) */
+    } else if (opt_time_limit_ms > 0) {
         stop_time = &_stop_time;
         limit_time.tv_sec = opt_time_limit_ms / 1000L;
         limit_time.tv_nsec = (opt_time_limit_ms % 1000L) * 1000000L;
@@ -384,32 +391,50 @@ int main_pid(pid_t pid) {
         clock_add(stop_time, &limit_time, stop_time);
     }
 
-    n = 0;
-    hit_limit = 0;
     while (!done) {
-        rv = 0;
+        /* record start_time */
         clock_get(&start_time);
-        if (opt_pause) rv |= pause_pid(pid);                            /* maybe PTRACE_ATTACH */
-        rv |= do_trace_ptr(&context);                                   /* trace */
-        if (opt_pause) rv |= unpause_pid(pid);                          /* maybe PTRACE_DETACH */
-        if ((rv == PHPSPY_OK && ++n == opt_trace_limit)) {              /* maybe apply trace limit */
-            hit_limit = 1;
+
+        /* trace (maybe with PTRACE_ATTACH) */
+        rv = 0;
+        if (opt_pause) rv |= pause_pid(pid);
+        rv |= do_trace_ptr(&context);
+        if (opt_pause) rv |= unpause_pid(pid);
+
+        /* bail if pid died */
+        if ((rv & PHPSPY_ERR_PID_DEAD) != 0) break;
+
+        /* maybe apply trace limit */
+        if (opt_trace_limit > 0 && rv == PHPSPY_OK) {
+            if (in_pgrep_mode) {
+                __atomic_add_fetch(&trace_count, 1, __ATOMIC_SEQ_CST);
+            } else {
+                trace_count += 1;
+            }
+            /* in pgrep mode, it is possible for each thread to sneak in one
+               extra trace even after the limit is reached but it should exit
+               after that. */
+            if (trace_count >= opt_trace_limit) break;
+        }
+
+        /* maybe apply time limit */
+        if (stop_time && clock_diff(&end_time, stop_time) >= 1) {
             break;
         }
-        if ((rv & PHPSPY_ERR_PID_DEAD) != 0) break;                     /* bail if pid died */
+
+        /* calc sleep_time and sleep */
         clock_get(&end_time);
-        if (stop_time && clock_diff(&end_time, stop_time) >= 1) {       /* maybe apply time limit */
-            hit_limit = 1;
-            break;
-        }
         calc_sleep_time(&end_time, &start_time, &sleep_time);
-        nanosleep(&sleep_time, NULL);                                   /* sleep */
+        nanosleep(&sleep_time, NULL);
     }
 
     context.event_handler(&context, PHPSPY_TRACE_EVENT_DEINIT);
 
-    /* For pgrep mode, tell the main pid to exit if we went past the trace limit or time limit */
-    if (hit_limit) write_done_pipe();
+    /* in pgrep mode, trigger done condition if we went over the trace limit.
+       it is ok for multiple threads to call this. */
+    if (in_pgrep_mode && opt_trace_limit > 0 && trace_count >= opt_trace_limit) {
+        write_done_pipe();
+    }
 
     /* TODO proper signal handling for non-pgrep modes */
     return PHPSPY_OK;

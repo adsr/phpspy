@@ -13,3 +13,12 @@ use_sudo=1
 source $TEST_SH
 wait $php_pid
 rm -f $pid_file
+
+phpspy_opts=(--pgrep "--exact hope_this_does_not_exist_lol" --threads 2 --time-limit-ms=1000)
+declare -A expected
+expected[nothing]='^$'
+use_timeout_s=2
+use_sudo=1
+source $TEST_SH
+wait $php_pid
+rm -f $pid_file
