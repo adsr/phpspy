@@ -142,8 +142,6 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "                                       (default: %d)\n", opt_fout_buffer_size);
     fprintf(fp, "  -f, --filter=<regex>               Filter output by POSIX regex\n");
     fprintf(fp, "                                       (default: none)\n");
-    fprintf(fp, "  -f, --filter=<regex>               Filter output by POSIX regex\n");
-    fprintf(fp, "                                       (default: none)\n");
     fprintf(fp, "  -F, --filter-negate=<regex>        Same as `-f` except negated\n");
     fprintf(fp, "  -d, --verbose-fields=<opts>        Set verbose output fields\n");
     fprintf(fp, "                                       (p=pid t=timestamp\n");
