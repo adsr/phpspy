@@ -103,7 +103,9 @@ struct __attribute__((__packed__)) _zval_71 {
             uint8_t         pad0[3];                /* 9        +3 */
         } v;
     } u1;
-    uint8_t                 pad1[4];                /* 12       +4 */
+    union {
+        uint32_t next;                              /* 12       +4 */
+    } u2;
 };
 
 struct __attribute__((__packed__)) _php_core_globals_71 {
@@ -112,7 +114,8 @@ struct __attribute__((__packed__)) _php_core_globals_71 {
 };
 
 struct __attribute__((__packed__)) _zend_array_71 {
-    uint8_t                 pad0[16];               /* 0        +16 */
+    uint8_t                 pad0[12];               /* 0        +12 */
+    uint32_t                nTableMask;             /* 12       +4 */
     Bucket_71               *arData;                /* 16       +8 */
     uint32_t                nNumUsed;               /* 24       +4 */
     uint32_t                nNumOfElements;         /* 28       +4 */
