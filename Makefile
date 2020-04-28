@@ -15,11 +15,8 @@ php_path?=php
 
 sinclude config.mk
 
-has_pthread := $(shell $(LD) $(phpspy_ldflags) -lpthread -o/dev/null >/dev/null 2>&1 && echo :)
 has_termbox := $(shell $(LD) $(phpspy_ldflags) -ltermbox -o/dev/null >/dev/null 2>&1 && echo :)
 has_phpconf := $(shell command -v php-config                         >/dev/null 2>&1 && echo :)
-
-$(or $(has_pthread), $(error Need libpthread))
 
 ifdef USE_ZEND
   $(or $(has_phpconf), $(error Need php-config))
