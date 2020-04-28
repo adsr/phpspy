@@ -27,8 +27,12 @@
 #define copy_zstring          concat2(copy_zstring_,          phpv)
 #define copy_zval             concat2(copy_zval_,             phpv)
 #define copy_zarray           concat2(copy_zarray_,           phpv)
+#define copy_zarray_bucket    concat2(copy_zarray_bucket_,    phpv)
 
 #include "phpspy_trace.c"
+
+#undef concat1
+#undef concat2
 
 #undef Bucket
 #undef php_core_globals
@@ -47,7 +51,13 @@
 #undef zval
 
 #undef do_trace
-#undef copy_zarray
+#undef copy_executor_globals
+#undef copy_stack
+#undef copy_request_info
+#undef copy_memory_info
+#undef copy_globals
+#undef copy_locals
 #undef copy_zstring
 #undef copy_zval
-#undef varpeek_find
+#undef copy_zarray
+#undef copy_zarray_bucket

@@ -50,7 +50,8 @@
 #define PHPSPY_MIN(a, b) ((a) < (b) ? (a) : (b))
 #define PHPSPY_MAX(a, b) ((a) > (b) ? (a) : (b))
 #define PHPSPY_STR_SIZE 256
-#define PHPSPY_MAX_BUCKETS 256
+#define PHPSPY_MAX_ARRAY_BUCKETS 128
+#define PHPSPY_MAX_ARRAY_TABLE_SIZE 512
 
 #define PHPSPY_OK           0
 #define PHPSPY_ERR          1
@@ -199,5 +200,6 @@ extern int event_handler_fout(struct trace_context_s *context, int event_type);
 extern int event_handler_callgrind(struct trace_context_s *context, int event_type);
 extern void write_done_pipe();
 extern void log_error(const char *fmt, ...);
+extern uint64_t zend_inline_hash_func(const char *str, size_t len);
 
 #endif
