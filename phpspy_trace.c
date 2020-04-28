@@ -283,11 +283,11 @@ static int copy_zarray(trace_context_t *context, zend_array *local_arr, char *bu
     int array_len;
     size_t tmp_len;
     Bucket buckets[PHPSPY_MAX_ARRAY_BUCKETS];
-    uint32_t hash_table[PHPSPY_MAX_ARRAY_TABLE_SIZE];
     uint32_t hash_table_size;
     zend_array array;
     uint64_t hash_val;
     uint32_t hash_index;
+    uint32_t hash_table_val;
     uint32_t *hash_bucket;
     char *obuf;
 
@@ -296,20 +296,13 @@ static int copy_zarray(trace_context_t *context, zend_array *local_arr, char *bu
 
     if (single_key) {
 
-        array_len = PHPSPY_MIN(array.nNumOfElements, PHPSPY_MAX_ARRAY_BUCKETS);
-        try_copy_proc_mem("buckets", array.arData, buckets, sizeof(Bucket) * array_len);
-
-        memset(hash_table, (uint32_t)-1, sizeof(uint32_t) * PHPSPY_MAX_ARRAY_TABLE_SIZE);
-        hash_table_size = (uint32_t)(-1 * (int32_t)array.nTableMask);
-
-        try_copy_proc_mem("hash_table", ((uint32_t*)array.arData) - hash_table_size, hash_table, sizeof(uint32_t) * PHPSPY_MAX_ARRAY_TABLE_SIZE);
-
         hash_val = phpspy_zend_inline_hash_func(single_key, strlen(single_key));
-
+        hash_table_size = (uint32_t)(-1 * (int32_t)array.nTableMask);
         hash_index = hash_val % hash_table_size;
-        if (hash_index >= PHPSPY_MAX_ARRAY_TABLE_SIZE) return PHPSPY_ERR;
 
-        hash_bucket = &hash_table[hash_index];
+        try_copy_proc_mem("hash_table_val", ((uint32_t*)array.arData) - hash_table_size + hash_index, &hash_table_val, sizeof(uint32_t));
+
+        hash_bucket = &hash_table_val;
 
         do {
             if (*hash_bucket == (uint32_t)-1) return PHPSPY_ERR;
@@ -317,6 +310,7 @@ static int copy_zarray(trace_context_t *context, zend_array *local_arr, char *bu
             hash_bucket = NULL;
             try(rv, copy_zarray_bucket(context, buckets, single_key, &hash_bucket, buf, buf_size, buf_len));
         } while (hash_bucket);
+
     } else {
 
         array_len = PHPSPY_MIN(array.nNumOfElements, PHPSPY_MAX_ARRAY_BUCKETS);
