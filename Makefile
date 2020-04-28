@@ -23,6 +23,7 @@ $(or $(has_pthread), $(error Need libpthread))
 
 ifdef USE_ZEND
   $(or $(has_phpconf), $(error Need php-config))
+  phpspy_cflags:=$(subst c90,c11,$(phpspy_cflags))
   phpspy_includes:=$(phpspy_includes) $$(php-config --includes)
   phpspy_defines:=$(phpspy_defines) -DUSE_ZEND=1
 endif

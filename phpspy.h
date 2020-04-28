@@ -25,7 +25,6 @@
 #include <unistd.h>
 #include <termbox.h>
 #include <regex.h>
-#include <uthash.h>
 
 #ifdef USE_ZEND
 #include <main/php_config.h>
@@ -43,10 +42,12 @@
 #include <php_structs_74.h>
 #endif
 
+#include <uthash.h>
+
 #define try(__rv, __call)       do { if (((__rv) = (__call)) != 0) return (__rv); } while(0)
 #define try_break(__rv, __call) do { if (((__rv) = (__call)) != 0) break;         } while(0)
 
-#define PHPSPY_VERSION "0.5.0"
+#define PHPSPY_VERSION "0.6.0"
 #define PHPSPY_MIN(a, b) ((a) < (b) ? (a) : (b))
 #define PHPSPY_MAX(a, b) ((a) > (b) ? (a) : (b))
 #define PHPSPY_STR_SIZE 256
@@ -170,10 +171,12 @@ typedef struct addr_memo_s {
     uint64_t php_base_addr;
 } addr_memo_t;
 
+#ifndef USE_ZEND
 struct __attribute__((__packed__)) _zend_module_entry {
     uint8_t pad0[88];
     const char *version;
 };
+#endif
 
 extern char *opt_pgrep_args;
 extern int done;
@@ -200,6 +203,6 @@ extern int event_handler_fout(struct trace_context_s *context, int event_type);
 extern int event_handler_callgrind(struct trace_context_s *context, int event_type);
 extern void write_done_pipe();
 extern void log_error(const char *fmt, ...);
-extern uint64_t zend_inline_hash_func(const char *str, size_t len);
+extern uint64_t phpspy_zend_inline_hash_func(const char *str, size_t len);
 
 #endif

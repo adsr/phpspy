@@ -765,7 +765,7 @@ static void try_get_php_version(trace_target_t *target) {
     else log_error("try_get_php_version: Unrecognized PHP version\n");
 }
 
-uint64_t zend_inline_hash_func(const char *str, size_t len) {
+uint64_t phpspy_zend_inline_hash_func(const char *str, size_t len) {
     /* Adapted from zend_string.h */
     uint64_t hash;
     hash = 5381UL;
