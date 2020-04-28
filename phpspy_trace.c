@@ -308,8 +308,6 @@ static int copy_zarray(trace_context_t *context, zend_array *local_arr, char *bu
 
         do {
             if (*hash_bucket == (uint32_t)-1) return PHPSPY_ERR;
-            if (*hash_bucket >= PHPSPY_MAX_ARRAY_BUCKETS) return PHPSPY_ERR;
-
             try_copy_proc_mem("bucket", array.arData + *hash_bucket, buckets, sizeof(Bucket));
             hash_bucket = NULL;
             try(rv, copy_zarray_bucket(context, buckets, single_key, &hash_bucket, buf, buf_size, buf_len));
