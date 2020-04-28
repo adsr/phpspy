@@ -158,6 +158,9 @@ static int copy_request_info(trace_context_t *context) {
 }
 
 static int copy_memory_info(trace_context_t *context) {
+    #ifdef USE_ZEND
+    return PHPSPY_ERR; /* zend_alloc_globals is not public */
+    #else
     int rv;
     zend_mm_heap mm_heap;
     zend_alloc_globals alloc_globals;
@@ -175,6 +178,8 @@ static int copy_memory_info(trace_context_t *context) {
     try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_MEM));
 
     return PHPSPY_OK;
+
+    #endif
 }
 
 static int copy_globals(trace_context_t *context) {
@@ -299,7 +304,7 @@ static int copy_zarray(trace_context_t *context, zend_array *local_arr, char *bu
 
         try_copy_proc_mem("hash_table", ((uint32_t*)array.arData) - hash_table_size, hash_table, sizeof(uint32_t) * PHPSPY_MAX_ARRAY_TABLE_SIZE);
 
-        hash_val = zend_inline_hash_func(single_key, strlen(single_key));
+        hash_val = phpspy_zend_inline_hash_func(single_key, strlen(single_key));
 
         hash_index = hash_val % hash_table_size;
         if (hash_index >= PHPSPY_MAX_ARRAY_TABLE_SIZE) return PHPSPY_ERR;
