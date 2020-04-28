@@ -51,7 +51,7 @@
 #define PHPSPY_MAX(a, b) ((a) > (b) ? (a) : (b))
 #define PHPSPY_STR_SIZE 256
 #define PHPSPY_MAX_ARRAY_BUCKETS 128
-#define PHPSPY_MAX_ARRAY_TABLE_SIZE 256
+#define PHPSPY_MAX_ARRAY_TABLE_SIZE 512
 
 #define PHPSPY_OK           0
 #define PHPSPY_ERR          1
