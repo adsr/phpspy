@@ -765,6 +765,35 @@ static void try_get_php_version(trace_target_t *target) {
     else log_error("try_get_php_version: Unrecognized PHP version\n");
 }
 
+uint64_t zend_inline_hash_func(const char *str, size_t len) {
+    /* Adapted from zend_string.h */
+    uint64_t hash;
+    hash = 5381UL;
+
+    for (; len >= 8; len -= 8) {
+        hash = ((hash << 5) + hash) + *str++;
+        hash = ((hash << 5) + hash) + *str++;
+        hash = ((hash << 5) + hash) + *str++;
+        hash = ((hash << 5) + hash) + *str++;
+        hash = ((hash << 5) + hash) + *str++;
+        hash = ((hash << 5) + hash) + *str++;
+        hash = ((hash << 5) + hash) + *str++;
+        hash = ((hash << 5) + hash) + *str++;
+    }
+    switch (len) {
+        case 7: hash = ((hash << 5) + hash) + *str++; /* fallthrough... */
+        case 6: hash = ((hash << 5) + hash) + *str++; /* fallthrough... */
+        case 5: hash = ((hash << 5) + hash) + *str++; /* fallthrough... */
+        case 4: hash = ((hash << 5) + hash) + *str++; /* fallthrough... */
+        case 3: hash = ((hash << 5) + hash) + *str++; /* fallthrough... */
+        case 2: hash = ((hash << 5) + hash) + *str++; /* fallthrough... */
+        case 1: hash = ((hash << 5) + hash) + *str++; break;
+        case 0: break;
+    }
+
+    return hash | 0x8000000000000000UL;
+}
+
 void log_error(const char *fmt, ...) {
     va_list args;
     if (log_error_enabled) {

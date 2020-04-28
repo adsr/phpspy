@@ -10,6 +10,7 @@ static int copy_locals(trace_context_t *context, zend_op *zop, zend_execute_data
 static int copy_zstring(trace_context_t *context, const char *what, zend_string *rzstring, char *buf, size_t buf_size, size_t *buf_len);
 static int copy_zval(trace_context_t *context, zval *local_zval, char *buf, size_t buf_size, size_t *buf_len);
 static int copy_zarray(trace_context_t *context, zend_array *local_arr, char *buf, size_t buf_size, size_t *buf_len, char *single_key);
+static int copy_zarray_bucket(trace_context_t *context, Bucket *bucket, char *single_key, uint32_t **hash_bucket, char *buf, size_t buf_size, size_t *buf_len);
 
 static int do_trace(trace_context_t *context) {
     int rv, depth;
@@ -276,51 +277,95 @@ static int copy_zarray(trace_context_t *context, zend_array *local_arr, char *bu
     int i;
     int array_len;
     size_t tmp_len;
-    Bucket buckets[PHPSPY_MAX_BUCKETS];
+    Bucket buckets[PHPSPY_MAX_ARRAY_BUCKETS];
+    uint32_t hash_table[PHPSPY_MAX_ARRAY_TABLE_SIZE];
+    uint32_t hash_table_size;
     zend_array array;
+    uint64_t hash_val;
+    uint32_t hash_index;
+    uint32_t *hash_bucket;
     char *obuf;
 
     obuf = buf;
     try_copy_proc_mem("array", local_arr, &array, sizeof(array));
-    array_len = PHPSPY_MIN(array.nNumOfElements, PHPSPY_MAX_BUCKETS);
 
-    try_copy_proc_mem("buckets", array.arData, buckets, sizeof(Bucket) * array_len);
-    for (i = 0; i < array_len; i++) {
+    if (single_key) {
+
+        array_len = PHPSPY_MIN(array.nNumOfElements, PHPSPY_MAX_ARRAY_BUCKETS);
+        try_copy_proc_mem("buckets", array.arData, buckets, sizeof(Bucket) * array_len);
+
+        memset(hash_table, (uint32_t)-1, sizeof(uint32_t) * PHPSPY_MAX_ARRAY_TABLE_SIZE);
+        hash_table_size = (uint32_t)(-1 * (int32_t)array.nTableMask);
+
+        try_copy_proc_mem("hash_table", ((uint32_t*)array.arData) - hash_table_size, hash_table, sizeof(uint32_t) * PHPSPY_MAX_ARRAY_TABLE_SIZE);
+
+        hash_val = zend_inline_hash_func(single_key, strlen(single_key));
+
+        hash_index = hash_val % hash_table_size;
+        if (hash_index >= PHPSPY_MAX_ARRAY_TABLE_SIZE) return PHPSPY_ERR;
+
+        hash_bucket = &hash_table[hash_index];
+
+        do {
+            if (*hash_bucket == (uint32_t)-1) return PHPSPY_ERR;
+            try_copy_proc_mem("bucket", array.arData + *hash_bucket, buckets, sizeof(Bucket));
+            hash_bucket = NULL;
+            try(rv, copy_zarray_bucket(context, buckets, single_key, &hash_bucket, buf, buf_size, buf_len));
+        } while (hash_bucket);
+    } else {
+
+        array_len = PHPSPY_MIN(array.nNumOfElements, PHPSPY_MAX_ARRAY_BUCKETS);
+        try_copy_proc_mem("buckets", array.arData, buckets, sizeof(Bucket) * array_len);
+
+        for (i = 0; i < array_len; i++) {
+            try(rv, copy_zarray_bucket(context, buckets + i, NULL, NULL, buf, buf_size, &tmp_len));
+            buf_size -= tmp_len;
+            buf += tmp_len;
+
+            /* TODO Introduce a string class to clean this silliness up */
+            if (buf_size >= 2) {
+                *buf = ',';
+                --buf_size;
+                ++buf;
+            }
+        }
+
+        *buf_len = (size_t)(buf - obuf);
+    }
+
+    return PHPSPY_OK;
+}
+
+static int copy_zarray_bucket(trace_context_t *context, Bucket *bucket, char *single_key, uint32_t **hash_bucket, char *buf, size_t buf_size, size_t *buf_len) {
+    int rv;
+    char tmp[PHPSPY_STR_SIZE];
+    size_t tmp_len;
+    char *obuf;
+
+    obuf = buf;
+
+    if (bucket->key != NULL) {
+        try(rv, copy_zstring(context, "array_key", bucket->key, tmp, sizeof(tmp), &tmp_len));
+
         if (single_key) {
-            if (buckets[i].key == 0) {
-                continue;
+            if (strcmp(single_key, tmp) != 0) {
+                /* Hash collision */
+                *hash_bucket = &bucket->val.u2.next;
+                return PHPSPY_OK;
             }
-            try(rv, copy_zstring(context, "array_key", buckets[i].key, buf, buf_size, &tmp_len));
-            if (strncmp(buf, single_key, tmp_len) != 0 || tmp_len != strlen(single_key)) {
-                continue;
-            }
-            try(rv, copy_zval(context, &buckets[i].val, buf, buf_size, &tmp_len));
-            *buf_len = (size_t)(buf - obuf);
-            return PHPSPY_OK;
         } else {
-            if (buckets[i].key != 0) {
-                try(rv, copy_zstring(context, "array_key", buckets[i].key, buf, buf_size, &tmp_len));
-                buf_size -= tmp_len;
-                buf += tmp_len;
-
-                snprintf(buf, buf_size, "=");
-                tmp_len = strlen(buf);
-                buf_size -= tmp_len;
-                buf += tmp_len;
+            /* TODO Introduce a string class to clean this silliness up */
+            if (buf_size > tmp_len + 1 + 1) {
+                snprintf(buf, buf_size, "%s=", tmp);
+                buf_size -= tmp_len + 1;
+                buf += tmp_len + 1;
             }
-            try(rv, copy_zval(context, &buckets[i].val, buf, buf_size, &tmp_len));
-            buf_size -= tmp_len;
-            buf += tmp_len;
-
-            snprintf(buf, buf_size, ",");
-            tmp_len = strlen(buf);
-            buf_size -= tmp_len;
-            buf += tmp_len;
         }
     }
 
-    /* If we get here when looking for a single_key, we have lost */
-    if (single_key) return PHPSPY_ERR;
+    try(rv, copy_zval(context, &bucket->val, buf, buf_size, &tmp_len));
+    buf_size -= tmp_len;
+    buf += tmp_len;
 
     *buf_len = (size_t)(buf - obuf);
     return PHPSPY_OK;
