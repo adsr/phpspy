@@ -1,10 +1,15 @@
 #!/bin/bash
 this_dir=$(cd $(dirname "${BASH_SOURCE[0]}") >/dev/null && pwd)
-phpsrc_dir=~/php-src
+phpsrc_dir=$1
+
+if [ -z "$phpsrc_dir" ]; then
+    echo "Required: php-src directory"
+    exit 1
+fi
 
 pushd $phpsrc_dir
 git fetch --tags
-for phpv in php-7.0.29 php-7.1.21 php-7.2.9 php-7.3.0beta3; do
+for phpv in php-7.0.33 php-7.1.33 php-7.2.30 php-7.3.17 php-7.4.5; do
     git reset --hard HEAD \
         && git clean -fdx \
         && git checkout $phpv \
