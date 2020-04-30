@@ -8,6 +8,7 @@ end
 
 printf "zend_executor_globals\n"
 whatis zend_executor_globals
+       fieldof zend_executor_globals symbol_table
        fieldof zend_executor_globals current_execute_data
 printf "\n"
 
