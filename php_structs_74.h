@@ -22,8 +22,20 @@ typedef struct _zend_mm_heap_74          zend_mm_heap_74;
 
 /* Assumes 8-byte pointers */
                                                     /* offset   length */
+struct __attribute__((__packed__)) _zend_array_74 {
+    uint8_t                 pad0[12];               /* 0        +12 */
+    uint32_t                nTableMask;             /* 12       +4 */
+    Bucket_74               *arData;                /* 16       +8 */
+    uint32_t                nNumUsed;               /* 24       +4 */
+    uint32_t                nNumOfElements;         /* 28       +4 */
+    uint32_t                nTableSize;             /* 32       +4 */
+    uint8_t                 pad1[20];               /* 36       +20 */
+};
+
 struct __attribute__((__packed__)) _zend_executor_globals_74 {
-    uint8_t                 pad0[488];              /* 0        +488 */
+    uint8_t                 pad0[304];              /* 0        +304 */
+    zend_array_74           symbol_table;           /* 304      +56 */
+    uint8_t                 pad1[128];              /* 360      +128 */
     zend_execute_data_74    *current_execute_data;  /* 488      +8 */
 };
 
@@ -111,15 +123,6 @@ struct __attribute__((__packed__)) _zval_74 {
 struct __attribute__((__packed__)) _php_core_globals_74 {
     uint8_t                 pad0[368];              /* 0        +368 */
     zval_74                 http_globals[6];        /* 368      +48 */
-};
-
-struct __attribute__((__packed__)) _zend_array_74 {
-    uint8_t                 pad0[12];               /* 0        +12 */
-    uint32_t                nTableMask;             /* 12       +4 */
-    Bucket_74               *arData;                /* 16       +8 */
-    uint32_t                nNumUsed;               /* 24       +4 */
-    uint32_t                nNumOfElements;         /* 28       +4 */
-    uint32_t                nTableSize;             /* 32       +4 */
 };
 
 struct __attribute__((__packed__)) _Bucket_74 {
