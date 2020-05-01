@@ -554,9 +554,6 @@ static int find_addresses(trace_target_t *target) {
     } else if (opt_capture_req) {
         try(rv, get_symbol_addr(&memo, target->pid, "sapi_globals", &target->sapi_globals_addr));
     }
-    if (HASH_CNT(hh, glopeek_map)) {
-        try(rv, get_symbol_addr(&memo, target->pid, "core_globals", &target->core_globals_addr));
-    }
     if (opt_capture_mem) {
         try(rv, get_symbol_addr(&memo, target->pid, "alloc_globals", &target->alloc_globals_addr));
     }
@@ -650,7 +647,7 @@ static void varpeek_add(char *varspec) {
 
 static void glopeek_add(char *glospec) {
     char *dot;
-    int index;
+    char *gloname;
     glopeek_entry_t *gentry;
     dot = strchr(glospec, '.');
     if (!dot) {
@@ -660,24 +657,24 @@ static void glopeek_add(char *glospec) {
     HASH_FIND_STR(glopeek_map, glospec, gentry);
     if (gentry) return;
     if (strncmp("post.", glospec, dot-glospec) == 0) {
-        index = 0;
+        gloname = "_POST";
     } else if (strncmp("get.", glospec, dot-glospec) == 0) {
-        index = 1;
-    } else if (strncmp("cookies.", glospec, dot-glospec) == 0) {
-        index = 2;
+        gloname = "_GET";
+    } else if (strncmp("cookie.", glospec, dot-glospec) == 0) {
+        gloname = "_COOKIE";
     } else if (strncmp("server.", glospec, dot-glospec) == 0) {
-        index = 3;
-    } else if (strncmp("env.", glospec, dot-glospec) == 0) {
-        index = 4;
+        gloname = "_SERVER";
     } else if (strncmp("files.", glospec, dot-glospec) == 0) {
-        index = 5;
+        gloname = "_FILES";
+    } else if (strncmp("globals.", glospec, dot-glospec) == 0) {
+        gloname = ""; /* $GLOBAL variables are stored directly in the symbol table */
     } else {
         log_error("glopeek_add: Invalid global: %s\n\n", glospec);
         usage(stderr, 1);
     }
     gentry = calloc(1, sizeof(glopeek_entry_t));
     snprintf(gentry->key, sizeof(gentry->key), "%s", glospec);
-    gentry->index = index;
+    snprintf(gentry->gloname, sizeof(gentry->gloname), "%s", gloname);
     snprintf(gentry->varname, sizeof(gentry->varname), "%s", dot+1);
     HASH_ADD_STR(glopeek_map, key, gentry);
 }

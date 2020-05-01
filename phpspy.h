@@ -97,8 +97,8 @@ typedef struct varpeek_entry_s {
 
 typedef struct glopeek_entry_s {
     char key[PHPSPY_STR_SIZE];
-    int index;
-    char varname[PHPSPY_STR_SIZE];
+    char gloname[PHPSPY_STR_SIZE]; /* The name of the superglobal array */
+    char varname[PHPSPY_STR_SIZE]; /* The name of the global variable within the superglobal array */
     UT_hash_handle hh;
 } glopeek_entry_t;
 
@@ -145,7 +145,6 @@ typedef struct trace_target_s {
     pid_t pid;
     uint64_t executor_globals_addr;
     uint64_t sapi_globals_addr;
-    uint64_t core_globals_addr;
     uint64_t alloc_globals_addr;
     uint64_t basic_functions_module_addr;
 } trace_target_t;
