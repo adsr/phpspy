@@ -31,7 +31,6 @@ int (*opt_event_handler)(struct trace_context_s *context, int event_type) = even
 int opt_continue_on_error = 0;
 int opt_fout_buffer_size = 4096;
 
-size_t zend_string_val_offset = 0;
 int done = 0;
 int (*do_trace_ptr)(trace_context_t *context) = NULL;
 varpeek_entry_t *varpeek_map = NULL;
@@ -566,13 +565,6 @@ static int find_addresses(trace_target_t *target) {
         target->basic_functions_module_addr = 0;
     }
     log_error_enabled = 1;
-
-    /* TODO probably don't need zend_string_val_offset */
-    #ifdef USE_ZEND
-    zend_string_val_offset = offsetof(zend_string, val);
-    #else
-    zend_string_val_offset = offsetof(zend_string_70, val);
-    #endif
     return PHPSPY_OK;
 }
 

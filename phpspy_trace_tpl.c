@@ -18,16 +18,17 @@
 #define zval                  concat2(zval_,                  phpv)
 
 #define do_trace              concat2(do_trace_,              phpv)
+#define trace_stack           concat2(trace_stack_,           phpv)
+#define trace_request_info    concat2(trace_request_info_,    phpv)
+#define trace_memory_info     concat2(trace_memory_info_,     phpv)
+#define trace_globals         concat2(trace_globals_,         phpv)
+#define trace_locals          concat2(trace_locals_,          phpv)
 #define copy_executor_globals concat2(copy_executor_globals_, phpv)
-#define copy_stack            concat2(copy_stack_,            phpv)
-#define copy_request_info     concat2(copy_request_info_,     phpv)
-#define copy_memory_info      concat2(copy_memory_info_,      phpv)
-#define copy_globals          concat2(copy_globals_,          phpv)
-#define copy_locals           concat2(copy_locals_,           phpv)
-#define copy_zstring          concat2(copy_zstring_,          phpv)
-#define copy_zval             concat2(copy_zval_,             phpv)
-#define copy_zarray           concat2(copy_zarray_,           phpv)
-#define copy_zarray_bucket    concat2(copy_zarray_bucket_,    phpv)
+#define sprint_zstring        concat2(sprint_zstring_,        phpv)
+#define sprint_zval           concat2(sprint_zval_,           phpv)
+#define sprint_zarray         concat2(sprint_zarray_,         phpv)
+#define sprint_zarray_element concat2(sprint_zarray_element_, phpv)
+#define sprint_zarray_bucket  concat2(sprint_zarray_bucket_,  phpv)
 
 #include "phpspy_trace.c"
 
@@ -51,13 +52,14 @@
 #undef zval
 
 #undef do_trace
+#undef trace_stack
+#undef trace_request_info
+#undef trace_memory_info
+#undef trace_globals
+#undef trace_locals
 #undef copy_executor_globals
-#undef copy_stack
-#undef copy_request_info
-#undef copy_memory_info
-#undef copy_globals
-#undef copy_locals
-#undef copy_zstring
-#undef copy_zval
-#undef copy_zarray
-#undef copy_zarray_bucket
+#undef sprint_zstring
+#undef sprint_zval
+#undef sprint_zarray
+#undef sprint_zarray_element
+#undef sprint_zarray_bucket
