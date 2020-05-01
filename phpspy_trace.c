@@ -1,17 +1,31 @@
 #define try_copy_proc_mem(__what, __raddr, __laddr, __size) \
     try(rv, copy_proc_mem(context->target.pid, (__what), (__raddr), (__laddr), (__size)))
 
-static int copy_executor_globals(trace_context_t *context, zend_executor_globals *executor_globals);
-static int copy_stack(trace_context_t *context, zend_execute_data *remote_execute_data, int *depth);
-static int copy_request_info(trace_context_t *context);
-static int copy_memory_info(trace_context_t *context);
-static int copy_globals(trace_context_t *context);
-static int copy_locals(trace_context_t *context, zend_op *zop, zend_execute_data *remote_execute_data, zend_op_array *op_array, char *file, int file_len);
-static int copy_zstring(trace_context_t *context, const char *what, zend_string *rzstring, char *buf, size_t buf_size, size_t *buf_len);
-static int copy_zval(trace_context_t *context, zval *local_zval, char *buf, size_t buf_size, size_t *buf_len);
-static int copy_zarray(trace_context_t *context, zend_array *local_arr, char *buf, size_t buf_size, size_t *buf_len, char *single_key);
-static int copy_zarray_bucket(trace_context_t *context, Bucket *bucket, char *single_key, uint32_t **hash_bucket, char *buf, size_t buf_size, size_t *buf_len);
+static int trace_stack(trace_context_t *context, zend_execute_data *remote_execute_data, int *depth);
+static int trace_request_info(trace_context_t *context);
+static int trace_memory_info(trace_context_t *context);
+static int trace_globals(trace_context_t *context);
+static int trace_locals(trace_context_t *context, zend_op *zop, zend_execute_data *remote_execute_data, zend_op_array *op_array, char *file, int file_len);
 
+static int copy_executor_globals(trace_context_t *context, zend_executor_globals *executor_globals);
+
+static int sprint_zstring(trace_context_t *context, const char *what, zend_string *lzstring, char *buf, size_t buf_size, size_t *buf_len);
+static int sprint_zval(trace_context_t *context, zval *local_zval, char *buf, size_t buf_size, size_t *buf_len);
+static int sprint_zarray(trace_context_t *context, zend_array *rzarray, char *buf, size_t buf_size, size_t *buf_len);
+static int sprint_zarray_element(trace_context_t *context, zend_array *rzarray, const char *key, char *buf, size_t buf_size, size_t *buf_len);
+static int sprint_zarray_bucket(trace_context_t *context, Bucket *lbucket, char *buf, size_t buf_size, size_t *buf_len);
+
+/*********************
+    Trace functions
+ *********************/
+
+/**
+ * Sample a single execution trace.
+ *
+ * @param context Trace context
+ *
+ * @return int Status code
+ */
 static int do_trace(trace_context_t *context) {
     int rv, depth;
     zend_executor_globals executor_globals;
@@ -31,22 +45,22 @@ static int do_trace(trace_context_t *context) {
             }                                               \
         } while(0)
 
-        rv |= copy_stack(context, executor_globals.current_execute_data, &depth);
+        rv |= trace_stack(context, executor_globals.current_execute_data, &depth);
         maybe_break_on_err();
         if (depth < 1) break;
 
         if (opt_capture_req) {
-            rv |= copy_request_info(context);
+            rv |= trace_request_info(context);
             maybe_break_on_err();
         }
 
         if (opt_capture_mem) {
-            rv |= copy_memory_info(context);
+            rv |= trace_memory_info(context);
             maybe_break_on_err();
         }
 
         if (HASH_CNT(hh, glopeek_map) > 0) {
-            rv |= copy_globals(context);
+            rv |= trace_globals(context);
             maybe_break_on_err();
         }
 
@@ -60,14 +74,16 @@ static int do_trace(trace_context_t *context) {
     return PHPSPY_OK;
 }
 
-static int copy_executor_globals(trace_context_t *context, zend_executor_globals *executor_globals) {
-    int rv;
-    executor_globals->current_execute_data = NULL;
-    try_copy_proc_mem("executor_globals", (void*)context->target.executor_globals_addr, executor_globals, sizeof(*executor_globals));
-    return PHPSPY_OK;
-}
-
-static int copy_stack(trace_context_t *context, zend_execute_data *remote_execute_data, int *depth) {
+/**
+ * Iterate through the callstack and trace each frame with the PHPSPY_TRACE_EVENT_FRAME event.
+ *
+ * @param context             Trace context
+ * @param remote_execute_data Remote execute_data
+ * @param depth               Stack depth output
+ *
+ * @return int Status code
+ */
+static int trace_stack(trace_context_t *context, zend_execute_data *remote_execute_data, int *depth) {
     int rv;
     zend_execute_data execute_data;
     zend_function zfunc;
@@ -92,24 +108,24 @@ static int copy_stack(trace_context_t *context, zend_execute_data *remote_execut
         try_copy_proc_mem("execute_data", remote_execute_data, &execute_data, sizeof(execute_data));
         try_copy_proc_mem("zfunc", execute_data.func, &zfunc, sizeof(zfunc));
         if (zfunc.common.function_name) {
-            try(rv, copy_zstring(context, "function_name", zfunc.common.function_name, frame->loc.func, sizeof(frame->loc.func), &frame->loc.func_len));
+            try(rv, sprint_zstring(context, "function_name", zfunc.common.function_name, frame->loc.func, sizeof(frame->loc.func), &frame->loc.func_len));
         } else {
             frame->loc.func_len = snprintf(frame->loc.func, sizeof(frame->loc.func), "<main>");
         }
         if (zfunc.common.scope) {
             try_copy_proc_mem("zce", zfunc.common.scope, &zce, sizeof(zce));
-            try(rv, copy_zstring(context, "class_name", zce.name, frame->loc.class, sizeof(frame->loc.class), &frame->loc.class_len));
+            try(rv, sprint_zstring(context, "class_name", zce.name, frame->loc.class, sizeof(frame->loc.class), &frame->loc.class_len));
         } else {
             frame->loc.class[0] = '\0';
             frame->loc.class_len = 0;
         }
         if (zfunc.type == 2) {
-            try(rv, copy_zstring(context, "filename", zfunc.op_array.filename, frame->loc.file, sizeof(frame->loc.file), &frame->loc.file_len));
+            try(rv, sprint_zstring(context, "filename", zfunc.op_array.filename, frame->loc.file, sizeof(frame->loc.file), &frame->loc.file_len));
             frame->loc.lineno = zfunc.op_array.line_start;
             /* TODO add comments */
             if (HASH_CNT(hh, varpeek_map) > 0) {
                 if (copy_proc_mem(target->pid, "opline", execute_data.opline, &zop, sizeof(zop)) == PHPSPY_OK) {
-                    copy_locals(context, &zop, remote_execute_data, &zfunc.op_array, frame->loc.file, frame->loc.file_len);
+                    trace_locals(context, &zop, remote_execute_data, &zfunc.op_array, frame->loc.file, frame->loc.file_len);
                 }
             }
         } else {
@@ -125,7 +141,14 @@ static int copy_stack(trace_context_t *context, zend_execute_data *remote_execut
     return PHPSPY_OK;
 }
 
-static int copy_request_info(trace_context_t *context) {
+/**
+ * Trace request info with the PHPSPY_TRACE_EVENT_REQUEST event.
+ *
+ * @param context Trace context
+ *
+ * @return int Status code
+ */
+static int trace_request_info(trace_context_t *context) {
     int rv;
     sapi_globals_struct sapi_globals;
     trace_target_t *target;
@@ -157,7 +180,14 @@ static int copy_request_info(trace_context_t *context) {
     return PHPSPY_OK;
 }
 
-static int copy_memory_info(trace_context_t *context) {
+/**
+ * Trace memory usage with the PHPSPY_TRACE_EVENT_MEM event.
+ *
+ * @param context Trace context
+ *
+ * @return int Status code
+ */
+static int trace_memory_info(trace_context_t *context) {
     #ifdef USE_ZEND
     return PHPSPY_ERR; /* zend_alloc_globals is not public */
     #else
@@ -182,7 +212,12 @@ static int copy_memory_info(trace_context_t *context) {
     #endif
 }
 
-static int copy_globals(trace_context_t *context) {
+/**
+ * Trace global variable values with the PHPSPY_TRACE_EVENT_GLOPEEK event.
+ *
+ * @param context Trace context
+ */
+static int trace_globals(trace_context_t *context) {
     int rv;
     php_core_globals core_globals;
     glopeek_entry_t *gentry, *gentry_tmp;
@@ -193,7 +228,7 @@ static int copy_globals(trace_context_t *context) {
 
     try_copy_proc_mem("core_globals", (void*)target->core_globals_addr, &core_globals, sizeof(core_globals));
     HASH_ITER(hh, glopeek_map, gentry, gentry_tmp) {
-        try(rv, copy_zarray(context, core_globals.http_globals[gentry->index].value.arr, context->buf, sizeof(context->buf), &context->buf_len, gentry->varname));
+        try(rv, sprint_zarray_element(context, core_globals.http_globals[gentry->index].value.arr, gentry->varname, context->buf, sizeof(context->buf), &context->buf_len));
         context->event.glopeek.gentry = gentry;
         context->event.glopeek.zval_str = context->buf;
         try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_GLOPEEK));
@@ -202,7 +237,19 @@ static int copy_globals(trace_context_t *context) {
     return PHPSPY_OK;
 }
 
-static int copy_locals(trace_context_t *context, zend_op *zop, zend_execute_data *remote_execute_data, zend_op_array *op_array, char *file, int file_len) {
+/**
+ * Trace local variable values with the PHPSPY_TRACE_EVENT_VARPEEK event.
+ *
+ * @param context             Trace context
+ * @param zop                 Local zend_op
+ * @param remote_execute_data Remote execute_data
+ * @param op_array            Local zend_op_array
+ * @param file                Current filename
+ * @param file_len            Current filename length
+ *
+ * @return int Status code
+ */
+static int trace_locals(trace_context_t *context, zend_op *zop, zend_execute_data *remote_execute_data, zend_op_array *op_array, char *file, int file_len) {
     int rv, i, num_vars_found, num_vars_peeking;
     char tmp[PHPSPY_STR_SIZE];
     size_t tmp_len;
@@ -221,13 +268,13 @@ static int copy_locals(trace_context_t *context, zend_op *zop, zend_execute_data
 
     for (i = 0; i < op_array->last_var; i++) {
         try_copy_proc_mem("var", op_array->vars + i, &zstrp, sizeof(zstrp));
-        try(rv, copy_zstring(context, "var", zstrp, tmp, sizeof(tmp), &tmp_len));
+        try(rv, sprint_zstring(context, "var", zstrp, tmp, sizeof(tmp), &tmp_len));
         HASH_FIND(hh, entry->varmap, tmp, tmp_len, var);
         if (!var) continue;
         num_vars_found += 1;
         /* See ZEND_CALL_VAR_NUM macro in php-src */
         try_copy_proc_mem("zval", ((zval*)(remote_execute_data)) + ((int)(5 + i)), &zv, sizeof(zv));
-        try(rv, copy_zval(context, &zv, tmp, sizeof(tmp), &tmp_len));
+        try(rv, sprint_zval(context, &zv, tmp, sizeof(tmp), &tmp_len));
         context->event.varpeek.entry = entry;
         context->event.varpeek.var = var;
         context->event.varpeek.zval_str = tmp;
@@ -238,36 +285,84 @@ static int copy_locals(trace_context_t *context, zend_op *zop, zend_execute_data
     return PHPSPY_OK;
 }
 
-static int copy_zstring(trace_context_t *context, const char *what, zend_string *rzstring, char *buf, size_t buf_size, size_t *buf_len) {
+/********************
+    Copy functions
+ ********************/
+
+/**
+ * Copy executor_globals from the remote process to local memory.
+ *
+ * @param context          Trace context
+ * @param executor_globals Local destination executor_globals
+ *
+ * @return int Status code
+ */
+static int copy_executor_globals(trace_context_t *context, zend_executor_globals *executor_globals) {
+    int rv;
+    executor_globals->current_execute_data = NULL;
+    try_copy_proc_mem("executor_globals", (void*)context->target.executor_globals_addr, executor_globals, sizeof(*executor_globals));
+    return PHPSPY_OK;
+}
+
+/*********************
+    Print functions
+ *********************/
+
+/**
+ * Print the value of a remote zend_string to a string buffer.
+ *
+ * @param context  Trace context
+ * @param what     Memory copy message
+ * @param rzstring Remote zstring
+ * @param buf      String buffer to write to
+ * @param buf_size Size of string buffer
+ * @param buf_len  Length of written string
+ *
+ * @return int Status code
+ */
+static int sprint_zstring(trace_context_t *context, const char *what, zend_string *rzstring, char *buf, size_t buf_size, size_t *buf_len) {
     int rv;
     zend_string lzstring;
+
     *buf = '\0';
     *buf_len = 0;
     try_copy_proc_mem(what, rzstring, &lzstring, sizeof(lzstring));
     *buf_len = PHPSPY_MIN(lzstring.len, PHPSPY_MAX(1, buf_size)-1);
-    try_copy_proc_mem(what, ((char*)rzstring) + zend_string_val_offset, buf, *buf_len);
+    try_copy_proc_mem(what, ((char*)rzstring) + offsetof(zend_string, val), buf, *buf_len);
     *(buf + (int)*buf_len) = '\0';
+
     return PHPSPY_OK;
 }
 
-static int copy_zval(trace_context_t *context, zval *local_zval, char *buf, size_t buf_size, size_t *buf_len) {
+/**
+ * Print the value of a local zval to a string buffer. For some types, this entails copying remote value data.
+ *
+ * @param context  Trace context
+ * @param lzval    Local zval
+ * @param buf      String buffer to write to
+ * @param buf_size Size of string buffer
+ * @param buf_len  Length of written string
+ *
+ * @return int Status code
+ */
+static int sprint_zval(trace_context_t *context, zval *lzval, char *buf, size_t buf_size, size_t *buf_len) {
     int rv;
     int type;
-    type = (int)local_zval->u1.v.type;
+    type = (int)lzval->u1.v.type;
     switch (type) {
         case IS_LONG:
-            snprintf(buf, buf_size, "%ld", local_zval->value.lval);
+            snprintf(buf, buf_size, "%ld", lzval->value.lval);
             *buf_len = strlen(buf);
             break;
         case IS_DOUBLE:
-            snprintf(buf, buf_size, "%f", local_zval->value.dval);
+            snprintf(buf, buf_size, "%f", lzval->value.dval);
             *buf_len = strlen(buf);
             break;
         case IS_STRING:
-            try(rv, copy_zstring(context, "zval", local_zval->value.str, buf, buf_size, buf_len));
+            try(rv, sprint_zstring(context, "zval", lzval->value.str, buf, buf_size, buf_len));
             break;
         case IS_ARRAY:
-            try(rv, copy_zarray(context, local_zval->value.arr, buf, buf_size, buf_len, NULL));
+            try(rv, sprint_zarray(context, lzval->value.arr, buf, buf_size, buf_len));
             break;
         default:
             /* TODO handle other zval types */
@@ -277,93 +372,130 @@ static int copy_zval(trace_context_t *context, zval *local_zval, char *buf, size
     return PHPSPY_OK;
 }
 
-static int copy_zarray(trace_context_t *context, zend_array *local_arr, char *buf, size_t buf_size, size_t *buf_len, char *single_key) {
+/**
+ * Print a comma-separated list of zend_array values to a string buffer.
+ *
+ * @param context  Trace context
+ * @param rzarray  Remote zend_array
+ * @param buf      String buffer to write to
+ * @param buf_size Size of string buffer
+ * @param buf_len  Length of written string
+ *
+ * @return int Status code
+ */
+static int sprint_zarray(trace_context_t *context, zend_array *rzarray, char *buf, size_t buf_size, size_t *buf_len) {
     int rv;
     int i;
     int array_len;
     size_t tmp_len;
     Bucket buckets[PHPSPY_MAX_ARRAY_BUCKETS];
-    uint32_t hash_table_size;
-    zend_array array;
-    uint64_t hash_val;
-    uint32_t hash_index;
-    uint32_t hash_table_val;
-    uint32_t *hash_bucket;
+    zend_array lzarray;
     char *obuf;
 
     obuf = buf;
-    try_copy_proc_mem("array", local_arr, &array, sizeof(array));
+    try_copy_proc_mem("array", rzarray, &lzarray, sizeof(lzarray));
 
-    if (single_key) {
+    array_len = PHPSPY_MIN(lzarray.nNumOfElements, PHPSPY_MAX_ARRAY_BUCKETS);
+    try_copy_proc_mem("buckets", lzarray.arData, buckets, sizeof(Bucket) * array_len);
 
-        hash_val = phpspy_zend_inline_hash_func(single_key, strlen(single_key));
-        hash_table_size = (uint32_t)(-1 * (int32_t)array.nTableMask);
-        hash_index = hash_val % hash_table_size;
+    for (i = 0; i < array_len; i++) {
+        try(rv, sprint_zarray_bucket(context, buckets + i, buf, buf_size, &tmp_len));
+        buf_size -= tmp_len;
+        buf += tmp_len;
 
-        try_copy_proc_mem("hash_table_val", ((uint32_t*)array.arData) - hash_table_size + hash_index, &hash_table_val, sizeof(uint32_t));
-
-        hash_bucket = &hash_table_val;
-
-        do {
-            if (*hash_bucket == (uint32_t)-1) return PHPSPY_ERR;
-            try_copy_proc_mem("bucket", array.arData + *hash_bucket, buckets, sizeof(Bucket));
-            hash_bucket = NULL;
-            try(rv, copy_zarray_bucket(context, buckets, single_key, &hash_bucket, buf, buf_size, buf_len));
-        } while (hash_bucket);
-
-    } else {
-
-        array_len = PHPSPY_MIN(array.nNumOfElements, PHPSPY_MAX_ARRAY_BUCKETS);
-        try_copy_proc_mem("buckets", array.arData, buckets, sizeof(Bucket) * array_len);
-
-        for (i = 0; i < array_len; i++) {
-            try(rv, copy_zarray_bucket(context, buckets + i, NULL, NULL, buf, buf_size, &tmp_len));
-            buf_size -= tmp_len;
-            buf += tmp_len;
-
-            /* TODO Introduce a string class to clean this silliness up */
-            if (buf_size >= 2) {
-                *buf = ',';
-                --buf_size;
-                ++buf;
-            }
+        /* TODO Introduce a string class to clean this silliness up */
+        if (buf_size >= 2) {
+            *buf = ',';
+            --buf_size;
+            ++buf;
         }
-
-        *buf_len = (size_t)(buf - obuf);
     }
+
+    *buf_len = (size_t)(buf - obuf);
 
     return PHPSPY_OK;
 }
 
-static int copy_zarray_bucket(trace_context_t *context, Bucket *bucket, char *single_key, uint32_t **hash_bucket, char *buf, size_t buf_size, size_t *buf_len) {
+/**
+ * Print a single zend_array element to a string buffer.
+ *
+ * @param context  Trace context
+ * @param rzarray  Remote zend_array
+ * @param key      Array key of element to print
+ * @param buf      String buffer to write to
+ * @param buf_size Size of string buffer
+ * @param buf_len  Length of written string
+ *
+ * @return int Status code
+ */
+static int sprint_zarray_element(trace_context_t *context, zend_array *rzarray, const char *key, char *buf, size_t buf_size, size_t *buf_len) {
     int rv;
-    char tmp[PHPSPY_STR_SIZE];
+    zend_array lzarray;
+    Bucket bucket;
+    uint32_t hash_table_size;
+    uint64_t hash_val;
+    uint32_t hash_index;
+    uint32_t hash_table_val;
+    uint32_t *hash_bucket;
+    char tmp_key[PHPSPY_STR_SIZE];
+    size_t tmp_len;
+
+    try_copy_proc_mem("array", rzarray, &lzarray, sizeof(lzarray));
+
+    hash_val = phpspy_zend_inline_hash_func(key, strlen(key));
+    hash_table_size = (uint32_t)(-1 * (int32_t)lzarray.nTableMask);
+    hash_index = hash_val % hash_table_size;
+
+    try_copy_proc_mem("hash_table_val", ((uint32_t*)lzarray.arData) - hash_table_size + hash_index, &hash_table_val, sizeof(uint32_t));
+
+    hash_bucket = &hash_table_val;
+
+    do {
+        if (*hash_bucket == (uint32_t)-1) return PHPSPY_ERR;
+
+        /* Copy the next bucket from array data */
+        try_copy_proc_mem("bucket", lzarray.arData + *hash_bucket, &bucket, sizeof(Bucket));
+
+        if (bucket.key == NULL) {
+            break;
+        }
+
+        /* On hash collision, advance to the next bucket */
+        try(rv, sprint_zstring(context, "array_key", bucket.key, tmp_key, sizeof(tmp_key), &tmp_len));
+
+        if (strcmp(key, tmp_key) == 0) {
+            hash_bucket = NULL;
+        } else {
+            hash_bucket = &bucket.val.u2.next;
+        }
+    } while (hash_bucket);
+
+    /* Print the zval from the bucket */
+    try(rv, sprint_zval(context, &bucket.val, buf, buf_size, buf_len));
+
+    return PHPSPY_OK;
+}
+
+static int sprint_zarray_bucket(trace_context_t *context, Bucket *lbucket, char *buf, size_t buf_size, size_t *buf_len) {
+    int rv;
+    char tmp_key[PHPSPY_STR_SIZE];
     size_t tmp_len;
     char *obuf;
 
     obuf = buf;
 
-    if (bucket->key != NULL) {
-        try(rv, copy_zstring(context, "array_key", bucket->key, tmp, sizeof(tmp), &tmp_len));
+    if (lbucket->key != NULL) {
+        try(rv, sprint_zstring(context, "array_key", lbucket->key, tmp_key, sizeof(tmp_key), &tmp_len));
 
-        if (single_key) {
-            if (strcmp(single_key, tmp) != 0) {
-                /* Hash collision */
-                *hash_bucket = &bucket->val.u2.next;
-                return PHPSPY_OK;
-            }
-        } else {
-            /* TODO Introduce a string class to clean this silliness up */
-            if (buf_size > tmp_len + 1 + 1) {
-                snprintf(buf, buf_size, "%s=", tmp);
-                buf_size -= tmp_len + 1;
-                buf += tmp_len + 1;
-            }
+        /* TODO Introduce a string class to clean this silliness up */
+        if (buf_size > tmp_len + 1 + 1) {
+            snprintf(buf, buf_size, "%s=", tmp_key);
+            buf_size -= tmp_len + 1;
+            buf += tmp_len + 1;
         }
     }
 
-    try(rv, copy_zval(context, &bucket->val, buf, buf_size, &tmp_len));
-    buf_size -= tmp_len;
+    try(rv, sprint_zval(context, &lbucket->val, buf, buf_size, &tmp_len));
     buf += tmp_len;
 
     *buf_len = (size_t)(buf - obuf);
