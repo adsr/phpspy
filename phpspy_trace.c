@@ -8,11 +8,12 @@ static int trace_globals(trace_context_t *context);
 static int trace_locals(trace_context_t *context, zend_op *zop, zend_execute_data *remote_execute_data, zend_op_array *op_array, char *file, int file_len);
 
 static int copy_executor_globals(trace_context_t *context, zend_executor_globals *executor_globals);
+static int copy_zarray_bucket(trace_context_t *context, zend_array *rzarray, const char *key, Bucket *lbucket);
 
 static int sprint_zstring(trace_context_t *context, const char *what, zend_string *lzstring, char *buf, size_t buf_size, size_t *buf_len);
-static int sprint_zval(trace_context_t *context, zval *local_zval, char *buf, size_t buf_size, size_t *buf_len);
+static int sprint_zval(trace_context_t *context, zval *lzval, char *buf, size_t buf_size, size_t *buf_len);
 static int sprint_zarray(trace_context_t *context, zend_array *rzarray, char *buf, size_t buf_size, size_t *buf_len);
-static int sprint_zarray_element(trace_context_t *context, zend_array *rzarray, const char *key, char *buf, size_t buf_size, size_t *buf_len);
+static int sprint_zarray_val(trace_context_t *context, zend_array *rzarray, const char *key, char *buf, size_t buf_size, size_t *buf_len);
 static int sprint_zarray_bucket(trace_context_t *context, Bucket *lbucket, char *buf, size_t buf_size, size_t *buf_len);
 
 /*********************
@@ -216,19 +217,31 @@ static int trace_memory_info(trace_context_t *context) {
  * Trace global variable values with the PHPSPY_TRACE_EVENT_GLOPEEK event.
  *
  * @param context Trace context
+ *
+ * @return int Status code
  */
 static int trace_globals(trace_context_t *context) {
     int rv;
-    php_core_globals core_globals;
     glopeek_entry_t *gentry, *gentry_tmp;
-    trace_target_t *target;
+    zend_array *garray;
+    zend_array *symtable;
+    Bucket lbucket;
 
-    memset(&core_globals, 0, sizeof(php_core_globals));
-    target = &context->target;
+    /* Find the remote address of executor_globals.symbol_table */
+    symtable = (zend_array *)(context->target.executor_globals_addr + offsetof(zend_executor_globals, symbol_table));
 
-    try_copy_proc_mem("core_globals", (void*)target->core_globals_addr, &core_globals, sizeof(core_globals));
     HASH_ITER(hh, glopeek_map, gentry, gentry_tmp) {
-        try(rv, sprint_zarray_element(context, core_globals.http_globals[gentry->index].value.arr, gentry->varname, context->buf, sizeof(context->buf), &context->buf_len));
+
+        /* Point garray at the zend_array where this global variable resides */
+        if (gentry->gloname[0]) {
+            try(rv, copy_zarray_bucket(context, symtable, gentry->gloname, &lbucket));
+            garray = lbucket.val.value.arr;
+        } else {
+            garray = symtable;
+        }
+
+        /* Print the element within the array */
+        try(rv, sprint_zarray_val(context, garray, gentry->varname, context->buf, sizeof(context->buf), &context->buf_len));
         context->event.glopeek.gentry = gentry;
         context->event.glopeek.zval_str = context->buf;
         try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_GLOPEEK));
@@ -301,6 +314,60 @@ static int copy_executor_globals(trace_context_t *context, zend_executor_globals
     int rv;
     executor_globals->current_execute_data = NULL;
     try_copy_proc_mem("executor_globals", (void*)context->target.executor_globals_addr, executor_globals, sizeof(*executor_globals));
+    return PHPSPY_OK;
+}
+
+/**
+ * Copy an element from a remote zend_array to a Bucket in local memory.
+ *
+ * @param context Trace context
+ * @param rzarray Remote zend_array
+ * @param key     Array key of element
+ * @param lbucket Local Bucket to write to
+ *
+ * @return int Status code
+ */
+static int copy_zarray_bucket(trace_context_t *context, zend_array *rzarray, const char *key, Bucket *lbucket) {
+    int rv;
+    zend_array lzarray;
+    uint32_t hash_table_size;
+    uint64_t hash_val;
+    uint32_t hash_index;
+    uint32_t hash_table_val;
+    uint32_t *hash_bucket;
+    char tmp_key[PHPSPY_STR_SIZE];
+    size_t tmp_len;
+
+    try_copy_proc_mem("array", rzarray, &lzarray, sizeof(lzarray));
+
+    hash_val = phpspy_zend_inline_hash_func(key, strlen(key));
+    hash_table_size = (uint32_t)(-1 * (int32_t)lzarray.nTableMask);
+    hash_index = hash_val % hash_table_size;
+
+    try_copy_proc_mem("hash_table_val", ((uint32_t*)lzarray.arData) - hash_table_size + hash_index, &hash_table_val, sizeof(uint32_t));
+
+    hash_bucket = &hash_table_val;
+
+    do {
+        if (*hash_bucket == (uint32_t)-1) return PHPSPY_ERR;
+
+        /* Copy the next bucket from array data */
+        try_copy_proc_mem("bucket", lzarray.arData + *hash_bucket, lbucket, sizeof(Bucket));
+
+        if (lbucket->key == NULL) {
+            break;
+        }
+
+        /* On hash collision, advance to the next bucket */
+        try(rv, sprint_zstring(context, "array_key", lbucket->key, tmp_key, sizeof(tmp_key), &tmp_len));
+
+        if (strcmp(key, tmp_key) == 0) {
+            hash_bucket = NULL;
+        } else {
+            hash_bucket = &lbucket->val.u2.next;
+        }
+    } while (hash_bucket);
+
     return PHPSPY_OK;
 }
 
@@ -417,7 +484,7 @@ static int sprint_zarray(trace_context_t *context, zend_array *rzarray, char *bu
 }
 
 /**
- * Print a single zend_array element to a string buffer.
+ * Print a single zend_array value to a string buffer.
  *
  * @param context  Trace context
  * @param rzarray  Remote zend_array
@@ -428,54 +495,27 @@ static int sprint_zarray(trace_context_t *context, zend_array *rzarray, char *bu
  *
  * @return int Status code
  */
-static int sprint_zarray_element(trace_context_t *context, zend_array *rzarray, const char *key, char *buf, size_t buf_size, size_t *buf_len) {
+static int sprint_zarray_val(trace_context_t *context, zend_array *rzarray, const char *key, char *buf, size_t buf_size, size_t *buf_len) {
     int rv;
-    zend_array lzarray;
     Bucket bucket;
-    uint32_t hash_table_size;
-    uint64_t hash_val;
-    uint32_t hash_index;
-    uint32_t hash_table_val;
-    uint32_t *hash_bucket;
-    char tmp_key[PHPSPY_STR_SIZE];
-    size_t tmp_len;
 
-    try_copy_proc_mem("array", rzarray, &lzarray, sizeof(lzarray));
-
-    hash_val = phpspy_zend_inline_hash_func(key, strlen(key));
-    hash_table_size = (uint32_t)(-1 * (int32_t)lzarray.nTableMask);
-    hash_index = hash_val % hash_table_size;
-
-    try_copy_proc_mem("hash_table_val", ((uint32_t*)lzarray.arData) - hash_table_size + hash_index, &hash_table_val, sizeof(uint32_t));
-
-    hash_bucket = &hash_table_val;
-
-    do {
-        if (*hash_bucket == (uint32_t)-1) return PHPSPY_ERR;
-
-        /* Copy the next bucket from array data */
-        try_copy_proc_mem("bucket", lzarray.arData + *hash_bucket, &bucket, sizeof(Bucket));
-
-        if (bucket.key == NULL) {
-            break;
-        }
-
-        /* On hash collision, advance to the next bucket */
-        try(rv, sprint_zstring(context, "array_key", bucket.key, tmp_key, sizeof(tmp_key), &tmp_len));
-
-        if (strcmp(key, tmp_key) == 0) {
-            hash_bucket = NULL;
-        } else {
-            hash_bucket = &bucket.val.u2.next;
-        }
-    } while (hash_bucket);
-
-    /* Print the zval from the bucket */
+    try(rv, copy_zarray_bucket(context, rzarray, key, &bucket));
     try(rv, sprint_zval(context, &bucket.val, buf, buf_size, buf_len));
 
     return PHPSPY_OK;
 }
 
+/**
+ * Print a zend_array Bucket, with its key, to a string buffer.
+ *
+ * @param context  Trace context
+ * @param lbucket  Local Bucket
+ * @param buf      String buffer to write to
+ * @param buf_size Size of string buffer
+ * @param buf_len  Length of written string
+ *
+ * @return int Status code
+ */
 static int sprint_zarray_bucket(trace_context_t *context, Bucket *lbucket, char *buf, size_t buf_size, size_t *buf_len) {
     int rv;
     char tmp_key[PHPSPY_STR_SIZE];
