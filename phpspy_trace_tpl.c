@@ -24,10 +24,11 @@
 #define trace_globals         concat2(trace_globals_,         phpv)
 #define trace_locals          concat2(trace_locals_,          phpv)
 #define copy_executor_globals concat2(copy_executor_globals_, phpv)
+#define copy_zarray_bucket    concat2(copy_zarray_bucket_,    phpv)
 #define sprint_zstring        concat2(sprint_zstring_,        phpv)
 #define sprint_zval           concat2(sprint_zval_,           phpv)
 #define sprint_zarray         concat2(sprint_zarray_,         phpv)
-#define sprint_zarray_element concat2(sprint_zarray_element_, phpv)
+#define sprint_zarray_val     concat2(sprint_zarray_val,      phpv)
 #define sprint_zarray_bucket  concat2(sprint_zarray_bucket_,  phpv)
 
 #include "phpspy_trace.c"
@@ -58,8 +59,9 @@
 #undef trace_globals
 #undef trace_locals
 #undef copy_executor_globals
+#undef copy_zarray_bucket
 #undef sprint_zstring
 #undef sprint_zval
 #undef sprint_zarray
-#undef sprint_zarray_element
+#undef sprint_zarray_val
 #undef sprint_zarray_bucket
