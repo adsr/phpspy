@@ -119,12 +119,12 @@ All with no changes to your application and minimal overhead.
                                            <varname>@<path>:<lineno>
                                            <varname>@<path>:<start>-<end>
                                            e.g., xyz@/path/to.php:10-20
-      -g, --peek-global=<glospec>        Peek at the contents of a superglobal var
+      -g, --peek-global=<glospec>        Peek at the contents of a global var
                                            located at `glospec`, which has the
                                            format: <global>.<key>
                                            where <global> is one of:
-                                           post, get, cookies, server, env, files,
-                                           e.g., server.request_id
+                                           post|get|cookie|server|files|globals
+                                           e.g., server.REQUEST_TIME
       -t, --top                          Show dynamic top-like output
 
 ### Example (variable peek)

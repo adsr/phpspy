@@ -163,12 +163,12 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "                                       <varname>@<path>:<lineno>\n");
     fprintf(fp, "                                       <varname>@<path>:<start>-<end>\n");
     fprintf(fp, "                                       e.g., xyz@/path/to.php:10-20\n");
-    fprintf(fp, "  -g, --peek-global=<glospec>        Peek at the contents of a superglobal\n");
-    fprintf(fp, "                                       var located at `glospec`, which has\n");
+    fprintf(fp, "  -g, --peek-global=<glospec>        Peek at the contents of a global var\n");
+    fprintf(fp, "                                       located at `glospec`, which has\n");
     fprintf(fp, "                                       the format: <global>.<key>\n");
     fprintf(fp, "                                       where <global> is one of:\n");
-    fprintf(fp, "                                       post, get, cookies, server, env,\n");
-    fprintf(fp, "                                       files, e.g., server.request_id\n");
+    fprintf(fp, "                                       post|get|cookie|server|files|globals\n");
+    fprintf(fp, "                                       e.g., server.REQUEST_TIME\n");
     fprintf(fp, "  -t, --top                          Show dynamic top-like output\n");
     cleanup();
     exit(exit_code);
