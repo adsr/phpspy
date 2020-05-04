@@ -29,13 +29,12 @@ struct __attribute__((__packed__)) _zend_array_74 {
     uint32_t                nNumUsed;               /* 24       +4 */
     uint32_t                nNumOfElements;         /* 28       +4 */
     uint32_t                nTableSize;             /* 32       +4 */
-    uint8_t                 pad1[20];               /* 36       +20 */
 };
 
 struct __attribute__((__packed__)) _zend_executor_globals_74 {
     uint8_t                 pad0[304];              /* 0        +304 */
-    zend_array_74           symbol_table;           /* 304      +56 */
-    uint8_t                 pad1[128];              /* 360      +128 */
+    zend_array_74           symbol_table;           /* 304      +36 */
+    uint8_t                 pad1[148];              /* 340      +148 */
     zend_execute_data_74    *current_execute_data;  /* 488      +8 */
 };
 
