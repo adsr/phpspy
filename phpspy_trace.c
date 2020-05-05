@@ -241,10 +241,14 @@ static int trace_globals(trace_context_t *context) {
         }
 
         /* Print the element within the array */
-        try(rv, sprint_zarray_val(context, garray, gentry->varname, context->buf, sizeof(context->buf), &context->buf_len));
-        context->event.glopeek.gentry = gentry;
-        context->event.glopeek.zval_str = context->buf;
-        try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_GLOPEEK));
+
+        rv = sprint_zarray_val(context, garray, gentry->varname, context->buf, sizeof(context->buf), &context->buf_len);
+
+        if (rv == PHPSPY_OK) {
+            context->event.glopeek.gentry = gentry;
+            context->event.glopeek.zval_str = context->buf;
+            try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_GLOPEEK));
+        }
     }
 
     return PHPSPY_OK;
