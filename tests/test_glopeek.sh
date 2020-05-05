@@ -13,7 +13,7 @@ f();
 EOD
 php_file=$(mktemp)
 echo "$php_src" >$php_file
-phpspy_opts=(--limit=0 --peek-global "server.REQUEST_TIME" --peek-global "globals.my_global" --peek-global "server.FAKE_VAR" --peek-global "server.SCRIPT_NAME" -- $PHP $php_file)
+phpspy_opts=(--limit=0 --peek-global "server.REQUEST_TIME" --peek-global "globals.my_global" --peek-global "server.FAKE_VAR" --peek-global "server.SCRIPT_NAME" --peek-global "server.X" -- $PHP $php_file)
 declare -A expected
 expected[glopeek_server    ]="^# glopeek server.REQUEST_TIME = \d+"
 expected[glopeek_globals   ]="^# glopeek globals.my_global = test_global"
