@@ -209,14 +209,20 @@ All with no changes to your application and minimal overhead.
     1 <main> <internal>:-1
     ...
 
-### Credits
+### Known bugs
 
-* phpspy is inspired by [rbspy][0].
+* phpspy may not work with a mod_php process that lives inside overlayfs and is also chrooted. (See [#109][8].)
 
 ### See also
 
-* [rbspy][0]
-* [py-spy][1]
+* [rbspy][0] for Ruby, the original inspiration for phpspy
+* [py-spy][1] for Python
+* [Xdebug profiler][2], instrumented profiler
+* [php-profiler][3], similar to phpspy but pure PHP
+* [sample_prof][4]
+* [php-trace][5]
+* [Blackfire][6], commercial
+* [Tideways][7], commercial
 
 ### TODO
 
@@ -225,3 +231,10 @@ All with no changes to your application and minimal overhead.
 
 [0]: https://github.com/rbspy/rbspy
 [1]: https://github.com/benfred/py-spy
+[2]: http://www.xdebug.org/docs/profiler
+[3]: https://github.com/sj-i/php-profiler
+[4]: https://github.com/nikic/sample_prof
+[5]: https://github.com/krakjoe/trace
+[6]: https://blackfire.io/
+[7]: https://tideways.io/
+[8]: https://github.com/adsr/phpspy/issues/109
