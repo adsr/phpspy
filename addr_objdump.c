@@ -32,6 +32,9 @@ static int get_php_bin_path(pid_t pid, char *path_root, char *path) {
         return 1;
     }
     snprintf(path_root, PHPSPY_STR_SIZE, "/proc/%d/root/%s", (int)pid, buf);
+    if (access(path_root, F_OK) != 0) {
+        snprintf(path_root, PHPSPY_STR_SIZE, "/proc/%d/exe", (int)pid);
+    }
     strcpy(path, buf);
     return 0;
 }

@@ -730,9 +730,10 @@ static void try_get_php_version(trace_target_t *target) {
             "{ echo -n /proc/%d/root/; "
             "  awk '/libphp[78]/{print $NF; exit 0} END{exit 1}' /proc/%d/maps "
             "  || readlink /proc/%d/exe; } "
+            "| { xargs stat --printf=%%n 2>/dev/null || echo /proc/%d/exe; } "
             "| xargs strings "
             "| grep -Po '(?<=X-Powered-By: PHP/)\\d\\.\\d'",
-            pid, pid, pid
+            pid, pid, pid, pid
         );
         if ((pcmd = popen(version_cmd, "r")) == NULL) {
             perror("try_get_php_version: popen");
