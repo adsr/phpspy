@@ -211,7 +211,7 @@ All with no changes to your application and minimal overhead.
 
 ### Known bugs
 
-* phpspy may not work with a mod_php process that lives inside overlayfs and is also chrooted. (See [#109][8].)
+* phpspy may not work with a chrooted mod_php process whose binary lives inside overlayfs. (See [#109][8].)
 
 ### See also
 
