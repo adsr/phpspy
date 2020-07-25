@@ -25,7 +25,7 @@ It can collect request info, memory usage, and variables:
 
 ![advanced](https://i.imgur.com/nlUfCWT.gif)
 
-You can also use it make flamegraphs like this:
+You can also use it to make flamegraphs like this:
 
 ![FlameGraph example](https://i.imgur.com/e6P9Arp.png)
 
