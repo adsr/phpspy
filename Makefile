@@ -57,6 +57,8 @@ install: phpspy_static
 	install -D -v -m 755 phpspy $(DESTDIR)$(prefix)/bin/phpspy
 	install -D -v -m 755 stackcollapse-phpspy.pl $(DESTDIR)$(prefix)/lib/phpspy/stackcollapse-phpspy.pl
 	install -D -v -m 755 vendor/flamegraph.pl $(DESTDIR)$(prefix)/lib/phpspy/vendor/flamegraph.pl
+	install -D -v -m 755 phpspy-flamegraph $(DESTDIR)$(prefix)/lib/phpspy/phpspy-flamegraph
+	ln -sf $(DESTDIR)$(prefix)/lib/phpspy/phpspy-flamegraph $(DESTDIR)$(prefix)/bin/phpspy-flamegraph
 
 clean:
 	cd vendor/termbox && ./waf clean
