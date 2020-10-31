@@ -1,13 +1,13 @@
 phpspy_cflags:=-std=c90 -Wall -Wextra -pedantic -g -O3 $(CFLAGS)
 phpspy_libs:=-pthread $(LDLIBS)
 phpspy_ldflags:=$(LDFLAGS)
-phpspy_includes:=-I. -I./vendor -Ivendor/termbox/src
+phpspy_includes:=-I. -I./vendor
 phpspy_defines:=
 phpspy_tests:=$(wildcard tests/test_*.sh)
 phpspy_sources:=phpspy.c pgrep.c top.c addr_objdump.c event_fout.c event_callgrind.c
 
-termbox_inlcudes=-Ivendor/termbox/src/
-termbox_libs:=-Wl,-Bstatic -Lvendor/termbox/build/src/ -ltermbox -Wl,-Bdynamic
+termbox_inlcudes=-Ivendor/termbox/
+termbox_libs:=-Wl,-Bstatic -Lvendor/termbox/ -ltermbox -Wl,-Bdynamic
 
 prefix?=/usr/local
 
@@ -27,17 +27,17 @@ endif
 
 all: phpspy_static
 
-phpspy_static: $(wildcard *.c *.h) vendor/termbox/build/src/libtermbox.a
+phpspy_static: $(wildcard *.c *.h) vendor/termbox/libtermbox.a
 	$(CC) $(phpspy_cflags) $(phpspy_includes) $(termbox_inlcudes) $(phpspy_defines) $(phpspy_sources) -o phpspy $(phpspy_ldflags) $(phpspy_libs) $(termbox_libs)
 
 phpspy_dynamic: $(wildcard *.c *.h)
 	@$(or $(has_termbox), $(error Need libtermbox. Hint: try `make phpspy_static`))
 	$(CC) $(phpspy_cflags) $(phpspy_includes) $(phpspy_defines) $(phpspy_sources) -o phpspy $(phpspy_ldflags) $(phpspy_libs) -ltermbox
 
-vendor/termbox/build/src/libtermbox.a: vendor/termbox/waf
-	cd vendor/termbox && ./waf configure && ./waf --targets=termbox_static
+vendor/termbox/libtermbox.a: vendor/termbox/termbox.c
+	cd vendor/termbox && $(MAKE)
 
-vendor/termbox/waf:
+vendor/termbox/termbox.c:
 	git submodule update --init --remote --recursive
 	cd vendor/termbox && git reset --hard
 
@@ -57,7 +57,7 @@ install: phpspy_static
 	install -D -v -m 755 phpspy $(DESTDIR)$(prefix)/bin/phpspy
 
 clean:
-	cd vendor/termbox && ./waf clean
+	cd vendor/termbox && $(MAKE) clean
 	rm -f phpspy
 
 .PHONY: all test install clean phpspy_static phpspy_dynamic
