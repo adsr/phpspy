@@ -62,8 +62,8 @@ All with no changes to your application and minimal overhead.
     Options:
       -h, --help                         Show this help
       -p, --pid=<pid>                    Trace PHP process at `pid`
-      -P, --pgrep=<args>                 Concurrently trace processes that match
-                                           pgrep `args` (see also `-T`)
+      -P, --pgrep=<args>                 Concurrently trace processes that
+                                           match pgrep `args` (see also `-T`)
       -T, --threads=<num>                Set number of threads to use with `-P`
                                            (default: 16)
       -s, --sleep-ns=<ns>                Sleep `ns` nanoseconds between traces
@@ -74,8 +74,10 @@ All with no changes to your application and minimal overhead.
                                            (default: auto;
                                            supported: 70 71 72 73 74)
       -l, --limit=<num>                  Limit total number of traces to capture
+                                           (approximate limit in pgrep mode)
                                            (default: 0; 0=unlimited)
       -i, --time-limit-ms=<ms>           Stop tracing after `ms` milliseconds
+                                           (second granularity in pgrep mode)
                                            (default: 0; 0=unlimited)
       -n, --max-depth=<max>              Set max stack trace depth
                                            (default: -1; -1=unlimited)
@@ -84,8 +86,8 @@ All with no changes to your application and minimal overhead.
                                            capital=negation)
                                            (default: QCUP; none)
       -m, --memory-usage                 Capture peak and current memory usage
-                                           with each trace (requires PHP debug
-                                           symbols)
+                                           with each trace (requires target PHP
+                                           process to have debug symbols)
       -o, --output=<path>                Write phpspy output to `path`
                                            (default: -; -=stdout)
       -O, --child-stdout=<path>          Write child stdout to `path`
@@ -97,6 +99,11 @@ All with no changes to your application and minimal overhead.
       -a, --addr-sapi-globals=<hex>      Set address of sapi_globals in hex
                                            (default: 0; 0=find dynamically)
       -1, --single-line                  Output in single-line mode
+      -b, --buffer-size=<size>           Set output buffer size to `size`.
+                                           Note: In `-P` mode, setting this
+                                           above PIPE_BUF (4096) may lead to
+                                           interlaced writes across threads.
+                                           (default: 4096)
       -f, --filter=<regex>               Filter output by POSIX regex
                                            (default: none)
       -F, --filter-negate=<regex>        Same as `-f` except negated
@@ -104,6 +111,8 @@ All with no changes to your application and minimal overhead.
                                            (p=pid t=timestamp
                                            capital=negation)
                                            (default: PT; none)
+      -c, --continue-on-error            Attempt to continue tracing after
+                                           encountering an error
       -#, --comment=<any>                Ignored; intended for self-documenting
                                            commands
       -@, --nothing                      Ignored
@@ -120,8 +129,8 @@ All with no changes to your application and minimal overhead.
                                            <varname>@<path>:<start>-<end>
                                            e.g., xyz@/path/to.php:10-20
       -g, --peek-global=<glospec>        Peek at the contents of a global var
-                                           located at `glospec`, which has the
-                                           format: <global>.<key>
+                                           located at `glospec`, which has
+                                           the format: <global>.<key>
                                            where <global> is one of:
                                            post|get|cookie|server|files|globals
                                            e.g., server.REQUEST_TIME
