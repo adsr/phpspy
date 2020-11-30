@@ -40,6 +40,7 @@
 #include <php_structs_72.h>
 #include <php_structs_73.h>
 #include <php_structs_74.h>
+#include <php_structs_80.h>
 #endif
 
 #include <uthash.h>

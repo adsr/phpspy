@@ -6,6 +6,15 @@ define fieldof
   printf "  $arg1 %lu +%lu\n", offsetof($arg0, $arg1), sizeof(typeof($arg0, $arg1))
 end
 
+printf "zend_array\n"
+whatis zend_array
+       fieldof zend_array nTableMask
+       fieldof zend_array arData
+       fieldof zend_array nNumUsed
+       fieldof zend_array nNumOfElements
+       fieldof zend_array nTableSize
+printf "\n"
+
 printf "zend_executor_globals\n"
 whatis zend_executor_globals
        fieldof zend_executor_globals symbol_table
@@ -67,19 +76,6 @@ whatis sapi_globals_struct
        fieldof sapi_globals_struct global_request_time
 printf "\n"
 
-printf "php_core_globals\n"
-whatis php_core_globals
-       fieldof php_core_globals http_globals
-printf "\n"
-
-printf "zval\n"
-whatis zval
-       fieldof zval value
-       fieldof zval u1
-       fieldof zval u1.v
-       fieldof zval u1.v.type
-printf "\n"
-
 printf "zend_value\n"
 whatis zend_value
        fieldof zend_value lval
@@ -88,12 +84,19 @@ whatis zend_value
        fieldof zend_value arr
 printf "\n"
 
-printf "zend_array\n"
-whatis zend_array
-       fieldof zend_array arData
-       fieldof zend_array nNumUsed
-       fieldof zend_array nNumOfElements
-       fieldof zend_array nTableSize
+printf "zval\n"
+whatis zval
+       fieldof zval value
+       fieldof zval u1
+       fieldof zval u1.v
+       fieldof zval u1.v.type
+       fieldof zval u2
+       fieldof zval u2.next
+printf "\n"
+
+printf "php_core_globals\n"
+whatis php_core_globals
+       fieldof php_core_globals http_globals
 printf "\n"
 
 printf "Bucket\n"
