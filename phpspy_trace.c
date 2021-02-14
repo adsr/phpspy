@@ -107,34 +107,37 @@ static int trace_stack(trace_context_t *context, zend_execute_data *remote_execu
 
         /* TODO reduce number of copy calls */
         try_copy_proc_mem("execute_data", remote_execute_data, &execute_data, sizeof(execute_data));
-        try_copy_proc_mem("zfunc", execute_data.func, &zfunc, sizeof(zfunc));
-        if (zfunc.common.function_name) {
-            try(rv, sprint_zstring(context, "function_name", zfunc.common.function_name, frame->loc.func, sizeof(frame->loc.func), &frame->loc.func_len));
-        } else {
-            frame->loc.func_len = snprintf(frame->loc.func, sizeof(frame->loc.func), "<main>");
-        }
-        if (zfunc.common.scope) {
-            try_copy_proc_mem("zce", zfunc.common.scope, &zce, sizeof(zce));
-            try(rv, sprint_zstring(context, "class_name", zce.name, frame->loc.class, sizeof(frame->loc.class), &frame->loc.class_len));
-        } else {
-            frame->loc.class[0] = '\0';
-            frame->loc.class_len = 0;
-        }
-        if (zfunc.type == 2) {
-            try(rv, sprint_zstring(context, "filename", zfunc.op_array.filename, frame->loc.file, sizeof(frame->loc.file), &frame->loc.file_len));
-            frame->loc.lineno = zfunc.op_array.line_start;
-            /* TODO add comments */
-            if (HASH_CNT(hh, varpeek_map) > 0) {
-                if (copy_proc_mem(target->pid, "opline", execute_data.opline, &zop, sizeof(zop)) == PHPSPY_OK) {
-                    trace_locals(context, &zop, remote_execute_data, &zfunc.op_array, frame->loc.file, frame->loc.file_len);
-                }
+        /* Check for null to avoid "copy_proc_mem: Not copying zfunc; raddr is NULL" when optimized out. Skip this frame. */
+        if (execute_data.func) {
+            try_copy_proc_mem("zfunc", execute_data.func, &zfunc, sizeof(zfunc));
+            if (zfunc.common.function_name) {
+                try(rv, sprint_zstring(context, "function_name", zfunc.common.function_name, frame->loc.func, sizeof(frame->loc.func), &frame->loc.func_len));
+            } else {
+                frame->loc.func_len = snprintf(frame->loc.func, sizeof(frame->loc.func), "<main>");
             }
-        } else {
-            frame->loc.file_len = snprintf(frame->loc.file, sizeof(frame->loc.file), "<internal>");
-            frame->loc.lineno = -1;
+            if (zfunc.common.scope) {
+                try_copy_proc_mem("zce", zfunc.common.scope, &zce, sizeof(zce));
+                try(rv, sprint_zstring(context, "class_name", zce.name, frame->loc.class, sizeof(frame->loc.class), &frame->loc.class_len));
+            } else {
+                frame->loc.class[0] = '\0';
+                frame->loc.class_len = 0;
+            }
+            if (zfunc.type == 2) {
+                try(rv, sprint_zstring(context, "filename", zfunc.op_array.filename, frame->loc.file, sizeof(frame->loc.file), &frame->loc.file_len));
+                frame->loc.lineno = zfunc.op_array.line_start;
+                /* TODO add comments */
+                if (HASH_CNT(hh, varpeek_map) > 0) {
+                    if (copy_proc_mem(target->pid, "opline", execute_data.opline, &zop, sizeof(zop)) == PHPSPY_OK) {
+                        trace_locals(context, &zop, remote_execute_data, &zfunc.op_array, frame->loc.file, frame->loc.file_len);
+                    }
+                }
+            } else {
+                frame->loc.file_len = snprintf(frame->loc.file, sizeof(frame->loc.file), "<internal>");
+                frame->loc.lineno = -1;
+            }
+            frame->depth = *depth;
+            try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_FRAME));
         }
-        frame->depth = *depth;
-        try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_FRAME));
         remote_execute_data = execute_data.prev_execute_data;
         *depth += 1;
     }
