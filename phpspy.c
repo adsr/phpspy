@@ -710,7 +710,7 @@ static int copy_proc_mem(pid_t pid, const char *what, void *raddr, void *laddr, 
 
 static void try_get_php_version(trace_target_t *target) {
     struct _zend_module_entry basic_functions_module;
-    char version_cmd[256];
+    char version_cmd[1024];
     char phpv[4];
     pid_t pid;
     FILE *pcmd;
@@ -727,7 +727,7 @@ static void try_get_php_version(trace_target_t *target) {
 
     /* Try greping binary */
     if (phpv[0] == '\0') {
-        snprintf(
+        int n = snprintf(
             version_cmd,
             sizeof(version_cmd),
             "{ echo -n /proc/%d/root/; "
@@ -738,6 +738,11 @@ static void try_get_php_version(trace_target_t *target) {
             "| grep -Po '(?<=X-Powered-By: PHP/)\\d\\.\\d'",
             pid, pid, pid, pid
         );
+        if (n >= sizeof(version_cmd) - 1) {
+            log_error("version command overflow!");
+            return PHPSPY_ERR;
+        }
+
         if ((pcmd = popen(version_cmd, "r")) == NULL) {
             perror("try_get_php_version: popen");
             return;
