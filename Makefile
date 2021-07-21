@@ -1,4 +1,4 @@
-phpspy_cflags:=-std=c90 -Wall -Wextra -pedantic -g -O3 $(CFLAGS)
+phpspy_cflags:=-std=c90 -Wall -Wextra -pedantic -g -O3 -Wno-address-of-packed-member $(CFLAGS)
 phpspy_libs:=-pthread $(LDLIBS)
 phpspy_ldflags:=$(LDFLAGS)
 phpspy_includes:=-I. -I./vendor

@@ -125,7 +125,7 @@ static int trace_stack(trace_context_t *context, zend_execute_data *remote_execu
             frame->loc.lineno = zfunc.op_array.line_start;
             /* TODO add comments */
             if (HASH_CNT(hh, varpeek_map) > 0) {
-                if (copy_proc_mem(target->pid, "opline", execute_data.opline, &zop, sizeof(zop)) == PHPSPY_OK) {
+                if (copy_proc_mem(target->pid, "opline", (void*)execute_data.opline, &zop, sizeof(zop)) == PHPSPY_OK) {
                     trace_locals(context, &zop, remote_execute_data, &zfunc.op_array, frame->loc.file, frame->loc.file_len);
                 }
             }
@@ -190,6 +190,7 @@ static int trace_request_info(trace_context_t *context) {
  */
 static int trace_memory_info(trace_context_t *context) {
     #ifdef USE_ZEND
+    (void)context;
     return PHPSPY_ERR; /* zend_alloc_globals is not public */
     #else
     int rv;
