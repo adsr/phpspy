@@ -54,11 +54,11 @@ static void calc_sleep_time(struct timespec *end, struct timespec *start, struct
 static void varpeek_add(char *varspec);
 static void glopeek_add(char *glospec);
 static int copy_proc_mem(pid_t pid, const char *what, void *raddr, void *laddr, size_t size);
-static void try_get_php_version(trace_target_t *target);
 
 #ifdef USE_ZEND
 static int do_trace(trace_context_t *context);
 #else
+static void try_get_php_version(trace_target_t *target);
 static int do_trace_70(trace_context_t *context);
 static int do_trace_71(trace_context_t *context);
 static int do_trace_72(trace_context_t *context);
@@ -708,6 +708,7 @@ static int copy_proc_mem(pid_t pid, const char *what, void *raddr, void *laddr, 
     return PHPSPY_OK;
 }
 
+#ifndef USE_ZEND
 static void try_get_php_version(trace_target_t *target) {
     struct _zend_module_entry basic_functions_module;
     char version_cmd[1024];
@@ -738,9 +739,9 @@ static void try_get_php_version(trace_target_t *target) {
             "| grep -Po '(?<=X-Powered-By: PHP/)\\d\\.\\d'",
             pid, pid, pid, pid
         );
-        if (n >= sizeof(version_cmd) - 1) {
-            log_error("version command overflow!");
-            return PHPSPY_ERR;
+        if ((size_t)n >= sizeof(version_cmd) - 1) {
+            log_error("try_get_php_version: snprintf overflow\n");
+            return;
         }
 
         if ((pcmd = popen(version_cmd, "r")) == NULL) {
@@ -763,6 +764,7 @@ static void try_get_php_version(trace_target_t *target) {
     else if (strncmp(phpv, "8.1", 3) == 0) opt_phpv = "80";
     else log_error("try_get_php_version: Unrecognized PHP version\n");
 }
+#endif
 
 uint64_t phpspy_zend_inline_hash_func(const char *str, size_t len) {
     /* Adapted from zend_string.h */

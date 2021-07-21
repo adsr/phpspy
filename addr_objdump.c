@@ -31,7 +31,10 @@ static int get_php_bin_path(pid_t pid, char *path_root, char *path) {
         log_error("get_php_bin_path: Failed\n");
         return 1;
     }
-    snprintf(path_root, PHPSPY_STR_SIZE, "/proc/%d/root/%s", (int)pid, buf);
+    if (snprintf(path_root, PHPSPY_STR_SIZE, "/proc/%d/root/%s", (int)pid, buf) > PHPSPY_STR_SIZE - 1) {
+        log_error("get_php_bin_path: snprintf overflow\n");
+        return 1;
+    }
     if (access(path_root, F_OK) != 0) {
         snprintf(path_root, PHPSPY_STR_SIZE, "/proc/%d/exe", (int)pid);
     }
