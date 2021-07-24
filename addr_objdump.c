@@ -138,7 +138,10 @@ static int popen_read_line(char *buf, size_t buf_size, char *cmd_fmt, ...) {
     int buf_len;
     va_list cmd_args;
     va_start(cmd_args, cmd_fmt);
-    vsprintf(cmd, cmd_fmt, cmd_args);
+    if (vsnprintf(cmd, sizeof(cmd), cmd_fmt, cmd_args) >= (int)(sizeof(cmd) - 1)) {
+        log_error("vsnprintf overflow\n");
+        return 1;
+    }
     va_end(cmd_args);
     if (!(fp = popen(cmd, "r"))) {
         perror("popen");
