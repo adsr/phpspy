@@ -1,9 +1,45 @@
 #include "phpspy.h"
+#include <assert.h>
 
 static int get_php_bin_path(pid_t pid, char *path_root, char *path);
 static int get_php_base_addr(pid_t pid, char *path_root, char *path, uint64_t *raddr);
 static int get_symbol_offset(char *path_root, const char *symbol, uint64_t *raddr);
 static int popen_read_line(char *buf, size_t buf_size, char *cmd_fmt, ...);
+
+static int shell_escape(const char *arg, char *buf, size_t buf_size) {
+    char *const buf_end = buf + buf_size;
+    assert(buf_size >= 1);
+    *buf++ = '\'';
+
+    while (*arg) {
+        /* logic based on https://stackoverflow.com/a/3669819 */
+        if (*arg == '\'') {
+            if (buf_end - buf < 4) {
+                return 1;
+            }
+
+            *buf++ = '\''; /* close quoting */
+            *buf++ = '\\'; /* escape ... */
+            *buf++ = '\''; /* ... a single quote */
+            *buf++ = '\''; /* reopen quoting */
+            arg++;
+        } else {
+            if (buf_end - buf < 1) {
+                return 1;
+            }
+
+            *buf++ = *arg++;
+        }
+    }
+
+    if (buf_end - buf < 2) {
+        return 1;
+    }
+
+    *buf++ = '\'';
+    *buf = '\0';
+    return 0;
+}
 
 int get_symbol_addr(addr_memo_t *memo, pid_t pid, const char *symbol, uint64_t *raddr) {
     char *php_bin_path, *php_bin_path_root;
@@ -53,16 +89,25 @@ static int get_php_base_addr(pid_t pid, char *path_root, char *path, uint64_t *r
      * address relocation and/or a feature called 'prelinking', but not sure.
      */
     char buf[PHPSPY_STR_SIZE];
+    char arg_buf[PHPSPY_STR_SIZE];
     uint64_t start_addr;
     uint64_t virt_addr;
-    char *cmd_fmt = "grep -m1 ' %s$' /proc/%d/maps";
-    if (popen_read_line(buf, sizeof(buf), cmd_fmt, path, (int)pid) != 0) {
+    char *cmd_fmt = "grep -m1 ' '%s\\$ /proc/%d/maps";
+    if (shell_escape(path, arg_buf, sizeof(arg_buf))) {
+        log_error("shell_escape: Buffer too small to escape path: %s\n", path);
+        return 1;
+    }
+    if (popen_read_line(buf, sizeof(buf), cmd_fmt, arg_buf, (int)pid) != 0) {
         log_error("get_php_base_addr: Failed to get start_addr\n");
         return 1;
     }
     start_addr = strtoull(buf, NULL, 16);
+    if (shell_escape(path_root, arg_buf, sizeof(arg_buf))) {
+        log_error("shell_escape: Buffer too small to escape path_root: %s\n", path_root);
+        return 1;
+    }
     cmd_fmt = "objdump -p %s | awk '/LOAD/{print $5; exit}'";
-    if (popen_read_line(buf, sizeof(buf), cmd_fmt, path_root) != 0) {
+    if (popen_read_line(buf, sizeof(buf), cmd_fmt, arg_buf) != 0) {
         log_error("get_php_base_addr: Failed to get virt_addr\n");
         return 1;
     }
@@ -73,8 +118,13 @@ static int get_php_base_addr(pid_t pid, char *path_root, char *path, uint64_t *r
 
 static int get_symbol_offset(char *path_root, const char *symbol, uint64_t *raddr) {
     char buf[PHPSPY_STR_SIZE];
+    char arg_buf[PHPSPY_STR_SIZE];
     char *cmd_fmt = "objdump -Tt %s | awk '/ %s$/{print $1; exit}'";
-    if (popen_read_line(buf, sizeof(buf), cmd_fmt, path_root, symbol) != 0) {
+    if (shell_escape(path_root, arg_buf, sizeof(arg_buf))) {
+        log_error("shell_escape: Buffer too smal to escape path_root: %s\n", path_root);
+        return 1;
+    }
+    if (popen_read_line(buf, sizeof(buf), cmd_fmt, arg_buf, symbol) != 0) {
         log_error("get_symbol_offset: Failed\n");
         return 1;
     }
