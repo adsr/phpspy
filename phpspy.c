@@ -772,7 +772,8 @@ static void try_get_php_version(trace_target_t *target) {
     else if (strncmp(phpv, "7.3", 3) == 0) opt_phpv = "73";
     else if (strncmp(phpv, "7.4", 3) == 0) opt_phpv = "74";
     else if (strncmp(phpv, "8.0", 3) == 0) opt_phpv = "80";
-    else if (strncmp(phpv, "8.1", 3) == 0) opt_phpv = "80";
+    else if (strncmp(phpv, "8.1", 3) == 0) opt_phpv = "80"; /* TODO verify 8.x structs are the same as 8.0 */
+    else if (strncmp(phpv, "8.2", 3) == 0) opt_phpv = "80";
     else log_error("try_get_php_version: Unrecognized PHP version\n");
 }
 #endif
