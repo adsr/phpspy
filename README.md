@@ -46,11 +46,9 @@ All with no changes to your application and minimal overhead.
 
 ### Build options
 
-    $ make                   # Build dependencies locally and statically link
+    $ make                   # Use built-in structs
     $ # or
-    $ make phpspy_dynamic    # Dynamically link dependencies
-    $ # or
-    $ USE_ZEND=1 make ...    # Use Zend structs instead of built-in structs (requires php-dev or php-devel)
+    $ USE_ZEND=1 make ...    # Use Zend structs (requires PHP development headers)
 
 ### Usage
     $ ./phpspy -h
