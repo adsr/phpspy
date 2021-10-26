@@ -1,5 +1,10 @@
 #include "phpspy.h"
 
+#define TB_IMPL
+#define TB_OPT_V1_COMPAT
+#include "termbox.h"
+#undef TB_IMPL
+
 pid_t opt_pid = -1;
 char *opt_pgrep_args = NULL;
 int opt_num_workers = 16;

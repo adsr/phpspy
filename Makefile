@@ -1,4 +1,4 @@
-phpspy_cflags:=-std=c90 -Wall -Wextra -pedantic -g -O3 -Wno-address-of-packed-member $(CFLAGS)
+phpspy_cflags:=-std=c11 -Wall -Wextra -pedantic -g -O3 -Wno-address-of-packed-member $(CFLAGS)
 phpspy_libs:=-pthread $(LDLIBS)
 phpspy_ldflags:=$(LDFLAGS)
 phpspy_includes:=-I. -I./vendor
@@ -6,8 +6,7 @@ phpspy_defines:=
 phpspy_tests:=$(wildcard tests/test_*.sh)
 phpspy_sources:=phpspy.c pgrep.c top.c addr_objdump.c event_fout.c event_callgrind.c
 
-termbox_inlcudes=-Ivendor/termbox/
-termbox_libs:=-Wl,-Bstatic -Lvendor/termbox/ -ltermbox -Wl,-Bdynamic
+termbox_inlcudes=-Ivendor/termbox2/
 
 prefix?=/usr/local
 
@@ -15,33 +14,28 @@ php_path?=php
 
 sinclude config.mk
 
-has_termbox := $(shell $(LD) $(phpspy_ldflags) -ltermbox -o/dev/null >/dev/null 2>&1 && echo :)
-has_phpconf := $(shell command -v php-config                         >/dev/null 2>&1 && echo :)
+has_phpconf := $(shell command -v php-config >/dev/null 2>&1 && echo :)
 
 ifdef USE_ZEND
   $(or $(has_phpconf), $(error Need php-config))
-  phpspy_cflags:=$(subst c90,c11,$(phpspy_cflags))
   phpspy_includes:=$(phpspy_includes) $$(php-config --includes)
   phpspy_defines:=$(phpspy_defines) -DUSE_ZEND=1
 endif
 
-all: phpspy_static
+ifdef COMMIT
+  phpspy_defines:=$(phpspy_defines) -DCOMMIT=$(COMMIT)
+endif
 
-phpspy_static: $(wildcard *.c *.h) vendor/termbox/libtermbox.a
-	$(CC) $(phpspy_cflags) $(phpspy_includes) $(termbox_inlcudes) $(phpspy_defines) $(phpspy_sources) -o phpspy $(phpspy_ldflags) $(phpspy_libs) $(termbox_libs)
+all: phpspy
 
-phpspy_dynamic: $(wildcard *.c *.h)
-	@$(or $(has_termbox), $(error Need libtermbox. Hint: try `make phpspy_static`))
-	$(CC) $(phpspy_cflags) $(phpspy_includes) $(phpspy_defines) $(phpspy_sources) -o phpspy $(phpspy_ldflags) $(phpspy_libs) -ltermbox
+phpspy: $(wildcard *.c *.h) vendor/termbox2/termbox.h
+	$(CC) $(phpspy_cflags) $(phpspy_includes) $(termbox_inlcudes) $(phpspy_defines) $(phpspy_sources) -o phpspy $(phpspy_ldflags) $(phpspy_libs)
 
-vendor/termbox/libtermbox.a: vendor/termbox/termbox.c
-	cd vendor/termbox && $(MAKE)
-
-vendor/termbox/termbox.c:
+vendor/termbox2/termbox.h:
 	git submodule update --init --remote --recursive
-	cd vendor/termbox && git reset --hard
+	cd vendor/termbox2 && git reset --hard
 
-test: phpspy_static $(phpspy_tests)
+test: phpspy $(phpspy_tests)
 	@total=0; \
 	pass=0; \
 	for t in $(phpspy_tests); do \
@@ -53,11 +47,11 @@ test: phpspy_static $(phpspy_tests)
 	printf "Passed %d out of %d tests\n" $$pass $$total ; \
 	[ $$pass -eq $$total ] || exit 1
 
-install: phpspy_static
+install: phpspy
 	install -D -v -m 755 phpspy $(DESTDIR)$(prefix)/bin/phpspy
 
 clean:
-	cd vendor/termbox && $(MAKE) clean
+	cd vendor/termbox2 && $(MAKE) clean
 	rm -f phpspy
 
-.PHONY: all test install clean phpspy_static phpspy_dynamic
+.PHONY: all test install clean phpspy

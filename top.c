@@ -20,8 +20,6 @@ static void read_child_err(int fd);
 static void handle_line(char *line, int line_len);
 static void handle_event(struct tb_event *event);
 static void display();
-static void tb_print(const char *str, int x, int y, uint16_t fg, uint16_t bg);
-static void tb_printf(int x, int y, uint16_t fg, uint16_t bg, const char *fmt, ...);
 
 static func_entry_t *func_map = NULL;
 static func_entry_t **func_list = NULL;
@@ -334,22 +332,4 @@ static void display() {
     samp_count = 0;
 
     if (!is_paused) tb_present();
-}
-
-static void tb_print(const char *str, int x, int y, uint16_t fg, uint16_t bg) {
-    uint32_t uni;
-    while (*str) {
-        str += tb_utf8_char_to_unicode(&uni, str);
-        tb_change_cell(x, y, uni, fg, bg);
-        x++;
-    }
-}
-
-static void tb_printf(int x, int y, uint16_t fg, uint16_t bg, const char *fmt, ...) {
-    char buf[4096];
-    va_list vl;
-    va_start(vl, fmt);
-    vsnprintf(buf, sizeof(buf), fmt, vl);
-    va_end(vl);
-    tb_print(buf, x, y, fg, bg);
 }

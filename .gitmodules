@@ -1,3 +1,6 @@
 [submodule "vendor/termbox"]
 	path = vendor/termbox
 	url = https://github.com/termbox/termbox.git
+[submodule "vendor/termbox2"]
+	path = vendor/termbox2
+	url = https://github.com/termbox/termbox2.git
