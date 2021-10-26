@@ -330,12 +330,18 @@ static void parse_opts(int argc, char **argv) {
             case '@': break;
             case 'v':
                 printf(
-                    "phpspy v%s USE_ZEND=%s\n",
+                    "phpspy v%s USE_ZEND=%s COMMIT=%s\n",
                     PHPSPY_VERSION,
                     #ifdef USE_ZEND
                     "y"
                     #else
                     "n"
+                    #endif
+                    ,
+                    #ifdef COMMIT
+                    STR2(COMMIT)
+                    #else
+                    "-"
                     #endif
                 );
                 exit(0);
