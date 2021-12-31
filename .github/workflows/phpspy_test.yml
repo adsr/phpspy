@@ -1,0 +1,16 @@
+name: phpspy_test
+on: [push, pull_request]
+jobs:
+  phpspy_test_job:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - name: deps
+        run: |
+          sudo apt-get install -y php7.4-cli
+          echo "php_path:=/usr/bin/php7.4" | sudo tee config.mk
+      - name: test
+        run: make test
