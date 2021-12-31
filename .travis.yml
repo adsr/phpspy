@@ -1,9 +1,0 @@
-dist: xenial
-before_install:
-  - sudo add-apt-repository -y ppa:ondrej/php
-  - sudo apt-get update
-  - sudo apt-get install -y php7.3-cli
-  - echo "php_path:=/usr/bin/php7.3" | sudo tee config.mk
-before_script: make
-script: make test
-after_script: make clean
