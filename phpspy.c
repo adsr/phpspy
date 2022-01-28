@@ -386,7 +386,8 @@ int main_pid(pid_t pid) {
     } else if (strcmp("80", opt_phpv) == 0) {
         do_trace_ptr = do_trace_80;
     } else {
-        do_trace_ptr = do_trace_72;
+        log_error("main_pid: Unrecognized PHP version (%s)\n", opt_phpv);
+        return PHPSPY_ERR;
     }
     #endif
 
