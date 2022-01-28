@@ -70,6 +70,7 @@ static int do_trace_72(trace_context_t *context);
 static int do_trace_73(trace_context_t *context);
 static int do_trace_74(trace_context_t *context);
 static int do_trace_80(trace_context_t *context);
+static int do_trace_81(trace_context_t *context);
 #endif
 
 int main(int argc, char **argv) {
@@ -113,7 +114,7 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "                                       (see also `-s`) (default: %lu)\n", 1000000000UL/opt_sleep_ns);
     fprintf(fp, "  -V, --php-version=<ver>            Set PHP version\n");
     fprintf(fp, "                                       (default: %s;\n", opt_phpv);
-    fprintf(fp, "                                       supported: 70 71 72 73 74 80)\n");
+    fprintf(fp, "                                       supported: 70 71 72 73 74 80 81 82)\n");
     fprintf(fp, "  -l, --limit=<num>                  Limit total number of traces to capture\n");
     fprintf(fp, "                                       (approximate limit in pgrep mode)\n");
     fprintf(fp, "                                       (default: %lu; 0=unlimited)\n", opt_trace_limit);
@@ -385,6 +386,10 @@ int main_pid(pid_t pid) {
         do_trace_ptr = do_trace_74;
     } else if (strcmp("80", opt_phpv) == 0) {
         do_trace_ptr = do_trace_80;
+    } else if (strcmp("81", opt_phpv) == 0) {
+        do_trace_ptr = do_trace_81;
+    } else if (strcmp("82", opt_phpv) == 0) {
+        do_trace_ptr = do_trace_81; /* TODO verify 8.2 structs */
     } else {
         log_error("main_pid: Unrecognized PHP version (%s)\n", opt_phpv);
         return PHPSPY_ERR;
@@ -841,6 +846,9 @@ void log_error(const char *fmt, ...) {
 #include "phpspy_trace_tpl.c"
 #undef phpv
 #define phpv 80
+#include "phpspy_trace_tpl.c"
+#undef phpv
+#define phpv 81
 #include "phpspy_trace_tpl.c"
 #undef phpv
 #endif
