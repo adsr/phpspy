@@ -63,7 +63,7 @@ static int copy_proc_mem(pid_t pid, const char *what, void *raddr, void *laddr, 
 #ifdef USE_ZEND
 static int do_trace(trace_context_t *context);
 #else
-static void try_get_php_version(trace_target_t *target);
+static int get_php_version(trace_target_t *target);
 static int do_trace_70(trace_context_t *context);
 static int do_trace_71(trace_context_t *context);
 static int do_trace_72(trace_context_t *context);
@@ -370,7 +370,7 @@ int main_pid(pid_t pid) {
     #else
 
     if (strcmp(opt_phpv, "auto") == 0) {
-        try_get_php_version(&context.target);
+        try(rv, get_php_version(&context.target));
     }
 
     if (strcmp("70", opt_phpv) == 0) {
@@ -720,7 +720,7 @@ static int copy_proc_mem(pid_t pid, const char *what, void *raddr, void *laddr, 
 }
 
 #ifndef USE_ZEND
-static void try_get_php_version(trace_target_t *target) {
+static int get_php_version(trace_target_t *target) {
     struct _zend_module_entry basic_functions_module;
     char version_cmd[1024];
     char phpv[4];
@@ -751,17 +751,17 @@ static void try_get_php_version(trace_target_t *target) {
             pid, pid, pid, pid
         );
         if ((size_t)n >= sizeof(version_cmd) - 1) {
-            log_error("try_get_php_version: snprintf overflow\n");
-            return;
+            log_error("get_php_version: snprintf overflow\n");
+            return PHPSPY_ERR;
         }
 
         if ((pcmd = popen(version_cmd, "r")) == NULL) {
-            perror("try_get_php_version: popen");
-            return;
+            perror("get_php_version: popen");
+            return PHPSPY_ERR;
         } else if (fread(&phpv, sizeof(char), 3, pcmd) != 3) {
-            log_error("try_get_php_version: Could not detect PHP version\n");
+            log_error("get_php_version: Could not detect PHP version\n");
             pclose(pcmd);
-            return;
+            return PHPSPY_ERR;
         }
         pclose(pcmd);
     }
@@ -772,9 +772,14 @@ static void try_get_php_version(trace_target_t *target) {
     else if (strncmp(phpv, "7.3", 3) == 0) opt_phpv = "73";
     else if (strncmp(phpv, "7.4", 3) == 0) opt_phpv = "74";
     else if (strncmp(phpv, "8.0", 3) == 0) opt_phpv = "80";
-    else if (strncmp(phpv, "8.1", 3) == 0) opt_phpv = "80"; /* TODO verify 8.x structs are the same as 8.0 */
-    else if (strncmp(phpv, "8.2", 3) == 0) opt_phpv = "80";
-    else log_error("try_get_php_version: Unrecognized PHP version\n");
+    else if (strncmp(phpv, "8.1", 3) == 0) opt_phpv = "81";
+    else if (strncmp(phpv, "8.2", 3) == 0) opt_phpv = "82";
+    else {
+        log_error("get_php_version: Unrecognized PHP version (%s)\n", phpv);
+        return PHPSPY_ERR;
+    }
+
+    return PHPSPY_OK;
 }
 #endif
 
