@@ -14,7 +14,6 @@ typedef struct _sapi_request_info_73     sapi_request_info_73;
 typedef struct _sapi_globals_struct_73   sapi_globals_struct_73;
 typedef union  _zend_value_73            zend_value_73;
 typedef struct _zval_73                  zval_73;
-typedef struct _php_core_globals_73      php_core_globals_73;
 typedef struct _Bucket_73                Bucket_73;
 typedef struct _zend_array_73            zend_array_73;
 typedef struct _zend_alloc_globals_73    zend_alloc_globals_73;
@@ -117,11 +116,6 @@ struct __attribute__((__packed__)) _zval_73 {
     union {
         uint32_t next;                              /* 12       +4 */
     } u2;
-};
-
-struct __attribute__((__packed__)) _php_core_globals_73 {
-    uint8_t                 pad0[368];              /* 0        +368 */
-    zval_73                 http_globals[6];        /* 368      +96 */
 };
 
 struct __attribute__((__packed__)) _Bucket_73 {
