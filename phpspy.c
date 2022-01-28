@@ -743,7 +743,7 @@ static void try_get_php_version(trace_target_t *target) {
             version_cmd,
             sizeof(version_cmd),
             "{ echo -n /proc/%d/root/; "
-            "  awk '/libphp[78]/{print $NF; exit 0} END{exit 1}' /proc/%d/maps "
+            "  awk -ve=1 '/libphp[78]/{print $NF; e=0; exit} END{exit e}' /proc/%d/maps "
             "  || readlink /proc/%d/exe; } "
             "| { xargs stat --printf=%%n 2>/dev/null || echo /proc/%d/exe; } "
             "| xargs strings "
