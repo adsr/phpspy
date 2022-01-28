@@ -121,7 +121,7 @@ struct __attribute__((__packed__)) _zval_73 {
 
 struct __attribute__((__packed__)) _php_core_globals_73 {
     uint8_t                 pad0[368];              /* 0        +368 */
-    zval_73                 http_globals[6];        /* 368      +48 */
+    zval_73                 http_globals[6];        /* 368      +96 */
 };
 
 struct __attribute__((__packed__)) _Bucket_73 {
