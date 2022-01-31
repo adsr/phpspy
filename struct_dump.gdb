@@ -94,11 +94,6 @@ whatis zval
        fieldof zval u2.next
 printf "\n"
 
-printf "php_core_globals\n"
-whatis php_core_globals
-       fieldof php_core_globals http_globals
-printf "\n"
-
 printf "Bucket\n"
 whatis Bucket
        fieldof Bucket val
