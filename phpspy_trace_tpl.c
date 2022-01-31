@@ -2,7 +2,6 @@
 #define concat2(a, b) concat1(a, b)
 
 #define Bucket                concat2(Bucket_,                phpv)
-#define php_core_globals      concat2(php_core_globals_,      phpv)
 #define sapi_globals_struct   concat2(sapi_globals_struct_,   phpv)
 #define sapi_request_info     concat2(sapi_request_info_,     phpv)
 #define zend_alloc_globals    concat2(zend_alloc_globals_,    phpv)
@@ -37,7 +36,6 @@
 #undef concat2
 
 #undef Bucket
-#undef php_core_globals
 #undef sapi_globals_struct
 #undef sapi_request_info
 #undef zend_alloc_globals
