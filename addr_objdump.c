@@ -61,7 +61,7 @@ int get_symbol_addr(addr_memo_t *memo, pid_t pid, const char *symbol, uint64_t *
 
 static int get_php_bin_path(pid_t pid, char *path_root, char *path) {
     char buf[PHPSPY_STR_SIZE];
-    char *cmd_fmt = "awk '/libphp[78]?/{print $NF; exit 0} END{exit 1}' /proc/%d/maps"
+    char *cmd_fmt = "awk -ve=1 '/libphp[78]?/{print $NF; e=0; exit} END{exit e}' /proc/%d/maps"
         " || readlink /proc/%d/exe";
     if (popen_read_line(buf, sizeof(buf), cmd_fmt, (int)pid, (int)pid) != 0) {
         log_error("get_php_bin_path: Failed\n");
