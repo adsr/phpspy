@@ -168,6 +168,7 @@ typedef struct trace_context_s {
     } event;
     void *event_udata;
     int (*event_handler)(struct trace_context_s *context, int event_type);
+    const char *event_handler_opts;
     char buf[PHPSPY_STR_SIZE];
     size_t buf_len;
 } trace_context_t;

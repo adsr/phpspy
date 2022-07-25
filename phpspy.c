@@ -33,6 +33,7 @@ int opt_filter_negate = 0;
 int opt_verbose_fields_pid = 0;
 int opt_verbose_fields_ts = 0;
 int (*opt_event_handler)(struct trace_context_s *context, int event_type) = event_handler_fout;
+char *opt_event_handler_opts = NULL;
 int opt_continue_on_error = 0;
 int opt_fout_buffer_size = 4096;
 
@@ -144,7 +145,8 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "  -b, --buffer-size=<size>           Set output buffer size to `size`.\n");
     fprintf(fp, "                                       Note: In `-P` mode, setting this\n");
     fprintf(fp, "                                       above PIPE_BUF (4096) may lead to\n");
-    fprintf(fp, "                                       interlaced writes across threads.\n");
+    fprintf(fp, "                                       interlaced writes across threads");
+    fprintf(fp, "                                       unless `-J m` is specified.\n");
     fprintf(fp, "                                       (default: %d)\n", opt_fout_buffer_size);
     fprintf(fp, "  -f, --filter=<regex>               Filter output by POSIX regex\n");
     fprintf(fp, "                                       (default: none)\n");
@@ -163,6 +165,10 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "Experimental options:\n");
     fprintf(fp, "  -j, --event-handler=<handler>      Set event handler (fout, callgrind)\n");
     fprintf(fp, "                                       (default: fout)\n");
+    fprintf(fp, "  -J, --event-handler-opts=<opts>    Set event handler options\n");
+    fprintf(fp, "                                       (fout: m=use mutex to prevent\n");
+    fprintf(fp, "                                       interlaced writes on stdout in `-P`\n");
+    fprintf(fp, "                                       mode)\n");
     fprintf(fp, "  -S, --pause-process                Pause process while reading stacktrace\n");
     fprintf(fp, "                                       (unsafe for production!)\n");
     fprintf(fp, "  -e, --peek-var=<varspec>           Peek at the contents of the var located\n");
@@ -238,6 +244,7 @@ static void parse_opts(int argc, char **argv) {
         { "verbose-fields",        required_argument, NULL, 'd' },
         { "continue-on-error",     no_argument,       NULL, 'c' },
         { "event-handler",         required_argument, NULL, 'j' },
+        { "event-handler-opts",    required_argument, NULL, 'J' },
         { "comment",               required_argument, NULL, '#' },
         { "nothing",               no_argument,       NULL, '@' },
         { "version",               no_argument,       NULL, 'v' },
@@ -257,7 +264,7 @@ static void parse_opts(int argc, char **argv) {
     while (
         optind < argc
         && argv[optind][0] == '-'
-        && (c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:i:n:r:mo:O:E:x:a:1b:f:F:d:cj:#:@vSe:g:t", long_opts, NULL)) != -1
+        && (c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:i:n:r:mo:O:E:x:a:1b:f:F:d:cj:J:#:@vSe:g:t", long_opts, NULL)) != -1
     ) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
@@ -327,6 +334,9 @@ static void parse_opts(int argc, char **argv) {
                     usage(stderr, 1);
                 }
                 break;
+            case 'J':
+                opt_event_handler_opts = optarg;
+                break;
             case '#': break;
             case '@': break;
             case 'v':
@@ -363,6 +373,7 @@ int main_pid(pid_t pid) {
     memset(&context, 0, sizeof(trace_context_t));
     context.target.pid = pid;
     context.event_handler = opt_event_handler;
+    context.event_handler_opts = opt_event_handler_opts;
     try(rv, find_addresses(&context.target));
     try(rv, context.event_handler(&context, PHPSPY_TRACE_EVENT_INIT));
 
