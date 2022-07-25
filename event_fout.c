@@ -6,11 +6,13 @@ typedef struct event_handler_fout_udata_s {
     char *cur;
     size_t buf_size;
     size_t rem;
+    int use_mutex;
 } event_handler_fout_udata_t;
 
 static int event_handler_fout_write(event_handler_fout_udata_t *udata);
 static int event_handler_fout_snprintf(char **s, size_t *n, size_t *ret_len, int repl_delim, const char *fmt, ...);
 static int event_handler_fout_open(int *fd);
+static pthread_mutex_t event_handler_fout_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 int event_handler_fout(struct trace_context_s *context, int event_type) {
     int rv, fd;
@@ -34,6 +36,8 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
             udata->buf = malloc(udata->buf_size);
             udata->cur = udata->buf;
             udata->rem = udata->buf_size;
+            udata->use_mutex = context->event_handler_opts != NULL
+                && strchr(context->event_handler_opts, 'm') != NULL ? 1 : 0;
             context->event_udata = udata;
             break;
         case PHPSPY_TRACE_EVENT_STACK_BEGIN:
@@ -142,17 +146,31 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
 }
 
 static int event_handler_fout_write(event_handler_fout_udata_t *udata) {
+    int rv;
     ssize_t write_len;
+
+    rv = PHPSPY_OK;
     write_len = (udata->cur - udata->buf);
 
     if (write_len < 1) {
         /* nothing to write */
-    } else if (write(udata->fd, udata->buf, write_len) != write_len) {
-        log_error("event_handler_fout: Write failed (%s)\n", errno != 0 ? strerror(errno) : "partial");
-        return PHPSPY_ERR;
+        return rv;
     }
 
-    return PHPSPY_OK;
+    if (udata->use_mutex) {
+        pthread_mutex_lock(&event_handler_fout_mutex);
+    }
+
+    if (write(udata->fd, udata->buf, write_len) != write_len) {
+        log_error("event_handler_fout: Write failed (%s)\n", errno != 0 ? strerror(errno) : "partial");
+        rv = PHPSPY_ERR;
+    }
+
+    if (udata->use_mutex) {
+        pthread_mutex_unlock(&event_handler_fout_mutex);
+    }
+
+    return rv;
 }
 
 static int event_handler_fout_snprintf(char **s, size_t *n, size_t *ret_len, int repl_delim, const char *fmt, ...) {
