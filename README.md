@@ -70,7 +70,7 @@ All with no changes to your application and minimal overhead.
                                            (see also `-s`) (default: 99)
       -V, --php-version=<ver>            Set PHP version
                                            (default: auto;
-                                           supported: 70 71 72 73 74)
+                                           supported: 70 71 72 73 74 80 81 82)
       -l, --limit=<num>                  Limit total number of traces to capture
                                            (approximate limit in pgrep mode)
                                            (default: 0; 0=unlimited)
@@ -100,7 +100,8 @@ All with no changes to your application and minimal overhead.
       -b, --buffer-size=<size>           Set output buffer size to `size`.
                                            Note: In `-P` mode, setting this
                                            above PIPE_BUF (4096) may lead to
-                                           interlaced writes across threads.
+                                           interlaced writes across threads
+                                           unless `-J m` is specified.
                                            (default: 4096)
       -f, --filter=<regex>               Filter output by POSIX regex
                                            (default: none)
@@ -119,6 +120,10 @@ All with no changes to your application and minimal overhead.
     Experimental options:
       -j, --event-handler=<handler>      Set event handler (fout, callgrind)
                                            (default: fout)
+      -J, --event-handler-opts=<opts>    Set event handler options
+                                           (fout: m=use mutex to prevent
+                                           interlaced writes on stdout in `-P`
+                                           mode)
       -S, --pause-process                Pause process while reading stacktrace
                                            (unsafe for production!)
       -e, --peek-var=<varspec>           Peek at the contents of the var located
