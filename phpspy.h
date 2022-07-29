@@ -24,6 +24,7 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <sys/wait.h>
+#include <sys/syscall.h>
 #include <time.h>
 #include <unistd.h>
 #include <termbox.h>
@@ -45,6 +46,10 @@
 #include <php_structs_74.h>
 #include <php_structs_80.h>
 #include <php_structs_81.h>
+#endif
+
+#ifndef gettid
+#define gettid() syscall(SYS_gettid)
 #endif
 
 #include <uthash.h>
