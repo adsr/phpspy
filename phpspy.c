@@ -145,7 +145,7 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "  -b, --buffer-size=<size>           Set output buffer size to `size`.\n");
     fprintf(fp, "                                       Note: In `-P` mode, setting this\n");
     fprintf(fp, "                                       above PIPE_BUF (4096) may lead to\n");
-    fprintf(fp, "                                       interlaced writes across threads");
+    fprintf(fp, "                                       interlaced writes across threads\n");
     fprintf(fp, "                                       unless `-J m` is specified.\n");
     fprintf(fp, "                                       (default: %d)\n", opt_fout_buffer_size);
     fprintf(fp, "  -f, --filter=<regex>               Filter output by POSIX regex\n");
@@ -702,6 +702,7 @@ static void glopeek_add(char *glospec) {
     } else {
         log_error("glopeek_add: Invalid global: %s\n\n", glospec);
         usage(stderr, 1);
+        return;
     }
     gentry = calloc(1, sizeof(glopeek_entry_t));
     snprintf(gentry->key, sizeof(gentry->key), "%s", glospec);
