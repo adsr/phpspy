@@ -9,5 +9,5 @@ source $TEST_SH
 
 phpspy_opts=(--buffer-size=24 -- $PHP -r 'usleep(1000000);')
 declare -A not_expected
-not_expected[nothing]='^\S$'
+not_expected[anything]='^.+$'
 source $TEST_SH
