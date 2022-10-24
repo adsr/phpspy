@@ -36,14 +36,13 @@ static int do_trace(trace_context_t *context) {
 
     rv = PHPSPY_OK;
     do {
-        #define maybe_break_on_err() do {                   \
-            if ((rv & PHPSPY_ERR_PID_DEAD) != 0) {          \
-                break;                                      \
-            } else if ((rv & PHPSPY_ERR_BUF_FULL) != 0) {   \
-                break;                                      \
-            } else if (!opt_continue_on_error) {            \
-                break;                                      \
-            }                                               \
+        #define maybe_break_on_err() do {                      \
+            if (   (rv & PHPSPY_ERR_PID_DEAD) != 0             \
+                || (rv & PHPSPY_ERR_BUF_FULL) != 0             \
+                || (rv != PHPSPY_OK && !opt_continue_on_error) \
+            ) {                                                \
+                goto do_trace_end;                             \
+            }                                                  \
         } while(0)
 
         rv |= trace_stack(context, executor_globals.current_execute_data, &depth);
@@ -68,6 +67,7 @@ static int do_trace(trace_context_t *context) {
         #undef maybe_break_on_err
     } while (0);
 
+do_trace_end:
     if (rv == PHPSPY_OK || opt_continue_on_error) {
         try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_STACK_END));
     }
