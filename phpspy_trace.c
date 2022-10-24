@@ -72,7 +72,7 @@ do_trace_end:
         try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_STACK_END));
     }
 
-    return PHPSPY_OK;
+    return rv;
 }
 
 /**
