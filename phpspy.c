@@ -72,6 +72,8 @@ static int do_trace_73(trace_context_t *context);
 static int do_trace_74(trace_context_t *context);
 static int do_trace_80(trace_context_t *context);
 static int do_trace_81(trace_context_t *context);
+static int do_trace_82(trace_context_t *context);
+static int do_trace_83(trace_context_t *context);
 #endif
 
 int main(int argc, char **argv) {
@@ -115,7 +117,7 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "                                       (see also `-s`) (default: %lu)\n", 1000000000UL/opt_sleep_ns);
     fprintf(fp, "  -V, --php-version=<ver>            Set PHP version\n");
     fprintf(fp, "                                       (default: %s;\n", opt_phpv);
-    fprintf(fp, "                                       supported: 70 71 72 73 74 80 81 82)\n");
+    fprintf(fp, "                                       supported: 70 71 72 73 74 80 81 82 83)\n");
     fprintf(fp, "  -l, --limit=<num>                  Limit total number of traces to capture\n");
     fprintf(fp, "                                       (approximate limit in pgrep mode)\n");
     fprintf(fp, "                                       (default: %lu; 0=unlimited)\n", opt_trace_limit);
@@ -400,7 +402,9 @@ int main_pid(pid_t pid) {
     } else if (strcmp("81", opt_phpv) == 0) {
         do_trace_ptr = do_trace_81;
     } else if (strcmp("82", opt_phpv) == 0) {
-        do_trace_ptr = do_trace_81; /* TODO verify 8.2 structs */
+        do_trace_ptr = do_trace_82;
+    } else if (strcmp("83", opt_phpv) == 0) {
+        do_trace_ptr = do_trace_83; /* TODO verify 8.3 structs */
     } else {
         log_error("main_pid: Unrecognized PHP version (%s)\n", opt_phpv);
         return PHPSPY_ERR;
@@ -792,6 +796,7 @@ static int get_php_version(trace_target_t *target) {
     else if (strncmp(phpv, "8.0", 3) == 0) opt_phpv = "80";
     else if (strncmp(phpv, "8.1", 3) == 0) opt_phpv = "81";
     else if (strncmp(phpv, "8.2", 3) == 0) opt_phpv = "82";
+    else if (strncmp(phpv, "8.3", 3) == 0) opt_phpv = "83";
     else {
         log_error("get_php_version: Unrecognized PHP version (%s)\n", phpv);
         return PHPSPY_ERR;
@@ -861,6 +866,12 @@ void log_error(const char *fmt, ...) {
 #include "phpspy_trace_tpl.c"
 #undef phpv
 #define phpv 81
+#include "phpspy_trace_tpl.c"
+#undef phpv
+#define phpv 82
+#include "phpspy_trace_tpl.c"
+#undef phpv
+#define phpv 83
 #include "phpspy_trace_tpl.c"
 #undef phpv
 #endif
