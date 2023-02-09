@@ -450,7 +450,7 @@ int main_pid(pid_t pid) {
         }
 
         /* maybe apply time limit */
-        if (stop_time && clock_diff(&end_time, stop_time) >= 1) {
+        if (stop_time && clock_diff(&start_time, stop_time) >= 1) {
             break;
         }
 
