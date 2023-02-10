@@ -36,6 +36,7 @@ int (*opt_event_handler)(struct trace_context_s *context, int event_type) = even
 char *opt_event_handler_opts = NULL;
 int opt_continue_on_error = 0;
 int opt_fout_buffer_size = 4096;
+char *opt_libname_awk_patt = "libphp[78]?";
 
 int done = 0;
 int (*do_trace_ptr)(trace_context_t *context) = NULL;
@@ -159,6 +160,8 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "                                       (default: PT; none)\n");
     fprintf(fp, "  -c, --continue-on-error            Attempt to continue tracing after\n");
     fprintf(fp, "                                       encountering an error\n");
+    fprintf(fp, "  -w, --libname-awk-patt=<patt>      Awk pattern to match name of PHP lib\n");
+    fprintf(fp, "                                       (default: %s)\n", opt_libname_awk_patt);
     fprintf(fp, "  -#, --comment=<any>                Ignored; intended for self-documenting\n");
     fprintf(fp, "                                       commands\n");
     fprintf(fp, "  -@, --nothing                      Ignored\n");
@@ -254,6 +257,7 @@ static void parse_opts(int argc, char **argv) {
         { "peek-var",              required_argument, NULL, 'e' },
         { "peek-global",           required_argument, NULL, 'g' },
         { "top",                   no_argument,       NULL, 't' },
+        { "libname-awk-patt",      required_argument, NULL, 'w' },
         { 0,                       0,                 0,    0   }
     };
     /* Parse options until the first non-option argument is reached. Effectively
@@ -266,7 +270,7 @@ static void parse_opts(int argc, char **argv) {
     while (
         optind < argc
         && argv[optind][0] == '-'
-        && (c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:i:n:r:mo:O:E:x:a:1b:f:F:d:cj:J:#:@vSe:g:t", long_opts, NULL)) != -1
+        && (c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:i:n:r:mo:O:E:x:a:1b:f:F:d:cj:J:#:@vSe:g:tw:", long_opts, NULL)) != -1
     ) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
@@ -336,9 +340,7 @@ static void parse_opts(int argc, char **argv) {
                     usage(stderr, 1);
                 }
                 break;
-            case 'J':
-                opt_event_handler_opts = optarg;
-                break;
+            case 'J': opt_event_handler_opts = optarg; break;
             case '#': break;
             case '@': break;
             case 'v':
@@ -362,6 +364,7 @@ static void parse_opts(int argc, char **argv) {
             case 'e': varpeek_add(optarg); break;
             case 'g': glopeek_add(optarg); break;
             case 't': opt_top_mode = 1; break;
+            case 'w': opt_libname_awk_patt = optarg; break;
         }
     }
 }
@@ -761,16 +764,20 @@ static int get_php_version(trace_target_t *target) {
 
     /* Try greping binary */
     if (phpv[0] == '\0') {
+        char libname[PHPSPY_STR_SIZE];
+        if (shell_escape(opt_libname_awk_patt, libname, sizeof(libname), "opt_libname_awk_patt")) {
+            return PHPSPY_ERR;
+        }
         int n = snprintf(
             version_cmd,
             sizeof(version_cmd),
             "{ echo -n /proc/%d/root/; "
-            "  awk -ve=1 '/libphp[78]?/{print $NF; e=0; exit} END{exit e}' /proc/%d/maps "
+            "  awk -ve=1 -vp=%s '$0~p{print $NF; e=0; exit} END{exit e}' /proc/%d/maps "
             "  || readlink /proc/%d/exe; } "
             "| { xargs stat --printf=%%n 2>/dev/null || echo /proc/%d/exe; } "
             "| xargs strings "
             "| grep -Po '(?<=X-Powered-By: PHP/)\\d\\.\\d'",
-            pid, pid, pid, pid
+            pid, libname, pid, pid, pid
         );
         if ((size_t)n >= sizeof(version_cmd) - 1) {
             log_error("get_php_version: snprintf overflow\n");
