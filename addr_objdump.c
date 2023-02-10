@@ -6,7 +6,8 @@ static int get_php_base_addr(pid_t pid, char *path_root, char *path, uint64_t *r
 static int get_symbol_offset(char *path_root, const char *symbol, uint64_t *raddr);
 static int popen_read_line(char *buf, size_t buf_size, char *cmd_fmt, ...);
 
-static int shell_escape(const char *arg, char *buf, size_t buf_size) {
+int shell_escape(const char *arg, char *buf, size_t buf_size, const char *what) {
+    int rv = 0;
     char *const buf_end = buf + buf_size;
     assert(buf_size >= 1);
     *buf++ = '\'';
@@ -15,7 +16,8 @@ static int shell_escape(const char *arg, char *buf, size_t buf_size) {
         /* logic based on https://stackoverflow.com/a/3669819 */
         if (*arg == '\'') {
             if (buf_end - buf < 4) {
-                return 1;
+                rv = 1;
+                goto shell_escape_end;
             }
 
             *buf++ = '\''; /* close quoting */
@@ -25,7 +27,8 @@ static int shell_escape(const char *arg, char *buf, size_t buf_size) {
             arg++;
         } else {
             if (buf_end - buf < 1) {
-                return 1;
+                rv = 1;
+                goto shell_escape_end;
             }
 
             *buf++ = *arg++;
@@ -33,12 +36,19 @@ static int shell_escape(const char *arg, char *buf, size_t buf_size) {
     }
 
     if (buf_end - buf < 2) {
-        return 1;
+        rv = 1;
+        goto shell_escape_end;
     }
 
     *buf++ = '\'';
     *buf = '\0';
-    return 0;
+
+shell_escape_end:
+    if (rv != 0) {
+        log_error("shell_escape: Buffer too small to escape %s: %s\n", what, arg);
+    }
+
+    return rv;
 }
 
 int get_symbol_addr(addr_memo_t *memo, pid_t pid, const char *symbol, uint64_t *raddr) {
@@ -61,9 +71,13 @@ int get_symbol_addr(addr_memo_t *memo, pid_t pid, const char *symbol, uint64_t *
 
 static int get_php_bin_path(pid_t pid, char *path_root, char *path) {
     char buf[PHPSPY_STR_SIZE];
-    char *cmd_fmt = "awk -ve=1 '/libphp[78]?/{print $NF; e=0; exit} END{exit e}' /proc/%d/maps"
+    char libname[PHPSPY_STR_SIZE];
+    if (shell_escape(opt_libname_awk_patt, libname, sizeof(libname), "opt_libname_awk_patt")) {
+        return 1;
+    }
+    char *cmd_fmt = "awk -ve=1 -vp=%s '$0~p{print $NF; e=0; exit} END{exit e}' /proc/%d/maps"
         " || readlink /proc/%d/exe";
-    if (popen_read_line(buf, sizeof(buf), cmd_fmt, (int)pid, (int)pid) != 0) {
+    if (popen_read_line(buf, sizeof(buf), cmd_fmt, libname, (int)pid, (int)pid) != 0) {
         log_error("get_php_bin_path: Failed\n");
         return 1;
     }
@@ -93,8 +107,7 @@ static int get_php_base_addr(pid_t pid, char *path_root, char *path, uint64_t *r
     uint64_t start_addr;
     uint64_t virt_addr;
     char *cmd_fmt = "grep -m1 ' '%s\\$ /proc/%d/maps";
-    if (shell_escape(path, arg_buf, sizeof(arg_buf))) {
-        log_error("shell_escape: Buffer too small to escape path: %s\n", path);
+    if (shell_escape(path, arg_buf, sizeof(arg_buf), "path")) {
         return 1;
     }
     if (popen_read_line(buf, sizeof(buf), cmd_fmt, arg_buf, (int)pid) != 0) {
@@ -102,8 +115,7 @@ static int get_php_base_addr(pid_t pid, char *path_root, char *path, uint64_t *r
         return 1;
     }
     start_addr = strtoull(buf, NULL, 16);
-    if (shell_escape(path_root, arg_buf, sizeof(arg_buf))) {
-        log_error("shell_escape: Buffer too small to escape path_root: %s\n", path_root);
+    if (shell_escape(path_root, arg_buf, sizeof(arg_buf), "path_root")) {
         return 1;
     }
     cmd_fmt = "objdump -p %s | awk '/LOAD/{print $5; exit}'";
@@ -120,8 +132,7 @@ static int get_symbol_offset(char *path_root, const char *symbol, uint64_t *radd
     char buf[PHPSPY_STR_SIZE];
     char arg_buf[PHPSPY_STR_SIZE];
     char *cmd_fmt = "objdump -Tt %s | awk '/ %s$/{print $1; exit}'";
-    if (shell_escape(path_root, arg_buf, sizeof(arg_buf))) {
-        log_error("shell_escape: Buffer too smal to escape path_root: %s\n", path_root);
+    if (shell_escape(path_root, arg_buf, sizeof(arg_buf), "path_root")) {
         return 1;
     }
     if (popen_read_line(buf, sizeof(buf), cmd_fmt, arg_buf, symbol) != 0) {
