@@ -3,7 +3,7 @@
 phpspy is a low-overhead sampling profiler for PHP. It works with non-ZTS PHP
 7.0+ with CLI, Apache, and FPM SAPIs on 64-bit Linux 3.2+.
 
-[![Build Status](https://travis-ci.org/adsr/phpspy.svg?branch=master)](https://travis-ci.org/adsr/phpspy)
+[![Build Status](https://github.com/adsr/phpspy/actions/workflows/phpspy_test.yml/badge.svg)](https://github.com/adsr/phpspy/actions/workflows/phpspy_test.yml)
 
 ### Demos
 
