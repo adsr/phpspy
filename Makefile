@@ -28,11 +28,11 @@ endif
 
 all: phpspy
 
-phpspy: $(wildcard *.c *.h) vendor/termbox2/termbox.h
+phpspy: $(wildcard *.c *.h) vendor/termbox2/termbox2.h
 	$(CC) $(phpspy_cflags) $(phpspy_includes) $(termbox_inlcudes) $(phpspy_defines) $(phpspy_sources) -o phpspy $(phpspy_ldflags) $(phpspy_libs)
 
-vendor/termbox2/termbox.h:
-	git submodule update --init --remote --recursive
+vendor/termbox2/termbox2.h:
+	git submodule update --init --recursive
 	cd vendor/termbox2 && git reset --hard
 
 test: phpspy $(phpspy_tests)
