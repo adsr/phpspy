@@ -14,7 +14,7 @@ source $TEST_SH
 wait $php_pid
 rm -f $pid_file
 
-phpspy_opts=(--pgrep "--exact hope_this_does_not_exist_lol" --threads 2 --time-limit-ms=1000)
+phpspy_opts=(--pgrep "--full hope_this_does_not_exist_lol" --threads 2 --time-limit-ms=1000)
 declare -A expected
 expected[nothing]='^$'
 use_timeout_s=2
