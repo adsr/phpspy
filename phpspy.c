@@ -2,7 +2,7 @@
 
 #define TB_IMPL
 #define TB_OPT_V1_COMPAT
-#include "termbox.h"
+#include <termbox2.h>
 #undef TB_IMPL
 
 pid_t opt_pid = -1;
