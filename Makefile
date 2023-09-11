@@ -35,10 +35,10 @@ vendor/termbox2/termbox2.h:
 	if [ -d "$(CURDIR)/.git" ]; then \
 		git submodule update --init --recursive; \
 		cd vendor/termbox2 && git reset --hard; \
-    else \
-        cd vendor; \
+	else \
+		cd vendor; \
 		git clone https://github.com/termbox/termbox2.git; \
-    fi
+	fi
 
 test: phpspy $(phpspy_tests)
 	@total=0; \
