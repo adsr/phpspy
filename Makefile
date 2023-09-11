@@ -32,8 +32,13 @@ phpspy: $(wildcard *.c *.h) vendor/termbox2/termbox2.h
 	$(CC) $(phpspy_cflags) $(phpspy_includes) $(termbox_inlcudes) $(phpspy_defines) $(phpspy_sources) -o phpspy $(phpspy_ldflags) $(phpspy_libs)
 
 vendor/termbox2/termbox2.h:
-	git submodule update --init --recursive
-	cd vendor/termbox2 && git reset --hard
+	if [ -d "$(CURDIR)/.git" ]; then \
+		git submodule update --init --recursive; \
+		cd vendor/termbox2 && git reset --hard; \
+    else \
+        cd vendor; \
+		git clone https://github.com/termbox/termbox2.git; \
+    fi
 
 test: phpspy $(phpspy_tests)
 	@total=0; \
