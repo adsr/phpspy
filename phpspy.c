@@ -75,6 +75,7 @@ static int do_trace_80(trace_context_t *context);
 static int do_trace_81(trace_context_t *context);
 static int do_trace_82(trace_context_t *context);
 static int do_trace_83(trace_context_t *context);
+static int do_trace_84(trace_context_t *context);
 #endif
 
 int main(int argc, char **argv) {
@@ -407,7 +408,9 @@ int main_pid(pid_t pid) {
     } else if (strcmp("82", opt_phpv) == 0) {
         do_trace_ptr = do_trace_82;
     } else if (strcmp("83", opt_phpv) == 0) {
-        do_trace_ptr = do_trace_83; /* TODO verify 8.3 structs */
+        do_trace_ptr = do_trace_83;
+    } else if (strcmp("84", opt_phpv) == 0) {
+        do_trace_ptr = do_trace_84; /* TODO verify 8.4 structs */
     } else {
         log_error("main_pid: Unrecognized PHP version (%s)\n", opt_phpv);
         return PHPSPY_ERR;
@@ -804,6 +807,7 @@ static int get_php_version(trace_target_t *target) {
     else if (strncmp(phpv, "8.1", 3) == 0) opt_phpv = "81";
     else if (strncmp(phpv, "8.2", 3) == 0) opt_phpv = "82";
     else if (strncmp(phpv, "8.3", 3) == 0) opt_phpv = "83";
+    else if (strncmp(phpv, "8.4", 3) == 0) opt_phpv = "84";
     else {
         log_error("get_php_version: Unrecognized PHP version (%s)\n", phpv);
         return PHPSPY_ERR;
@@ -879,6 +883,9 @@ void log_error(const char *fmt, ...) {
 #include "phpspy_trace_tpl.c"
 #undef phpv
 #define phpv 83
+#include "phpspy_trace_tpl.c"
+#undef phpv
+#define phpv 84
 #include "phpspy_trace_tpl.c"
 #undef phpv
 #endif
