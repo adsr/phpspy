@@ -15,6 +15,7 @@ php_path?=php
 sinclude config.mk
 
 has_phpconf := $(shell command -v php-config >/dev/null 2>&1 && echo :)
+git_sha := $(shell test -d .git && command -v git >/dev/null && git rev-parse --short HEAD)
 
 ifdef USE_ZEND
   $(or $(has_phpconf), $(error Need php-config))
@@ -24,6 +25,8 @@ endif
 
 ifdef COMMIT
   phpspy_defines:=$(phpspy_defines) -DCOMMIT=$(COMMIT)
+else ifneq ($(git_sha),)
+  phpspy_defines:=$(phpspy_defines) -DCOMMIT=$(git_sha)
 endif
 
 all: phpspy
