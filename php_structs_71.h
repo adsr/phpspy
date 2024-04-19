@@ -57,13 +57,13 @@ struct __attribute__((__packed__)) _zend_op_array_71 {
 };
 
 union __attribute__((__packed__)) _zend_function_71 {
-    uint8_t                 type;                   /* 0        +8 */
+    uint8_t                 type;                   /* 0        +1 */
     struct {
         uint8_t             pad0[8];                /* 0        +8 */
         zend_string_71      *function_name;         /* 8        +8 */
         zend_class_entry_71 *scope;                 /* 16       +8 */
     } common;
-    zend_op_array_71        op_array;               /* 0        +132 */
+    zend_op_array_71        op_array;               /* 0        +208 */
 };
 
 struct __attribute__((__packed__)) _zend_class_entry_71 {
@@ -74,7 +74,7 @@ struct __attribute__((__packed__)) _zend_class_entry_71 {
 struct __attribute__((__packed__)) _zend_string_71 {
     uint8_t                 pad0[16];               /* 0        +16 */
     size_t                  len;                    /* 16       +8 */
-    char                    val[1];                 /* 24       +8 */
+    char                    val[1];                 /* 24       +1 */
 };
 
 struct __attribute__((__packed__)) _zend_op_71 {
@@ -121,7 +121,7 @@ struct __attribute__((__packed__)) _zval_71 {
 struct __attribute__((__packed__)) _Bucket_71 {
     zval_71                 val;                    /* 0        +16 */
     uint64_t                h;                      /* 16       +8 */
-    zend_string_71          *key;                   /* 24       +32 */
+    zend_string_71          *key;                   /* 24       +8 */
 };
 
 struct __attribute__((__packed__)) _zend_alloc_globals_71 {
