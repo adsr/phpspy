@@ -28,7 +28,7 @@ struct __attribute__((__packed__)) _zend_array_82 {
     uint32_t                nNumUsed;               /* 24       +4 */
     uint32_t                nNumOfElements;         /* 28       +4 */
     uint32_t                nTableSize;             /* 32       +4 */
-};                                                  /*          =36 */
+};
 
 struct __attribute__((__packed__)) _zend_executor_globals_82 {
     uint8_t                 pad0[304];              /* 0        +304 */
@@ -57,7 +57,7 @@ struct __attribute__((__packed__)) _zend_op_array_82 {
 };
 
 union __attribute__((__packed__)) _zend_function_82 {
-    uint8_t                 type;                   /* 0        +8 */
+    uint8_t                 type;                   /* 0        +1 */
     struct {
         uint8_t             pad0[8];                /* 0        +8 */
         zend_string_82      *function_name;         /* 8        +8 */
@@ -74,8 +74,8 @@ struct __attribute__((__packed__)) _zend_class_entry_82 {
 struct __attribute__((__packed__)) _zend_string_82 {
     uint8_t                 pad0[16];               /* 0        +16 */
     size_t                  len;                    /* 16       +8 */
-    char                    val[1];                 /* 24       +8 */
-};                                                  /*          =32 */
+    char                    val[1];                 /* 24       +1 */
+};
 
 struct __attribute__((__packed__)) _zend_op_82 {
     uint8_t                 pad0[24];               /* 0        +24 */
@@ -89,7 +89,7 @@ struct __attribute__((__packed__)) _sapi_request_info_82 {
     uint8_t                 pad1[8];                /* 24       +8 */
     char                    *path_translated;       /* 32       +8 */
     char                    *request_uri;           /* 40       +8 */
-};                                                  /*          =48 */
+};
 
 struct __attribute__((__packed__)) _sapi_globals_struct_82 {
     uint8_t                 pad0[8];                /* 0        +8 */
@@ -112,7 +112,7 @@ struct __attribute__((__packed__)) _zval_82 {
             uint8_t         type;                   /* 8        +1 */
             uint8_t         pad0[3];                /* 9        +3 */
         } v;
-    } u1;                                           /* 8        +4 */
+    } u1;
     union {
         uint32_t next;                              /* 12       +4 */
     } u2;
@@ -122,7 +122,7 @@ struct __attribute__((__packed__)) _Bucket_82 {
     zval_82                 val;                    /* 0        +16 */
     uint64_t                h;                      /* 16       +8 */
     zend_string_82          *key;                   /* 24       +8 */
-};                                                  /*          =32 */
+};
 
 struct __attribute__((__packed__)) _zend_alloc_globals_82 {
     zend_mm_heap_82         *mm_heap;               /* 0        +8 */

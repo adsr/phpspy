@@ -28,7 +28,7 @@ struct __attribute__((__packed__)) _zend_array_80 {
     uint32_t                nNumUsed;               /* 24       +4 */
     uint32_t                nNumOfElements;         /* 28       +4 */
     uint32_t                nTableSize;             /* 32       +4 */
-};                                                  /*          =36 */
+};
 
 struct __attribute__((__packed__)) _zend_executor_globals_80 {
     uint8_t                 pad0[304];              /* 0        +304 */
@@ -57,7 +57,7 @@ struct __attribute__((__packed__)) _zend_op_array_80 {
 };
 
 union __attribute__((__packed__)) _zend_function_80 {
-    uint8_t                 type;                   /* 0        +8 */
+    uint8_t                 type;                   /* 0        +1 */
     struct {
         uint8_t             pad0[8];                /* 0        +8 */
         zend_string_80      *function_name;         /* 8        +8 */
@@ -74,8 +74,8 @@ struct __attribute__((__packed__)) _zend_class_entry_80 {
 struct __attribute__((__packed__)) _zend_string_80 {
     uint8_t                 pad0[16];               /* 0        +16 */
     size_t                  len;                    /* 16       +8 */
-    char                    val[1];                 /* 24       +8 */
-};                                                  /*          =32 */
+    char                    val[1];                 /* 24       +1 */
+};
 
 struct __attribute__((__packed__)) _zend_op_80 {
     uint8_t                 pad0[24];               /* 0        +24 */
@@ -89,7 +89,7 @@ struct __attribute__((__packed__)) _sapi_request_info_80 {
     uint8_t                 pad1[8];                /* 24       +8 */
     char                    *path_translated;       /* 32       +8 */
     char                    *request_uri;           /* 40       +8 */
-};                                                  /*          =48 */
+};
 
 struct __attribute__((__packed__)) _sapi_globals_struct_80 {
     uint8_t                 pad0[8];                /* 0        +8 */
@@ -121,8 +121,8 @@ struct __attribute__((__packed__)) _zval_80 {
 struct __attribute__((__packed__)) _Bucket_80 {
     zval_80                 val;                    /* 0        +16 */
     uint64_t                h;                      /* 16       +8 */
-    zend_string_80          *key;                   /* 24       +32 */
-};                                                  /*          =56 */
+    zend_string_80          *key;                   /* 24       +8 */
+};
 
 struct __attribute__((__packed__)) _zend_alloc_globals_80 {
     zend_mm_heap_80         *mm_heap;               /* 0        +8 */

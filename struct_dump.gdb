@@ -1,5 +1,6 @@
 macro define offsetof(st, f) ((size_t)&(((st *)0)->f))
 macro define typeof(st, f) ((st *)0).f
+
 define fieldof
   printf "  "
   whatis typeof($arg0, $arg1)

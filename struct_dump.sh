@@ -9,7 +9,17 @@ fi
 
 pushd $phpsrc_dir
 git fetch --tags
-for phpv in php-7.0.33 php-7.1.33 php-7.2.30 php-7.3.17 php-7.4.5 php-8.0.15 php-8.1.2; do
+for phpv in php-7.0.33 \
+            php-7.1.33 \
+            php-7.2.34 \
+            php-7.3.33 \
+            php-7.4.33 \
+            php-8.0.30 \
+            php-8.1.28 \
+            php-8.2.18 \
+            php-8.3.6 \
+            master
+do
     git reset --hard HEAD \
         && git clean -fdx \
         && git checkout $phpv \
