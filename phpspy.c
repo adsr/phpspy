@@ -779,8 +779,8 @@ static int get_php_version(trace_target_t *target) {
             "  || readlink /proc/%d/exe; } "
             "| { xargs stat --printf=%%n 2>/dev/null || echo /proc/%d/exe; } "
             "| xargs strings "
-            "| grep -o 'X-Powered-By: PHP/\\d\\.\\d' "
-            "| grep -o '\\d\\.\\d' ",
+            "| grep -Eo 'X-Powered-By: PHP/[0-9]+\\.[0-9]+' "
+            "| grep -Eo '[0-9]+\\.[0-9]+' ",
             pid, libname, pid, pid, pid
         );
         if ((size_t)n >= sizeof(version_cmd) - 1) {
