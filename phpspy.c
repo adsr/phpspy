@@ -2,7 +2,7 @@
 
 #define TB_IMPL
 #define TB_OPT_V1_COMPAT
-#include <termbox2.h>
+//#include <termbox2.h>
 #undef TB_IMPL
 
 pid_t opt_pid = -1;
@@ -28,7 +28,7 @@ char *opt_path_child_out = "phpspy.%d.out";
 char *opt_path_child_err = "phpspy.%d.err";
 char *opt_phpv = "auto";
 int opt_pause = 0;
-regex_t *opt_filter_re = NULL;
+//regex_t *opt_filter_re = NULL;
 int opt_filter_negate = 0;
 int opt_verbose_fields_pid = 0;
 int opt_verbose_fields_ts = 0;
@@ -42,7 +42,7 @@ int done = 0;
 int (*do_trace_ptr)(trace_context_t *context) = NULL;
 varpeek_entry_t *varpeek_map = NULL;
 glopeek_entry_t *glopeek_map = NULL;
-regex_t filter_re;
+//regex_t filter_re;
 int log_error_enabled = 1;
 int in_pgrep_mode = 0;
 uint64_t trace_count = 0;
@@ -83,12 +83,12 @@ int main(int argc, char **argv) {
     parse_opts(argc, argv);
 
     if (opt_top_mode != 0) {
-        rv = main_top(argc, argv);
+//        rv = main_top(argc, argv);
     } else if (opt_pid != -1) {
         rv = main_pid(opt_pid);
     } else if (opt_pgrep_args != NULL) {
         in_pgrep_mode = 1;
-        rv = main_pgrep();
+//        rv = main_pgrep();
     } else if (optind < argc) {
         rv = main_fork(argc, argv);
     } else {
@@ -309,16 +309,16 @@ static void parse_opts(int argc, char **argv) {
             case 'b': opt_fout_buffer_size = atoi_with_min_or_exit("-b", optarg, 1); break;
             case 'f':
             case 'F':
-                if (opt_filter_re) {
-                    regfree(opt_filter_re);
-                }
-                if (regcomp(&filter_re, optarg, REG_EXTENDED | REG_NOSUB | REG_NEWLINE) == 0) {
-                    opt_filter_re = &filter_re;
-                } else {
-                    log_error("parse_opts: Failed to compile filter regex\n\n"); /* TODO regerror */
-                    usage(stderr, 1);
-                }
-                opt_filter_negate = c == 'F' ? 1 : 0;
+//                if (opt_filter_re) {
+//                    regfree(opt_filter_re);
+//                }
+//                if (regcomp(&filter_re, optarg, REG_EXTENDED | REG_NOSUB | REG_NEWLINE) == 0) {
+//                    opt_filter_re = &filter_re;
+//                } else {
+//                    log_error("parse_opts: Failed to compile filter regex\n\n"); /* TODO regerror */
+//                    usage(stderr, 1);
+//                }
+//                opt_filter_negate = c == 'F' ? 1 : 0;
                 break;
             case 'd':
                 for (i = 0; i < strlen(optarg); i++) {
@@ -445,7 +445,7 @@ int main_pid(pid_t pid) {
         /* maybe apply trace limit */
         if (opt_trace_limit > 0 && rv == PHPSPY_OK) {
             if (in_pgrep_mode) {
-                __atomic_add_fetch(&trace_count, 1, __ATOMIC_SEQ_CST);
+                //__atomic_add_fetch(&trace_count, 1, __ATOMIC_SEQ_CST);
             } else {
                 trace_count += 1;
             }
@@ -471,36 +471,85 @@ int main_pid(pid_t pid) {
     /* in pgrep mode, trigger done condition if we went over the trace limit.
        it is ok for multiple threads to call this. */
     if (in_pgrep_mode && opt_trace_limit > 0 && trace_count >= opt_trace_limit) {
-        write_done_pipe();
+        //write_done_pipe();
     }
 
     /* TODO proper signal handling for non-pgrep modes */
     return PHPSPY_OK;
 }
 
+int exec(char **argv) {
+    int rv;
+    char cmd[PHPSPY_STR_SIZE] = {0};
+    char argv_buf[PHPSPY_STR_SIZE] = {0};
+    while(*argv) {
+        snprintf(argv_buf, sizeof(argv_buf), "%s ", *argv++);
+        strcat(cmd, argv_buf);
+    }
+
+    STARTUPINFO si;
+    PROCESS_INFORMATION pi;
+    ZeroMemory(&si, sizeof(si));
+    si.cb = sizeof(si);
+    ZeroMemory(&pi, sizeof(pi));
+
+    if (!CreateProcess(
+            NULL,
+            cmd,
+            NULL,
+            NULL,
+            FALSE,
+            0,
+            NULL,
+            NULL,
+            &si,
+            &pi)
+            ) {
+        printf("CreateProcess failed (%d).\n", GetLastError());
+        return 1;
+    }
+
+    Sleep(1000);
+    rv = main_pid(pi.dwProcessId);
+
+    WaitForSingleObject(pi.hProcess, INFINITE);
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+
+    return rv;
+}
+
 static int main_fork(int argc, char **argv) {
     int rv, status;
-    pid_t fork_pid;
+    pid_t fork_pid = 0;
     (void)argc;
-    fork_pid = fork();
+    return  exec(argv+optind);
+    printf("main_fork\n");
+//    fork_pid = fork();
+//    printf("fork_pid: %d\n", fork_pid);
     if (fork_pid == 0) {
-        redirect_child_stdio(STDOUT_FILENO, opt_path_child_out);
-        redirect_child_stdio(STDERR_FILENO, opt_path_child_err);
-        ptrace(PTRACE_TRACEME, 0, NULL, NULL);
-        execvp(argv[optind], argv + optind);
+//        redirect_child_stdio(STDOUT_FILENO, opt_path_child_out);
+//        redirect_child_stdio(STDERR_FILENO, opt_path_child_err);
+//        ptrace(PTRACE_TRACEME, 0, NULL, NULL);
+//        execvp(argv[optind], argv + optind);
+        exec(argv+optind);
+        printf("execvp: %s,%s\n", argv[optind], argv[optind+1]);
         perror("execvp");
         exit(1);
     } else if (fork_pid < 0) {
         perror("fork");
         exit(1);
     }
-    waitpid(fork_pid, &status, 0);
-    if (!WIFSTOPPED(status) || WSTOPSIG(status) != SIGTRAP) {
-        log_error("main_fork: Expected SIGTRAP from child\n");
-    }
-    ptrace(PTRACE_DETACH, fork_pid, NULL, NULL);
+//    waitpid(fork_pid, &status, 0);
+
+    printf("waitpid: %d\n", status);
+//    if (!WIFSTOPPED(status) || WSTOPSIG(status) != SIGTRAP) {
+//        log_error("main_fork: Expected SIGTRAP from child\n");
+//    }
+//    ptrace(PTRACE_DETACH, fork_pid, NULL, NULL);
     rv = main_pid(fork_pid);
-    waitpid(fork_pid, NULL, 0);
+//    waitpid(fork_pid, NULL, 0);
     return rv;
 }
 
@@ -509,9 +558,9 @@ static void cleanup() {
     varpeek_var_t *var, *var_tmp;
     glopeek_entry_t *gentry, *gentry_tmp;
 
-    if (opt_filter_re) {
-        regfree(opt_filter_re);
-    }
+//    if (opt_filter_re) {
+//        regfree(opt_filter_re);
+//    }
 
     HASH_ITER(hh, varpeek_map, entry, entry_tmp) {
         HASH_ITER(hh, entry->varmap, var, var_tmp) {
@@ -529,26 +578,26 @@ static void cleanup() {
 }
 
 static int pause_pid(pid_t pid) {
-    int rv;
-    if (ptrace(PTRACE_ATTACH, pid, 0, 0) == -1) {
-        rv = errno;
-        perror("ptrace");
-        return PHPSPY_ERR + (rv == ESRCH ? PHPSPY_ERR_PID_DEAD : 0);
-    }
-    if (waitpid(pid, NULL, 0) < 0) {
-        perror("waitpid");
-        return PHPSPY_ERR;
-    }
+//    int rv;
+//    if (ptrace(PTRACE_ATTACH, pid, 0, 0) == -1) {
+//        rv = errno;
+//        perror("ptrace");
+//        return PHPSPY_ERR + (rv == ESRCH ? PHPSPY_ERR_PID_DEAD : 0);
+//    }
+//    if (waitpid(pid, NULL, 0) < 0) {
+//        perror("waitpid");
+//        return PHPSPY_ERR;
+//    }
     return PHPSPY_OK;
 }
 
 static int unpause_pid(pid_t pid) {
-    int rv;
-    if (ptrace(PTRACE_DETACH, pid, 0, 0) == -1) {
-        rv = errno;
-        perror("ptrace");
-        return PHPSPY_ERR + (rv == ESRCH ? PHPSPY_ERR_PID_DEAD : 0);
-    }
+//    int rv;
+//    if (ptrace(PTRACE_DETACH, pid, 0, 0) == -1) {
+//        rv = errno;
+//        perror("ptrace");
+//        return PHPSPY_ERR + (rv == ESRCH ? PHPSPY_ERR_PID_DEAD : 0);
+//    }
     return PHPSPY_OK;
 }
 
@@ -558,7 +607,8 @@ static void redirect_child_stdio(int proc_fd, char *opt_path) {
     if (strcmp(opt_path, "-") == 0) {
         return;
     } else if (strstr(opt_path, "%d") != NULL) {
-        if (asprintf(&redir_path, opt_path, getpid()) < 0) {
+        // TODO asprintf
+        if (sprintf(&redir_path, opt_path, getpid()) < 0) {
             errno = ENOMEM;
             perror("asprintf");
             exit(1);
@@ -603,15 +653,31 @@ static int find_addresses(trace_target_t *target) {
         target->basic_functions_module_addr = 0;
     }
     log_error_enabled = 1;
+
+    strncpy(target->php_bin_path, memo.php_bin_path, PHPSPY_STR_SIZE - 1);
+
     return PHPSPY_OK;
 }
 
 static void clock_get(struct timespec *ts) {
-    if (clock_gettime(CLOCK_MONOTONIC_RAW, ts) == -1) {
+#ifndef WINDOWS
+    if (clock_gettime(1, ts) == -1) {
         perror("clock_gettime");
         ts->tv_sec = 0;
         ts->tv_nsec = 0;
     }
+#else
+    LARGE_INTEGER pf, pc;
+    QueryPerformanceFrequency(&pf);
+    QueryPerformanceCounter(&pc);
+
+    ts->tv_sec = pc.QuadPart / pf.QuadPart;
+    ts->tv_nsec = (int)(((pc.QuadPart % pf.QuadPart) * 1000000000L + (pf.QuadPart >> 1)) / pf.QuadPart);
+    if (ts->tv_nsec >= 1000000000L) {
+        ts->tv_sec++;
+        ts->tv_nsec -= 1000000000L;
+    }
+#endif
 }
 
 static void clock_add(struct timespec *a, struct timespec *b, struct timespec *res) {
@@ -721,6 +787,7 @@ static void glopeek_add(char *glospec) {
     HASH_ADD_STR(glopeek_map, key, gentry);
 }
 
+#ifdef LINUX
 static int copy_proc_mem(pid_t pid, const char *what, void *raddr, void *laddr, size_t size) {
     struct iovec local[1];
     struct iovec remote[1];
@@ -747,6 +814,30 @@ static int copy_proc_mem(pid_t pid, const char *what, void *raddr, void *laddr, 
     return PHPSPY_OK;
 }
 
+#else
+
+static int copy_proc_mem(pid_t pid, const char *what, void *raddr, void *laddr, size_t size) {
+    size_t bytesRead;
+    HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
+    if (hProcess == NULL) {
+        printf("Could not open process with PID %lu.\n", pid);
+        return;
+    }
+
+    if (ReadProcessMemory(hProcess, raddr, laddr, size, &bytesRead)) {
+        CloseHandle(hProcess);
+        return PHPSPY_OK;
+    } else {
+        CloseHandle(hProcess);
+        log_error("copy_proc_mem: Failed to copy %s; err=%d raddr=%p size=%lu\n", what, GetLastError(), raddr, size);
+        return PHPSPY_ERR;
+    }
+
+    return PHPSPY_OK;
+}
+
+#endif
+
 #ifndef USE_ZEND
 static int get_php_version(trace_target_t *target) {
     struct _zend_module_entry basic_functions_module;
@@ -767,6 +858,7 @@ static int get_php_version(trace_target_t *target) {
 
     /* Try greping binary */
     if (phpv[0] == '\0') {
+#ifndef WINDOWS
         char libname[PHPSPY_STR_SIZE];
         if (shell_escape(opt_libname_awk_patt, libname, sizeof(libname), "opt_libname_awk_patt")) {
             return PHPSPY_ERR;
@@ -787,7 +879,9 @@ static int get_php_version(trace_target_t *target) {
             log_error("get_php_version: snprintf overflow\n");
             return PHPSPY_ERR;
         }
-
+#else
+        snprintf(version_cmd, sizeof(version_cmd), "%s -r \"echo phpversion();\"", target->php_bin_path);
+#endif
         if ((pcmd = popen(version_cmd, "r")) == NULL) {
             perror("get_php_version: popen");
             return PHPSPY_ERR;

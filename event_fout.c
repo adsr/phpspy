@@ -12,7 +12,7 @@ typedef struct event_handler_fout_udata_s {
 static int event_handler_fout_write(event_handler_fout_udata_t *udata);
 static int event_handler_fout_snprintf(char **s, size_t *n, size_t *ret_len, int repl_delim, const char *fmt, ...);
 static int event_handler_fout_open(int *fd);
-static pthread_mutex_t event_handler_fout_mutex = PTHREAD_MUTEX_INITIALIZER;
+//static pthread_mutex_t event_handler_fout_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 int event_handler_fout(struct trace_context_s *context, int event_type) {
     int rv, fd;
@@ -117,11 +117,11 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
                 /* buffer is empty */
                 break;
             }
-            if (opt_filter_re) {
-                rv = regexec(opt_filter_re, udata->buf, 0, NULL, 0);
-                if (opt_filter_negate == 0 && rv != 0) break;
-                if (opt_filter_negate != 0 && rv == 0) break;
-            }
+//            if (opt_filter_re) {
+//                rv = regexec(opt_filter_re, udata->buf, 0, NULL, 0);
+//                if (opt_filter_negate == 0 && rv != 0) break;
+//                if (opt_filter_negate != 0 && rv == 0) break;
+//            }
             do {
                 if (opt_verbose_fields_ts) {
                     gettimeofday(&tv, NULL);
@@ -158,7 +158,7 @@ static int event_handler_fout_write(event_handler_fout_udata_t *udata) {
     }
 
     if (udata->use_mutex) {
-        pthread_mutex_lock(&event_handler_fout_mutex);
+        //pthread_mutex_lock(&event_handler_fout_mutex);
     }
 
     if (write(udata->fd, udata->buf, write_len) != write_len) {
@@ -167,7 +167,7 @@ static int event_handler_fout_write(event_handler_fout_udata_t *udata) {
     }
 
     if (udata->use_mutex) {
-        pthread_mutex_unlock(&event_handler_fout_mutex);
+        //pthread_mutex_unlock(&event_handler_fout_mutex);
     }
 
     return rv;
@@ -205,7 +205,7 @@ static int event_handler_fout_snprintf(char **s, size_t *n, size_t *ret_len, int
 
 static int event_handler_fout_open(int *fd) {
     int tfd = -1, errno_saved;
-    char *path, *apath = NULL;
+    char *path, *apath = malloc(1024);
 
     if (strcmp(opt_path_output, "-") == 0) {
         tfd = dup(STDOUT_FILENO);
@@ -218,7 +218,8 @@ static int event_handler_fout_open(int *fd) {
     }
 
     if (strstr(opt_path_output, "%d") != NULL) {
-        if (asprintf(&apath, opt_path_output, gettid()) < 0) {
+        // TODO asprintf
+        if (sprintf(&apath, opt_path_output, gettid()) < 0) {
             errno = ENOMEM;
             perror("event_handler_fout_open: asprintf");
             return PHPSPY_ERR;
@@ -227,8 +228,11 @@ static int event_handler_fout_open(int *fd) {
     } else {
         path = opt_path_output;
     }
-
+#ifdef WINDOWS
+    tfd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+#else
     tfd = open(path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+#endif
     errno_saved = errno;
 
     if (apath) {

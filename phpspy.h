@@ -7,9 +7,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
-#include <getopt.h>
 #include <limits.h>
-#include <pthread.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stddef.h>
@@ -17,6 +15,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#include "vendor/uthash.h"
+#include "basic.h"
+
+#ifndef WINDOWS
+#include <getopt.h>
+#include <pthread.h>
 #include <sys/ptrace.h>
 #include <sys/select.h>
 #include <sys/stat.h>
@@ -25,10 +30,10 @@
 #include <sys/uio.h>
 #include <sys/wait.h>
 #include <sys/syscall.h>
-#include <time.h>
 #include <unistd.h>
 #include <termbox2.h>
 #include <regex.h>
+#endif
 
 #ifdef USE_ZEND
 #include <main/php_config.h>
@@ -39,23 +44,17 @@
 #undef vsnprintf
 #undef HASH_ADD
 #else
-#include <php_structs_70.h>
-#include <php_structs_71.h>
-#include <php_structs_72.h>
-#include <php_structs_73.h>
-#include <php_structs_74.h>
-#include <php_structs_80.h>
-#include <php_structs_81.h>
-#include <php_structs_82.h>
-#include <php_structs_83.h>
-#include <php_structs_84.h>
+#include "php_structs_70.h"
+#include "php_structs_71.h"
+#include "php_structs_72.h"
+#include "php_structs_73.h"
+#include "php_structs_74.h"
+#include "php_structs_80.h"
+#include "php_structs_81.h"
+#include "php_structs_82.h"
+#include "php_structs_83.h"
+#include "php_structs_84.h"
 #endif
-
-#ifndef gettid
-#define gettid() syscall(SYS_gettid)
-#endif
-
-#include <uthash.h>
 
 #define try(__rv, __call)       do { if (((__rv) = (__call)) != 0) return (__rv); } while(0)
 #define try_break(__rv, __call) do { if (((__rv) = (__call)) != 0) break;         } while(0)
@@ -163,6 +162,7 @@ typedef struct trace_target_s {
     uint64_t sapi_globals_addr;
     uint64_t alloc_globals_addr;
     uint64_t basic_functions_module_addr;
+    char php_bin_path[PHPSPY_STR_SIZE];
 } trace_target_t;
 
 typedef struct trace_context_s {
@@ -183,12 +183,13 @@ typedef struct trace_context_s {
 
 typedef struct addr_memo_s {
     char php_bin_path[PHPSPY_STR_SIZE];
+    char php_dll_path[PHPSPY_STR_SIZE];
     char php_bin_path_root[PHPSPY_STR_SIZE];
     uint64_t php_base_addr;
 } addr_memo_t;
 
 #ifndef USE_ZEND
-struct __attribute__((__packed__)) _zend_module_entry {
+struct PHPSPY_PACK _zend_module_entry {
     uint8_t pad0[88];
     const char *version;
 };
@@ -201,7 +202,7 @@ extern pid_t opt_pid;
 extern char opt_frame_delim;
 extern char opt_trace_delim;
 extern char *opt_path_output;
-extern regex_t *opt_filter_re;
+//extern regex_t *opt_filter_re;
 extern int opt_filter_negate;
 extern int opt_verbose_fields_pid;
 extern int opt_verbose_fields_ts;
