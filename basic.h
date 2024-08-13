@@ -1,7 +1,7 @@
 #ifndef BASIC_H
 #define BASIC_H
 
-#ifndef WINDOWS
+#ifndef PHPSPY_WIN32
 
 #define PHPSPY_PACK __attribute__((__packed__))
 #ifndef gettid
@@ -11,14 +11,14 @@
 #endif
 
 
-#ifdef WINDOWS
+#ifdef PHPSPY_WIN32
 
 #include <windows.h>
 #include <time.h>
 #include <tlhelp32.h>
 #include <io.h>
 #include <stdint.h>
-#include "vendor/getopt.h"
+#include <getopt.h>
 
 
 #define popen	_popen
@@ -33,7 +33,8 @@
 #endif
 
 #define PHPSPY_PACK
-#define gettid() 1
+#define gettid() GetCurrentThreadId()
+#define getpid() GetCurrentProcessId()
 
 struct timezone
 {
@@ -45,6 +46,8 @@ typedef  uint32_t pid_t;
 typedef __int64 ssize_t;
 
 void nanosleep(struct timespec *ts, void *null);
+int getntptimeofday(struct timespec*, struct timezone*);
+int gettimeofday(struct timeval* p, void* z);
 
 #endif
 

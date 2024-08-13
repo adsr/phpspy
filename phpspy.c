@@ -1,9 +1,11 @@
 #include "phpspy.h"
 
+#ifndef PHPSPY_WIN32
 #define TB_IMPL
 #define TB_OPT_V1_COMPAT
-//#include <termbox2.h>
+#include <termbox2.h>
 #undef TB_IMPL
+#endif
 
 pid_t opt_pid = -1;
 char *opt_pgrep_args = NULL;
@@ -52,7 +54,11 @@ static int main_fork(int argc, char **argv);
 static void cleanup();
 static int pause_pid(pid_t pid);
 static int unpause_pid(pid_t pid);
+#ifndef PHPSPY_WIN32
 static void redirect_child_stdio(int proc_fd, char *opt_path);
+#else
+static void redirect_child_stdio(HANDLE * std, char *opt_path);
+#endif
 static int find_addresses(trace_target_t *target);
 static void clock_get(struct timespec *ts);
 static void clock_add(struct timespec *a, struct timespec *b, struct timespec *res);
@@ -478,33 +484,67 @@ int main_pid(pid_t pid) {
     return PHPSPY_OK;
 }
 
-int exec(char **argv) {
+#ifndef PHPSPY_WIN32
+static int main_fork(int argc, char **argv) {
+    int rv, status;
+    pid_t fork_pid;
+    (void)argc;
+    fork_pid = fork();
+    if (fork_pid == 0) {
+        redirect_child_stdio(STDOUT_FILENO, opt_path_child_out);
+        redirect_child_stdio(STDERR_FILENO, opt_path_child_err);
+        ptrace(PTRACE_TRACEME, 0, NULL, NULL);
+        execvp(argv[optind], argv + optind);
+        perror("execvp");
+        exit(1);
+    }
+    else if (fork_pid < 0) {
+        perror("fork");
+        exit(1);
+    }
+    waitpid(fork_pid, &status, 0);
+    if (!WIFSTOPPED(status) || WSTOPSIG(status) != SIGTRAP) {
+        log_error("main_fork: Expected SIGTRAP from child\n");
+    }
+    ptrace(PTRACE_DETACH, fork_pid, NULL, NULL);
+    rv = main_pid(fork_pid);
+    waitpid(fork_pid, NULL, 0);
+    return rv;
+}
+#else
+static int main_fork(int argc, char** argv) {
     int rv;
-    char cmd[PHPSPY_STR_SIZE] = {0};
-    char argv_buf[PHPSPY_STR_SIZE] = {0};
-    while(*argv) {
+    char cmd[PHPSPY_STR_SIZE] = { 0 };
+    char argv_buf[PHPSPY_STR_SIZE] = { 0 };
+
+    argv += optind;
+    while (*argv) {
         snprintf(argv_buf, sizeof(argv_buf), "%s ", *argv++);
         strcat(cmd, argv_buf);
     }
 
     STARTUPINFO si;
     PROCESS_INFORMATION pi;
+
     ZeroMemory(&si, sizeof(si));
     si.cb = sizeof(si);
+    redirect_child_stdio(&si.hStdOutput, opt_path_child_out);
+    redirect_child_stdio(&si.hStdError, opt_path_child_err);
+    si.dwFlags |= STARTF_USESTDHANDLES;
     ZeroMemory(&pi, sizeof(pi));
 
     if (!CreateProcess(
-            NULL,
-            cmd,
-            NULL,
-            NULL,
-            FALSE,
-            0,
-            NULL,
-            NULL,
-            &si,
-            &pi)
-            ) {
+        NULL,
+        cmd,
+        NULL,
+        NULL,
+        TRUE,
+        0,
+        NULL,
+        NULL,
+        &si,
+        &pi
+    )) {
         printf("CreateProcess failed (%d).\n", GetLastError());
         return 1;
     }
@@ -516,42 +556,12 @@ int exec(char **argv) {
 
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
+    CloseHandle(si.hStdOutput);
+    CloseHandle(si.hStdError);
 
     return rv;
 }
-
-static int main_fork(int argc, char **argv) {
-    int rv, status;
-    pid_t fork_pid = 0;
-    (void)argc;
-    return  exec(argv+optind);
-    printf("main_fork\n");
-//    fork_pid = fork();
-//    printf("fork_pid: %d\n", fork_pid);
-    if (fork_pid == 0) {
-//        redirect_child_stdio(STDOUT_FILENO, opt_path_child_out);
-//        redirect_child_stdio(STDERR_FILENO, opt_path_child_err);
-//        ptrace(PTRACE_TRACEME, 0, NULL, NULL);
-//        execvp(argv[optind], argv + optind);
-        exec(argv+optind);
-        printf("execvp: %s,%s\n", argv[optind], argv[optind+1]);
-        perror("execvp");
-        exit(1);
-    } else if (fork_pid < 0) {
-        perror("fork");
-        exit(1);
-    }
-//    waitpid(fork_pid, &status, 0);
-
-    printf("waitpid: %d\n", status);
-//    if (!WIFSTOPPED(status) || WSTOPSIG(status) != SIGTRAP) {
-//        log_error("main_fork: Expected SIGTRAP from child\n");
-//    }
-//    ptrace(PTRACE_DETACH, fork_pid, NULL, NULL);
-    rv = main_pid(fork_pid);
-//    waitpid(fork_pid, NULL, 0);
-    return rv;
-}
+#endif
 
 static void cleanup() {
     varpeek_entry_t *entry, *entry_tmp;
@@ -601,14 +611,18 @@ static int unpause_pid(pid_t pid) {
     return PHPSPY_OK;
 }
 
+#ifndef PHPSPY_WIN32
 static void redirect_child_stdio(int proc_fd, char *opt_path) {
+#else
+static void redirect_child_stdio(HANDLE *std, char* opt_path) {
+#endif
     char *redir_path;
-    FILE *redir_file;
     if (strcmp(opt_path, "-") == 0) {
         return;
     } else if (strstr(opt_path, "%d") != NULL) {
         // TODO asprintf
-        if (sprintf(&redir_path, opt_path, getpid()) < 0) {
+        redir_path = malloc(PHPSPY_STR_SIZE);
+        if (sprintf(redir_path, opt_path, getpid()) < 0) {
             errno = ENOMEM;
             perror("asprintf");
             exit(1);
@@ -619,6 +633,9 @@ static void redirect_child_stdio(int proc_fd, char *opt_path) {
             exit(1);
         }
     }
+#ifndef PHPSPY_WIN32
+    FILE *redir_file;
+
     if ((redir_file = fopen(redir_path, "w")) == NULL) {
         perror("fopen");
         free(redir_path);
@@ -626,6 +643,22 @@ static void redirect_child_stdio(int proc_fd, char *opt_path) {
     }
     dup2(fileno(redir_file), proc_fd);
     fclose(redir_file);
+#else
+    SECURITY_ATTRIBUTES sa;
+    HANDLE redir_file;
+
+    ZeroMemory(&sa, sizeof(sa));
+    sa.nLength = sizeof(sa);
+    sa.bInheritHandle = TRUE;
+
+    redir_file = CreateFile(redir_path, GENERIC_WRITE, FILE_SHARE_READ, &sa, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (redir_file == INVALID_HANDLE_VALUE) {
+        perror("fopen");
+        free(redir_path);
+        exit(1);
+    }
+    *std = redir_file;
+#endif
     free(redir_path);
 }
 
@@ -654,13 +687,15 @@ static int find_addresses(trace_target_t *target) {
     }
     log_error_enabled = 1;
 
+#ifdef PHPSPY_WIN32
     strncpy(target->php_bin_path, memo.php_bin_path, PHPSPY_STR_SIZE - 1);
+#endif
 
     return PHPSPY_OK;
 }
 
 static void clock_get(struct timespec *ts) {
-#ifndef WINDOWS
+#ifndef PHPSPY_WIN32
     if (clock_gettime(1, ts) == -1) {
         perror("clock_gettime");
         ts->tv_sec = 0;
@@ -787,7 +822,7 @@ static void glopeek_add(char *glospec) {
     HASH_ADD_STR(glopeek_map, key, gentry);
 }
 
-#ifdef LINUX
+#ifndef PHPSPY_WIN32
 static int copy_proc_mem(pid_t pid, const char *what, void *raddr, void *laddr, size_t size) {
     struct iovec local[1];
     struct iovec remote[1];
@@ -821,14 +856,16 @@ static int copy_proc_mem(pid_t pid, const char *what, void *raddr, void *laddr, 
     HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
     if (hProcess == NULL) {
         printf("Could not open process with PID %lu.\n", pid);
-        return;
+        return PHPSPY_ERR;
     }
+    BOOL rv = ReadProcessMemory(hProcess, raddr, laddr, size, &bytesRead);
+    CloseHandle(hProcess);
 
-    if (ReadProcessMemory(hProcess, raddr, laddr, size, &bytesRead)) {
-        CloseHandle(hProcess);
-        return PHPSPY_OK;
-    } else {
-        CloseHandle(hProcess);
+    if (!rv) {
+        if (bytesRead == 0) {
+            perror("process_vm_readv");
+            return PHPSPY_ERR | PHPSPY_ERR_PID_DEAD;
+        }
         log_error("copy_proc_mem: Failed to copy %s; err=%d raddr=%p size=%lu\n", what, GetLastError(), raddr, size);
         return PHPSPY_ERR;
     }
@@ -858,7 +895,7 @@ static int get_php_version(trace_target_t *target) {
 
     /* Try greping binary */
     if (phpv[0] == '\0') {
-#ifndef WINDOWS
+#ifndef PHPSPY_WIN32
         char libname[PHPSPY_STR_SIZE];
         if (shell_escape(opt_libname_awk_patt, libname, sizeof(libname), "opt_libname_awk_patt")) {
             return PHPSPY_ERR;
@@ -951,36 +988,36 @@ void log_error(const char *fmt, ...) {
 
 /* TODO figure out a way to make this cleaner */
 #ifdef USE_ZEND
-#include "phpspy_trace.c"
+#include <phpspy_trace.c>
 #else
 #define phpv 70
-#include "phpspy_trace_tpl.c"
+#include <phpspy_trace_tpl.c>
 #undef phpv
 #define phpv 71
-#include "phpspy_trace_tpl.c"
+#include <phpspy_trace_tpl.c>
 #undef phpv
 #define phpv 72
-#include "phpspy_trace_tpl.c"
+#include <phpspy_trace_tpl.c>
 #undef phpv
 #define phpv 73
-#include "phpspy_trace_tpl.c"
+#include <phpspy_trace_tpl.c>
 #undef phpv
 #define phpv 74
-#include "phpspy_trace_tpl.c"
+#include <phpspy_trace_tpl.c>
 #undef phpv
 #define phpv 80
-#include "phpspy_trace_tpl.c"
+#include <phpspy_trace_tpl.c>
 #undef phpv
 #define phpv 81
-#include "phpspy_trace_tpl.c"
+#include <phpspy_trace_tpl.c>
 #undef phpv
 #define phpv 82
-#include "phpspy_trace_tpl.c"
+#include <phpspy_trace_tpl.c>
 #undef phpv
 #define phpv 83
-#include "phpspy_trace_tpl.c"
+#include <phpspy_trace_tpl.c>
 #undef phpv
 #define phpv 84
-#include "phpspy_trace_tpl.c"
+#include <phpspy_trace_tpl.c>
 #undef phpv
 #endif

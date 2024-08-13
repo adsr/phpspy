@@ -19,7 +19,7 @@ typedef struct _zend_array_83            zend_array_83;
 typedef struct _zend_alloc_globals_83    zend_alloc_globals_83;
 typedef struct _zend_mm_heap_83          zend_mm_heap_83;
 
-#ifdef WINDOWS
+#ifdef PHPSPY_WIN32
 #pragma pack(push, 1)
 #endif
 
@@ -138,7 +138,7 @@ struct PHPSPY_PACK _zend_mm_heap_83 {
     size_t                  peak;                   /* 24       +8 */
 };
 
-#ifdef WINDOWS
+#ifdef PHPSPY_WIN32
 #pragma pack(pop)
 #endif
 

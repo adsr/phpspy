@@ -1,15 +1,13 @@
-#include "basic.h"
-#ifdef WINDOWS
+#include <basic.h>
+#ifdef PHPSPY_WIN32
 
 void nanosleep(struct timespec* ts, void *null) {
 	long ns = (ts->tv_sec * 1000000000UL) + (ts->tv_nsec * 1UL);
 	Sleep(ns / 1000000L);
 }
 
-
 #define FILETIME_1970 116444736000000000ull /* seconds between 1/1/1601 and 1/1/1970 */
 #define HECTONANOSEC_PER_SEC 10000000ull
-int getntptimeofday(struct timespec*, struct timezone*);
 
 int getntptimeofday(struct timespec* tp, struct timezone* z)
 {
@@ -47,7 +45,7 @@ int getntptimeofday(struct timespec* tp, struct timezone* z)
 	return res;
 }
 
-int __cdecl gettimeofday(struct timeval* p, void* z)
+int gettimeofday(struct timeval* p, void* z)
 {
 	struct timespec tp;
 
@@ -58,4 +56,4 @@ int __cdecl gettimeofday(struct timeval* p, void* z)
 	return 0;
 }
 
-#endif // WINDOWS
+#endif

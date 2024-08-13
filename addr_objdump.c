@@ -1,7 +1,7 @@
 #include "phpspy.h"
 #include <assert.h>
 
-#ifndef WINDOWS
+#ifndef PHPSPY_WIN32
 static int get_php_bin_path(pid_t pid, char *path_root, char *path);
 static int get_php_base_addr(pid_t pid, char *path_root, char *path, uint64_t *raddr);
 #else
@@ -63,7 +63,7 @@ int get_symbol_addr(addr_memo_t *memo, pid_t pid, const char *symbol, uint64_t *
     php_dll_path = memo->php_dll_path;
     php_bin_path_root = memo->php_bin_path_root;
     php_base_addr = &memo->php_base_addr;
-#ifdef LINUX
+#ifndef PHPSPY_WIN32
     if (*php_bin_path == '\0' && get_php_bin_path(pid, php_bin_path_root, php_bin_path) != 0) {
         return 1;
     } else if (*php_base_addr == 0 && get_php_base_addr(pid, php_bin_path_root, php_bin_path, php_base_addr) != 0) {
@@ -82,7 +82,7 @@ int get_symbol_addr(addr_memo_t *memo, pid_t pid, const char *symbol, uint64_t *
     return 0;
 }
 
-#ifndef WINDOWS
+#ifndef PHPSPY_WIN32
 
 static int get_php_bin_path(pid_t pid, char *path_root, char *path) {
     char buf[PHPSPY_STR_SIZE];
@@ -175,7 +175,7 @@ static int get_php_info(pid_t pid, char *php_bin_path, char *php_dll_path, uint6
     if (!Module32First(hModuleSnap, &me32)) {
         printf("Module32First failed. Error: %lu \n", GetLastError());
         CloseHandle(hModuleSnap);  // Clean the snapshot object.
-        return;
+        return 1;
     }
 
     do {
@@ -183,9 +183,9 @@ static int get_php_info(pid_t pid, char *php_bin_path, char *php_dll_path, uint6
             strncpy(php_dll_path, me32.szExePath, PHPSPY_STR_SIZE - 1);
             *raddr = (uint64_t) me32.modBaseAddr;
         } else if (strncmp(me32.szModule, "php.exe", 7) == 0 || strncmp(me32.szModule, "php-cgi.exe", 11) == 0) {
-            char* last_slash = strrchr(me32.szExePath, '\\');
+            char *last_slash = strrchr(me32.szExePath, '\\');
             *last_slash = '\0';
-            strncpy(php_bin_path, me32.szExePath, PHPSPY_STR_SIZE - 1);
+            strncpy_s(php_bin_path, PHPSPY_STR_SIZE, me32.szExePath, sizeof(me32.szExePath) - 1);
             strncat(php_bin_path, "\\php.exe", 8);
         }
     } while (Module32Next(hModuleSnap, &me32));

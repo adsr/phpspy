@@ -16,10 +16,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include "vendor/uthash.h"
-#include "basic.h"
+#include <uthash.h>
+#include <basic.h>
 
-#ifndef WINDOWS
+#ifndef PHPSPY_WIN32
 #include <getopt.h>
 #include <pthread.h>
 #include <sys/ptrace.h>
@@ -44,16 +44,16 @@
 #undef vsnprintf
 #undef HASH_ADD
 #else
-#include "php_structs_70.h"
-#include "php_structs_71.h"
-#include "php_structs_72.h"
-#include "php_structs_73.h"
-#include "php_structs_74.h"
-#include "php_structs_80.h"
-#include "php_structs_81.h"
-#include "php_structs_82.h"
-#include "php_structs_83.h"
-#include "php_structs_84.h"
+#include <php_structs_70.h>
+#include <php_structs_71.h>
+#include <php_structs_72.h>
+#include <php_structs_73.h>
+#include <php_structs_74.h>
+#include <php_structs_80.h>
+#include <php_structs_81.h>
+#include <php_structs_82.h>
+#include <php_structs_83.h>
+#include <php_structs_84.h>
 #endif
 
 #define try(__rv, __call)       do { if (((__rv) = (__call)) != 0) return (__rv); } while(0)
