@@ -30,7 +30,7 @@ char *opt_path_child_out = "phpspy.%d.out";
 char *opt_path_child_err = "phpspy.%d.err";
 char *opt_phpv = "auto";
 int opt_pause = 0;
-//regex_t *opt_filter_re = NULL;
+regex_t *opt_filter_re = NULL;
 int opt_filter_negate = 0;
 int opt_verbose_fields_pid = 0;
 int opt_verbose_fields_ts = 0;
@@ -44,7 +44,7 @@ int done = 0;
 int (*do_trace_ptr)(trace_context_t *context) = NULL;
 varpeek_entry_t *varpeek_map = NULL;
 glopeek_entry_t *glopeek_map = NULL;
-//regex_t filter_re;
+regex_t filter_re;
 int log_error_enabled = 1;
 int in_pgrep_mode = 0;
 uint64_t trace_count = 0;
@@ -315,16 +315,16 @@ static void parse_opts(int argc, char **argv) {
             case 'b': opt_fout_buffer_size = atoi_with_min_or_exit("-b", optarg, 1); break;
             case 'f':
             case 'F':
-//                if (opt_filter_re) {
-//                    regfree(opt_filter_re);
-//                }
-//                if (regcomp(&filter_re, optarg, REG_EXTENDED | REG_NOSUB | REG_NEWLINE) == 0) {
-//                    opt_filter_re = &filter_re;
-//                } else {
-//                    log_error("parse_opts: Failed to compile filter regex\n\n"); /* TODO regerror */
-//                    usage(stderr, 1);
-//                }
-//                opt_filter_negate = c == 'F' ? 1 : 0;
+                if (opt_filter_re) {
+                    regfree(opt_filter_re);
+                }
+                if (regcomp(&filter_re, optarg, REG_EXTENDED | REG_NOSUB | REG_NEWLINE) == 0) {
+                    opt_filter_re = &filter_re;
+                } else {
+                    log_error("parse_opts: Failed to compile filter regex\n\n"); /* TODO regerror */
+                    usage(stderr, 1);
+                }
+                opt_filter_negate = c == 'F' ? 1 : 0;
                 break;
             case 'd':
                 for (i = 0; i < strlen(optarg); i++) {
@@ -620,9 +620,7 @@ static void redirect_child_stdio(HANDLE *std, char* opt_path) {
     if (strcmp(opt_path, "-") == 0) {
         return;
     } else if (strstr(opt_path, "%d") != NULL) {
-        // TODO asprintf
-        redir_path = malloc(PHPSPY_STR_SIZE);
-        if (sprintf(redir_path, opt_path, getpid()) < 0) {
+        if (asprintf(&redir_path, opt_path, getpid()) < 0) {
             errno = ENOMEM;
             perror("asprintf");
             exit(1);

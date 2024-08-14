@@ -117,11 +117,11 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
                 /* buffer is empty */
                 break;
             }
-//            if (opt_filter_re) {
-//                rv = regexec(opt_filter_re, udata->buf, 0, NULL, 0);
-//                if (opt_filter_negate == 0 && rv != 0) break;
-//                if (opt_filter_negate != 0 && rv == 0) break;
-//            }
+            if (opt_filter_re) {
+                rv = regexec(opt_filter_re, udata->buf, 0, NULL, 0);
+                if (opt_filter_negate == 0 && rv != 0) break;
+                if (opt_filter_negate != 0 && rv == 0) break;
+            }
             do {
                 if (opt_verbose_fields_ts) {
                     gettimeofday(&tv, NULL);
@@ -205,7 +205,7 @@ static int event_handler_fout_snprintf(char **s, size_t *n, size_t *ret_len, int
 
 static int event_handler_fout_open(int *fd) {
     int tfd = -1, errno_saved;
-    char *path, *apath = malloc(PHPSPY_STR_SIZE);
+    char *path, *apath;
 
     if (strcmp(opt_path_output, "-") == 0) {
         tfd = dup(STDOUT_FILENO);
@@ -218,8 +218,7 @@ static int event_handler_fout_open(int *fd) {
     }
 
     if (strstr(opt_path_output, "%d") != NULL) {
-        // TODO asprintf
-        if (sprintf(apath, opt_path_output, gettid()) < 0) {
+        if (asprintf(&apath, opt_path_output, gettid()) < 0) {
             errno = ENOMEM;
             perror("event_handler_fout_open: asprintf");
             return PHPSPY_ERR;

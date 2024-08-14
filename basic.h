@@ -1,13 +1,14 @@
 #ifndef BASIC_H
 #define BASIC_H
 
-#ifndef PHPSPY_WIN32
+#include <stdlib.h>
+#include <stdarg.h>
 
+#ifndef PHPSPY_WIN32
 #define PHPSPY_PACK __attribute__((__packed__))
 #ifndef gettid
 #define gettid() syscall(SYS_gettid)
 #endif
-
 #endif
 
 
@@ -19,6 +20,7 @@
 #include <io.h>
 #include <stdint.h>
 #include <getopt.h>
+#include <pcre2posix.h>
 
 
 #define popen	_popen
@@ -38,14 +40,15 @@
 
 struct timezone
 {
-	int tz_minuteswest; /* of Greenwich */
-	int tz_dsttime;     /* type of dst correction to apply */
+    int tz_minuteswest; /* of Greenwich */
+    int tz_dsttime;     /* type of dst correction to apply */
 };
 
 typedef  uint32_t pid_t;
 typedef __int64 ssize_t;
 
 void nanosleep(struct timespec *ts, void *null);
+int asprintf(char** ret, char* fmt, ...);
 int getntptimeofday(struct timespec*, struct timezone*);
 int gettimeofday(struct timeval* p, void* z);
 
