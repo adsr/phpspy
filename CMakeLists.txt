@@ -17,6 +17,6 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(pcre)
 
-add_executable(phpspy basic.c phpspy.c addr_objdump.c event_fout.c event_callgrind.c vendor/getopt.c)
+add_executable(phpspy basic.c phpspy.c pgrep.c addr_objdump.c event_fout.c event_callgrind.c vendor/getopt.c)
 
 target_link_libraries(phpspy pcre2-posix)

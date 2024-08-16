@@ -60,10 +60,10 @@ static void redirect_child_stdio(int proc_fd, char *opt_path);
 static void redirect_child_stdio(HANDLE * std, char *opt_path);
 #endif
 static int find_addresses(trace_target_t *target);
-static void clock_get(struct timespec *ts);
-static void clock_add(struct timespec *a, struct timespec *b, struct timespec *res);
-static int clock_diff(struct timespec *a, struct timespec *b);
-static void calc_sleep_time(struct timespec *end, struct timespec *start, struct timespec *sleep);
+static void clock_get(struct timespec* ts);
+static void clock_add(struct timespec* a, struct timespec* b, struct timespec* res);
+static int clock_diff(struct timespec* a, struct timespec* b);
+static void calc_sleep_time(struct timespec* end, struct timespec* start, struct timespec* sleep);
 static void varpeek_add(char *varspec);
 static void glopeek_add(char *glospec);
 static int copy_proc_mem(pid_t pid, const char *what, void *raddr, void *laddr, size_t size);
@@ -89,12 +89,14 @@ int main(int argc, char **argv) {
     parse_opts(argc, argv);
 
     if (opt_top_mode != 0) {
-//        rv = main_top(argc, argv);
+#ifndef PHPSPY_WIN32
+        rv = main_top(argc, argv);
+#endif
     } else if (opt_pid != -1) {
         rv = main_pid(opt_pid);
     } else if (opt_pgrep_args != NULL) {
         in_pgrep_mode = 1;
-//        rv = main_pgrep();
+        rv = main_pgrep();
     } else if (optind < argc) {
         rv = main_fork(argc, argv);
     } else {
@@ -477,7 +479,7 @@ int main_pid(pid_t pid) {
     /* in pgrep mode, trigger done condition if we went over the trace limit.
        it is ok for multiple threads to call this. */
     if (in_pgrep_mode && opt_trace_limit > 0 && trace_count >= opt_trace_limit) {
-        //write_done_pipe();
+        write_done_pipe();
     }
 
     /* TODO proper signal handling for non-pgrep modes */
@@ -548,7 +550,7 @@ static int main_fork(int argc, char** argv) {
         printf("CreateProcess failed (%d).\n", GetLastError());
         return 1;
     }
-
+    /* TODO to be optimized */
     Sleep(1000);
     rv = main_pid(pi.dwProcessId);
 
@@ -568,9 +570,9 @@ static void cleanup() {
     varpeek_var_t *var, *var_tmp;
     glopeek_entry_t *gentry, *gentry_tmp;
 
-//    if (opt_filter_re) {
-//        regfree(opt_filter_re);
-//    }
+    if (opt_filter_re) {
+        regfree(opt_filter_re);
+    }
 
     HASH_ITER(hh, varpeek_map, entry, entry_tmp) {
         HASH_ITER(hh, entry->varmap, var, var_tmp) {
@@ -588,26 +590,30 @@ static void cleanup() {
 }
 
 static int pause_pid(pid_t pid) {
-//    int rv;
-//    if (ptrace(PTRACE_ATTACH, pid, 0, 0) == -1) {
-//        rv = errno;
-//        perror("ptrace");
-//        return PHPSPY_ERR + (rv == ESRCH ? PHPSPY_ERR_PID_DEAD : 0);
-//    }
-//    if (waitpid(pid, NULL, 0) < 0) {
-//        perror("waitpid");
-//        return PHPSPY_ERR;
-//    }
+#ifndef PHPSPY_WIN32
+    int rv;
+    if (ptrace(PTRACE_ATTACH, pid, 0, 0) == -1) {
+        rv = errno;
+        perror("ptrace");
+        return PHPSPY_ERR + (rv == ESRCH ? PHPSPY_ERR_PID_DEAD : 0);
+    }
+    if (waitpid(pid, NULL, 0) < 0) {
+        perror("waitpid");
+        return PHPSPY_ERR;
+    }
+#endif
     return PHPSPY_OK;
 }
 
 static int unpause_pid(pid_t pid) {
-//    int rv;
-//    if (ptrace(PTRACE_DETACH, pid, 0, 0) == -1) {
-//        rv = errno;
-//        perror("ptrace");
-//        return PHPSPY_ERR + (rv == ESRCH ? PHPSPY_ERR_PID_DEAD : 0);
-//    }
+#ifndef PHPSPY_WIN32
+    int rv;
+    if (ptrace(PTRACE_DETACH, pid, 0, 0) == -1) {
+        rv = errno;
+        perror("ptrace");
+        return PHPSPY_ERR + (rv == ESRCH ? PHPSPY_ERR_PID_DEAD : 0);
+    }
+#endif
     return PHPSPY_OK;
 }
 
@@ -692,9 +698,9 @@ static int find_addresses(trace_target_t *target) {
     return PHPSPY_OK;
 }
 
-static void clock_get(struct timespec *ts) {
+static void clock_get(struct timespec* ts) {
 #ifndef PHPSPY_WIN32
-    if (clock_gettime(1, ts) == -1) {
+    if (clock_gettime(CLOCK_MONOTONIC_RAW, ts) == -1) {
         perror("clock_gettime");
         ts->tv_sec = 0;
         ts->tv_nsec = 0;
@@ -713,7 +719,7 @@ static void clock_get(struct timespec *ts) {
 #endif
 }
 
-static void clock_add(struct timespec *a, struct timespec *b, struct timespec *res) {
+static void clock_add(struct timespec* a, struct timespec* b, struct timespec* res) {
     res->tv_sec = a->tv_sec + b->tv_sec;
     res->tv_nsec = a->tv_nsec + b->tv_nsec;
     if (res->tv_nsec >= 1000000000L) {
@@ -722,7 +728,7 @@ static void clock_add(struct timespec *a, struct timespec *b, struct timespec *r
     }
 }
 
-static int clock_diff(struct timespec *a, struct timespec *b) {
+static int clock_diff(struct timespec* a, struct timespec* b) {
     if (a->tv_sec == b->tv_sec) {
         if (a->tv_nsec == b->tv_nsec) {
             return 0;
@@ -732,7 +738,7 @@ static int clock_diff(struct timespec *a, struct timespec *b) {
     return a->tv_sec > b->tv_sec ? 1 : -1;
 }
 
-static void calc_sleep_time(struct timespec *end, struct timespec *start, struct timespec *sleep) {
+static void calc_sleep_time(struct timespec* end, struct timespec* start, struct timespec* sleep) {
     long end_ns, start_ns, sleep_ns;
     if (end->tv_sec == start->tv_sec) {
         sleep_ns = opt_sleep_ns - (end->tv_nsec - start->tv_nsec);
