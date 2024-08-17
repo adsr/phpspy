@@ -38,6 +38,7 @@
 #define PHPSPY_PACK
 #define gettid() GetCurrentThreadId()
 #define getpid() GetCurrentProcessId()
+#define PIPE_BUF 4096
 
 struct timezone
 {

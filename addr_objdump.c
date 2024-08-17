@@ -56,11 +56,10 @@ shell_escape_end:
 }
 
 int get_symbol_addr(addr_memo_t *memo, pid_t pid, const char *symbol, uint64_t *raddr) {
-    char *php_bin_path, *php_dll_path, *php_bin_path_root;
+    char *php_bin_path, *php_bin_path_root;
     uint64_t *php_base_addr;
     uint64_t addr_offset;
     php_bin_path = memo->php_bin_path;
-    php_dll_path = memo->php_dll_path;
     php_bin_path_root = memo->php_bin_path_root;
     php_base_addr = &memo->php_base_addr;
 #ifndef PHPSPY_WIN32
@@ -72,6 +71,7 @@ int get_symbol_addr(addr_memo_t *memo, pid_t pid, const char *symbol, uint64_t *
         return 1;
     }
 #else
+    char *php_dll_path = memo->php_dll_path;
     if (*php_bin_path == '\0' && get_php_info(pid, php_bin_path, php_dll_path, php_base_addr) != 0) {
         return 1;
     } else if (get_symbol_offset(php_dll_path, symbol, &addr_offset) != 0) {

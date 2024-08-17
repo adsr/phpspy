@@ -89,9 +89,9 @@ static void pgrep_for_pids() {
     char cmd_fmt[24] = "pgrep %s";
 #else
     char cmd_fmt[24] = "tasklist | findstr %s";
+    char pid_buf[8];
 #endif
     char line[128];
-    char pid_buf[8];
     int pid;
     int found;
     struct timespec timeout = {2, 0};

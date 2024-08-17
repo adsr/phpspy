@@ -256,6 +256,6 @@ static int callgrind_open(FILE **fout) {
         if (tfd != -1) close(tfd);
         return 1;
     }
-    setvbuf(*fout, NULL, _IOLBF, 1024); //PIPE_BUF
+    setvbuf(*fout, NULL, _IOLBF, PIPE_BUF);
     return 0;
 }
