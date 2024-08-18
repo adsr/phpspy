@@ -2,22 +2,22 @@
 
 static int wait_for_turn(char producer_or_consumer);
 static void pgrep_for_pids();
-static void *run_work_thread(void *arg);
+static phpspy_thread_func run_work_thread(void *arg);
 static int is_already_attached(int pid);
 static void init_work_threads();
 static void deinit_work_threads();
 static int block_all_signals();
 static void handle_signal(int signum);
-static void *run_signal_thread(void *arg);
+static phpspy_thread_func run_signal_thread(void *arg);
 
 static int *avail_pids = NULL;
 static int *attached_pids = NULL;
-static pthread_t *work_threads = NULL;
-static pthread_t signal_thread;
+static phpspy_thread_t*work_threads = NULL;
+static phpspy_thread_t signal_thread;
 static int avail_pids_count = 0;
-static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t can_produce = PTHREAD_COND_INITIALIZER;
-static pthread_cond_t can_consume = PTHREAD_COND_INITIALIZER;
+static phpspy_mutex_t mutex;
+static phpspy_cond_t can_produce;
+static phpspy_cond_t can_consume;
 static int done_pipe[2] = { -1, -1 };
 
 int main_pgrep() {
@@ -28,25 +28,27 @@ int main_pgrep() {
         exit(1);
     }
 
-    pthread_create(&signal_thread, NULL, run_signal_thread, NULL);
+    phpspy_thread_create(&signal_thread, NULL, run_signal_thread, NULL);
     block_all_signals();
 
     init_work_threads();
 
     for (i = 0; i < opt_num_workers; i++) {
-        pthread_create(&work_threads[i], NULL, run_work_thread, (void*)i);
+        phpspy_thread_create(&work_threads[i], NULL, run_work_thread, (void*)i);
     }
 
     if (opt_time_limit_ms > 0) {
+#ifndef PHPSPY_WIN32
         alarm(PHPSPY_MAX(1, opt_time_limit_ms / 1000));
+#endif
     }
 
     pgrep_for_pids();
 
     for (i = 0; i < opt_num_workers; i++) {
-        pthread_join(work_threads[i], NULL);
+        phpspy_thread_wait(work_threads[i], NULL);
     }
-    pthread_join(signal_thread, NULL);
+    phpspy_thread_wait(signal_thread, NULL);
 
     deinit_work_threads();
 
@@ -55,24 +57,26 @@ int main_pgrep() {
 }
 
 static int wait_for_turn(char producer_or_consumer) {
-    struct timespec timeout;
-    pthread_mutex_lock(&mutex);
+    struct timespec timeout = { 2, 0 };
+    phpspy_mutex_lock(&mutex);
     while (!done) {
         if (producer_or_consumer == 'p' && avail_pids_count < opt_num_workers) {
             break;
         } else if (avail_pids_count > 0) {
             break;
         }
+#ifndef PHPSPY_WIN32
         clock_gettime(CLOCK_REALTIME, &timeout);
         timeout.tv_sec += 2;
-        pthread_cond_timedwait(
+#endif
+        phpspy_cond_timedwait(
             producer_or_consumer == 'p' ? &can_produce : &can_consume,
             &mutex,
             &timeout
         );
     }
     if (done) {
-        pthread_mutex_unlock(&mutex);
+        phpspy_mutex_unlock(&mutex);
         return 1;
     }
     return 0;
@@ -81,11 +85,17 @@ static int wait_for_turn(char producer_or_consumer) {
 static void pgrep_for_pids() {
     FILE *pcmd;
     char *pgrep_cmd;
-    char line[64];
+#ifndef PHPSPY_WIN32
+    char cmd_fmt[24] = "pgrep %s";
+#else
+    char cmd_fmt[24] = "tasklist | findstr %s";
+    char pid_buf[8];
+#endif
+    char line[128];
     int pid;
     int found;
-    struct timespec timeout;
-    if (asprintf(&pgrep_cmd, "pgrep %s", opt_pgrep_args) < 0) {
+    struct timespec timeout = {2, 0};
+    if (asprintf(&pgrep_cmd, cmd_fmt, opt_pgrep_args) < 0) {
         errno = ENOMEM;
         perror("asprintf");
         exit(1);
@@ -96,41 +106,51 @@ static void pgrep_for_pids() {
         if ((pcmd = popen(pgrep_cmd, "r")) != NULL) {
             while (avail_pids_count < opt_num_workers && fgets(line, sizeof(line), pcmd) != NULL) {
                 if (strlen(line) < 1 || *line == '\n') continue;
+#ifdef PHPSPY_WIN32
+                sscanf_s(line, "%*s %s", pid_buf, sizeof(pid_buf));
+                pid = atoi(pid_buf);
+#else
                 pid = atoi(line);
+#endif
+                if (!pid) continue;
                 if (is_already_attached(pid)) continue;
                 avail_pids[avail_pids_count++] = pid;
                 found += 1;
             }
+            /* fflush */
+            while (fgets(line, sizeof(line), pcmd) != NULL);
             pclose(pcmd);
         }
         if (found > 0) {
-            pthread_cond_broadcast(&can_consume);
+            phpspy_cond_broadcast(&can_consume);
         } else {
+#ifndef PHPSPY_WIN32
             clock_gettime(CLOCK_REALTIME, &timeout);
             timeout.tv_sec += 2;
-            pthread_cond_timedwait(
+#endif
+            phpspy_cond_timedwait(
                 &can_produce,
                 &mutex,
                 &timeout
             );
         }
-        pthread_mutex_unlock(&mutex);
+        phpspy_mutex_unlock(&mutex);
     }
     free(pgrep_cmd);
 }
 
-static void *run_work_thread(void *arg) {
+static phpspy_thread_func run_work_thread(void *arg) {
     int worker_num;
     worker_num = (long)arg;
     while (!done) {
         if (wait_for_turn('c')) break;
         attached_pids[worker_num] = avail_pids[--avail_pids_count];
-        pthread_cond_signal(&can_produce);
-        pthread_mutex_unlock(&mutex);
+        phpspy_cond_signal(&can_produce);
+        phpspy_mutex_unlock(&mutex);
         main_pid(attached_pids[worker_num]);
         attached_pids[worker_num] = 0;
     }
-    return NULL;
+    return PHPSPY_THREAD_RETNULL;
 }
 
 static int is_already_attached(int pid) {
@@ -148,31 +168,33 @@ static int is_already_attached(int pid) {
 static void init_work_threads() {
     avail_pids = calloc(opt_num_workers, sizeof(int));
     attached_pids = calloc(opt_num_workers, sizeof(int));
-    work_threads = calloc(opt_num_workers, sizeof(pthread_t));
+    work_threads = calloc(opt_num_workers, sizeof(phpspy_thread_t));
     if (!avail_pids || !attached_pids || !work_threads) {
         errno = ENOMEM;
         perror("calloc");
         exit(1);
     }
-    pthread_mutex_init(&mutex, NULL);
-    pthread_cond_init(&can_produce, NULL);
-    pthread_cond_init(&can_consume, NULL);
+    phpspy_mutex_init(&mutex, NULL);
+    phpspy_cond_init(&can_produce, NULL);
+    phpspy_cond_init(&can_consume, NULL);
 }
 
 static void deinit_work_threads() {
     free(avail_pids);
     free(attached_pids);
     free(work_threads);
-    pthread_mutex_destroy(&mutex);
-    pthread_cond_destroy(&can_produce);
-    pthread_cond_destroy(&can_consume);
+    phpspy_mutex_destroy(&mutex);
+    phpspy_cond_destroy(&can_produce);
+    phpspy_cond_destroy(&can_consume);
 }
 
 static int block_all_signals() {
+#ifndef PHPSPY_WIN32
     int rv;
     sigset_t set;
     try(rv, sigfillset(&set));
     try(rv, sigprocmask(SIG_BLOCK, &set, NULL));
+#endif
     return 0;
 }
 
@@ -190,7 +212,8 @@ static void handle_signal(int signum) {
     write_done_pipe();
 }
 
-static void *run_signal_thread(void *arg) {
+static phpspy_thread_func run_signal_thread(void *arg) {
+#ifndef PHPSPY_WIN32
     int rv, ignore;
     fd_set rfds;
     struct timeval tv;
@@ -230,6 +253,7 @@ static void *run_signal_thread(void *arg) {
     pthread_cond_broadcast(&can_consume);
     pthread_cond_broadcast(&can_produce);
     pthread_mutex_unlock(&mutex);
+#endif
 
-    return NULL;
+    return PHPSPY_THREAD_RETNULL;
 }

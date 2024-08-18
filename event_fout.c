@@ -12,7 +12,7 @@ typedef struct event_handler_fout_udata_s {
 static int event_handler_fout_write(event_handler_fout_udata_t *udata);
 static int event_handler_fout_snprintf(char **s, size_t *n, size_t *ret_len, int repl_delim, const char *fmt, ...);
 static int event_handler_fout_open(int *fd);
-static pthread_mutex_t event_handler_fout_mutex = PTHREAD_MUTEX_INITIALIZER;
+static phpspy_mutex_t event_handler_fout_mutex;
 
 int event_handler_fout(struct trace_context_s *context, int event_type) {
     int rv, fd;
@@ -39,6 +39,7 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
             udata->use_mutex = context->event_handler_opts != NULL
                 && strchr(context->event_handler_opts, 'm') != NULL ? 1 : 0;
             context->event_udata = udata;
+            phpspy_mutex_init(&event_handler_fout_mutex, NULL);
             break;
         case PHPSPY_TRACE_EVENT_STACK_BEGIN:
             udata->cur = udata->buf;
@@ -140,6 +141,7 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
             close(udata->fd);
             free(udata->buf);
             free(udata);
+            phpspy_mutex_destroy(&event_handler_fout_mutex);
             break;
     }
     return PHPSPY_OK;
@@ -158,7 +160,7 @@ static int event_handler_fout_write(event_handler_fout_udata_t *udata) {
     }
 
     if (udata->use_mutex) {
-        pthread_mutex_lock(&event_handler_fout_mutex);
+        phpspy_mutex_lock(&event_handler_fout_mutex);
     }
 
     if (write(udata->fd, udata->buf, write_len) != write_len) {
@@ -167,7 +169,7 @@ static int event_handler_fout_write(event_handler_fout_udata_t *udata) {
     }
 
     if (udata->use_mutex) {
-        pthread_mutex_unlock(&event_handler_fout_mutex);
+        phpspy_mutex_unlock(&event_handler_fout_mutex);
     }
 
     return rv;
@@ -227,8 +229,11 @@ static int event_handler_fout_open(int *fd) {
     } else {
         path = opt_path_output;
     }
-
+#ifdef PHPSPY_WIN32
+    tfd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+#else
     tfd = open(path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+#endif
     errno_saved = errno;
 
     if (apath) {

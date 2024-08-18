@@ -1,9 +1,11 @@
 #include "phpspy.h"
 
+#ifndef PHPSPY_WIN32
 #define TB_IMPL
 #define TB_OPT_V1_COMPAT
 #include <termbox2.h>
 #undef TB_IMPL
+#endif
 
 pid_t opt_pid = -1;
 char *opt_pgrep_args = NULL;
@@ -52,7 +54,11 @@ static int main_fork(int argc, char **argv);
 static void cleanup();
 static int pause_pid(pid_t pid);
 static int unpause_pid(pid_t pid);
+#ifndef PHPSPY_WIN32
 static void redirect_child_stdio(int proc_fd, char *opt_path);
+#else
+static void redirect_child_stdio(HANDLE *std, char *opt_path);
+#endif
 static int find_addresses(trace_target_t *target);
 static void clock_get(struct timespec *ts);
 static void clock_add(struct timespec *a, struct timespec *b, struct timespec *res);
@@ -83,7 +89,9 @@ int main(int argc, char **argv) {
     parse_opts(argc, argv);
 
     if (opt_top_mode != 0) {
+#ifndef PHPSPY_WIN32
         rv = main_top(argc, argv);
+#endif
     } else if (opt_pid != -1) {
         rv = main_pid(opt_pid);
     } else if (opt_pgrep_args != NULL) {
@@ -445,7 +453,7 @@ int main_pid(pid_t pid) {
         /* maybe apply trace limit */
         if (opt_trace_limit > 0 && rv == PHPSPY_OK) {
             if (in_pgrep_mode) {
-                __atomic_add_fetch(&trace_count, 1, __ATOMIC_SEQ_CST);
+                phpspy_atomic_add64(&trace_count, 1);
             } else {
                 trace_count += 1;
             }
@@ -478,6 +486,7 @@ int main_pid(pid_t pid) {
     return PHPSPY_OK;
 }
 
+#ifndef PHPSPY_WIN32
 static int main_fork(int argc, char **argv) {
     int rv, status;
     pid_t fork_pid;
@@ -490,7 +499,8 @@ static int main_fork(int argc, char **argv) {
         execvp(argv[optind], argv + optind);
         perror("execvp");
         exit(1);
-    } else if (fork_pid < 0) {
+    }
+    else if (fork_pid < 0) {
         perror("fork");
         exit(1);
     }
@@ -503,6 +513,57 @@ static int main_fork(int argc, char **argv) {
     waitpid(fork_pid, NULL, 0);
     return rv;
 }
+#else
+static int main_fork(int argc, char** argv) {
+    int rv;
+    char cmd[PHPSPY_STR_SIZE] = { 0 };
+    char argv_buf[PHPSPY_STR_SIZE] = { 0 };
+
+    argv += optind;
+    while (*argv) {
+        snprintf(argv_buf, sizeof(argv_buf), "%s ", *argv++);
+        strcat(cmd, argv_buf);
+    }
+
+    STARTUPINFO si;
+    PROCESS_INFORMATION pi;
+
+    ZeroMemory(&si, sizeof(si));
+    si.cb = sizeof(si);
+    redirect_child_stdio(&si.hStdOutput, opt_path_child_out);
+    redirect_child_stdio(&si.hStdError, opt_path_child_err);
+    si.dwFlags |= STARTF_USESTDHANDLES;
+    ZeroMemory(&pi, sizeof(pi));
+
+    if (!CreateProcess(
+        NULL,
+        cmd,
+        NULL,
+        NULL,
+        TRUE,
+        0,
+        NULL,
+        NULL,
+        &si,
+        &pi
+    )) {
+        printf("CreateProcess failed (%d).\n", GetLastError());
+        return 1;
+    }
+    /* TODO to be optimized */
+    Sleep(1000);
+    rv = main_pid(pi.dwProcessId);
+
+    WaitForSingleObject(pi.hProcess, INFINITE);
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    CloseHandle(si.hStdOutput);
+    CloseHandle(si.hStdError);
+
+    return rv;
+}
+#endif
 
 static void cleanup() {
     varpeek_entry_t *entry, *entry_tmp;
@@ -529,6 +590,7 @@ static void cleanup() {
 }
 
 static int pause_pid(pid_t pid) {
+#ifndef PHPSPY_WIN32
     int rv;
     if (ptrace(PTRACE_ATTACH, pid, 0, 0) == -1) {
         rv = errno;
@@ -539,22 +601,28 @@ static int pause_pid(pid_t pid) {
         perror("waitpid");
         return PHPSPY_ERR;
     }
+#endif
     return PHPSPY_OK;
 }
 
 static int unpause_pid(pid_t pid) {
+#ifndef PHPSPY_WIN32
     int rv;
     if (ptrace(PTRACE_DETACH, pid, 0, 0) == -1) {
         rv = errno;
         perror("ptrace");
         return PHPSPY_ERR + (rv == ESRCH ? PHPSPY_ERR_PID_DEAD : 0);
     }
+#endif
     return PHPSPY_OK;
 }
 
+#ifndef PHPSPY_WIN32
 static void redirect_child_stdio(int proc_fd, char *opt_path) {
+#else
+static void redirect_child_stdio(HANDLE *std, char* opt_path) {
+#endif
     char *redir_path;
-    FILE *redir_file;
     if (strcmp(opt_path, "-") == 0) {
         return;
     } else if (strstr(opt_path, "%d") != NULL) {
@@ -569,6 +637,9 @@ static void redirect_child_stdio(int proc_fd, char *opt_path) {
             exit(1);
         }
     }
+#ifndef PHPSPY_WIN32
+    FILE *redir_file;
+
     if ((redir_file = fopen(redir_path, "w")) == NULL) {
         perror("fopen");
         free(redir_path);
@@ -576,6 +647,22 @@ static void redirect_child_stdio(int proc_fd, char *opt_path) {
     }
     dup2(fileno(redir_file), proc_fd);
     fclose(redir_file);
+#else
+    SECURITY_ATTRIBUTES sa;
+    HANDLE redir_file;
+
+    ZeroMemory(&sa, sizeof(sa));
+    sa.nLength = sizeof(sa);
+    sa.bInheritHandle = TRUE;
+
+    redir_file = CreateFile(redir_path, GENERIC_WRITE, FILE_SHARE_READ, &sa, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (redir_file == INVALID_HANDLE_VALUE) {
+        perror("fopen");
+        free(redir_path);
+        exit(1);
+    }
+    *std = redir_file;
+#endif
     free(redir_path);
 }
 
@@ -603,18 +690,36 @@ static int find_addresses(trace_target_t *target) {
         target->basic_functions_module_addr = 0;
     }
     log_error_enabled = 1;
+
+#ifdef PHPSPY_WIN32
+    strncpy(target->php_bin_path, memo.php_bin_path, PHPSPY_STR_SIZE - 1);
+#endif
+
     return PHPSPY_OK;
 }
 
-static void clock_get(struct timespec *ts) {
+static void clock_get(struct timespec* ts) {
+#ifndef PHPSPY_WIN32
     if (clock_gettime(CLOCK_MONOTONIC_RAW, ts) == -1) {
         perror("clock_gettime");
         ts->tv_sec = 0;
         ts->tv_nsec = 0;
     }
+#else
+    LARGE_INTEGER pf, pc;
+    QueryPerformanceFrequency(&pf);
+    QueryPerformanceCounter(&pc);
+
+    ts->tv_sec = pc.QuadPart / pf.QuadPart;
+    ts->tv_nsec = (int)(((pc.QuadPart % pf.QuadPart) * 1000000000L + (pf.QuadPart >> 1)) / pf.QuadPart);
+    if (ts->tv_nsec >= 1000000000L) {
+        ts->tv_sec++;
+        ts->tv_nsec -= 1000000000L;
+    }
+#endif
 }
 
-static void clock_add(struct timespec *a, struct timespec *b, struct timespec *res) {
+static void clock_add(struct timespec* a, struct timespec* b, struct timespec* res) {
     res->tv_sec = a->tv_sec + b->tv_sec;
     res->tv_nsec = a->tv_nsec + b->tv_nsec;
     if (res->tv_nsec >= 1000000000L) {
@@ -623,7 +728,7 @@ static void clock_add(struct timespec *a, struct timespec *b, struct timespec *r
     }
 }
 
-static int clock_diff(struct timespec *a, struct timespec *b) {
+static int clock_diff(struct timespec* a, struct timespec* b) {
     if (a->tv_sec == b->tv_sec) {
         if (a->tv_nsec == b->tv_nsec) {
             return 0;
@@ -633,7 +738,7 @@ static int clock_diff(struct timespec *a, struct timespec *b) {
     return a->tv_sec > b->tv_sec ? 1 : -1;
 }
 
-static void calc_sleep_time(struct timespec *end, struct timespec *start, struct timespec *sleep) {
+static void calc_sleep_time(struct timespec* end, struct timespec* start, struct timespec* sleep) {
     long end_ns, start_ns, sleep_ns;
     if (end->tv_sec == start->tv_sec) {
         sleep_ns = opt_sleep_ns - (end->tv_nsec - start->tv_nsec);
@@ -721,6 +826,7 @@ static void glopeek_add(char *glospec) {
     HASH_ADD_STR(glopeek_map, key, gentry);
 }
 
+#ifndef PHPSPY_WIN32
 static int copy_proc_mem(pid_t pid, const char *what, void *raddr, void *laddr, size_t size) {
     struct iovec local[1];
     struct iovec remote[1];
@@ -747,6 +853,32 @@ static int copy_proc_mem(pid_t pid, const char *what, void *raddr, void *laddr, 
     return PHPSPY_OK;
 }
 
+#else
+
+static int copy_proc_mem(pid_t pid, const char *what, void *raddr, void *laddr, size_t size) {
+    size_t bytesRead;
+    HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
+    if (hProcess == NULL) {
+        printf("Could not open process with PID %lu.\n", pid);
+        return PHPSPY_ERR;
+    }
+    BOOL rv = ReadProcessMemory(hProcess, raddr, laddr, size, &bytesRead);
+    CloseHandle(hProcess);
+
+    if (!rv) {
+        if (bytesRead == 0) {
+            perror("process_vm_readv");
+            return PHPSPY_ERR | PHPSPY_ERR_PID_DEAD;
+        }
+        log_error("copy_proc_mem: Failed to copy %s; err=%d raddr=%p size=%lu\n", what, GetLastError(), raddr, size);
+        return PHPSPY_ERR;
+    }
+
+    return PHPSPY_OK;
+}
+
+#endif
+
 #ifndef USE_ZEND
 static int get_php_version(trace_target_t *target) {
     struct _zend_module_entry basic_functions_module;
@@ -767,6 +899,7 @@ static int get_php_version(trace_target_t *target) {
 
     /* Try greping binary */
     if (phpv[0] == '\0') {
+#ifndef PHPSPY_WIN32
         char libname[PHPSPY_STR_SIZE];
         if (shell_escape(opt_libname_awk_patt, libname, sizeof(libname), "opt_libname_awk_patt")) {
             return PHPSPY_ERR;
@@ -787,7 +920,9 @@ static int get_php_version(trace_target_t *target) {
             log_error("get_php_version: snprintf overflow\n");
             return PHPSPY_ERR;
         }
-
+#else
+        snprintf(version_cmd, sizeof(version_cmd), "%s -r \"echo phpversion();\"", target->php_bin_path);
+#endif
         if ((pcmd = popen(version_cmd, "r")) == NULL) {
             perror("get_php_version: popen");
             return PHPSPY_ERR;
