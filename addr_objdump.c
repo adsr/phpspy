@@ -1,8 +1,12 @@
 #include "phpspy.h"
 #include <assert.h>
 
+#ifndef PHPSPY_WIN32
 static int get_php_bin_path(pid_t pid, char *path_root, char *path);
 static int get_php_base_addr(pid_t pid, char *path_root, char *path, uint64_t *raddr);
+#else
+static int get_php_info(pid_t pid, char *php_bin_path, char *php_dll_path, uint64_t *raddr);
+#endif
 static int get_symbol_offset(char *path_root, const char *symbol, uint64_t *raddr);
 static int popen_read_line(char *buf, size_t buf_size, char *cmd_fmt, ...);
 
@@ -58,6 +62,7 @@ int get_symbol_addr(addr_memo_t *memo, pid_t pid, const char *symbol, uint64_t *
     php_bin_path = memo->php_bin_path;
     php_bin_path_root = memo->php_bin_path_root;
     php_base_addr = &memo->php_base_addr;
+#ifndef PHPSPY_WIN32
     if (*php_bin_path == '\0' && get_php_bin_path(pid, php_bin_path_root, php_bin_path) != 0) {
         return 1;
     } else if (*php_base_addr == 0 && get_php_base_addr(pid, php_bin_path_root, php_bin_path, php_base_addr) != 0) {
@@ -65,9 +70,19 @@ int get_symbol_addr(addr_memo_t *memo, pid_t pid, const char *symbol, uint64_t *
     } else if (get_symbol_offset(php_bin_path_root, symbol, &addr_offset) != 0) {
         return 1;
     }
+#else
+    char *php_dll_path = memo->php_dll_path;
+    if (*php_bin_path == '\0' && get_php_info(pid, php_bin_path, php_dll_path, php_base_addr) != 0) {
+        return 1;
+    } else if (get_symbol_offset(php_dll_path, symbol, &addr_offset) != 0) {
+        return 1;
+    }
+#endif
     *raddr = *php_base_addr + addr_offset;
     return 0;
 }
+
+#ifndef PHPSPY_WIN32
 
 static int get_php_bin_path(pid_t pid, char *path_root, char *path) {
     char buf[PHPSPY_STR_SIZE];
@@ -142,6 +157,64 @@ static int get_symbol_offset(char *path_root, const char *symbol, uint64_t *radd
     *raddr = strtoull(buf, NULL, 16);
     return 0;
 }
+
+#else
+
+static int get_php_info(pid_t pid, char *php_bin_path, char *php_dll_path, uint64_t *raddr) {
+    HANDLE hModuleSnap = INVALID_HANDLE_VALUE;
+    MODULEENTRY32 me32;
+
+    hModuleSnap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, pid);
+    if (hModuleSnap == INVALID_HANDLE_VALUE) {
+        log_error("CreateToolhelp32Snapshot (of modules) failed. Error: %lu \n", GetLastError());
+        return 1;
+    }
+
+    me32.dwSize = sizeof(MODULEENTRY32);
+
+    if (!Module32First(hModuleSnap, &me32)) {
+        printf("Module32First failed. Error: %lu \n", GetLastError());
+        CloseHandle(hModuleSnap);  // Clean the snapshot object.
+        return 1;
+    }
+
+    do {
+        if (strncmp(me32.szModule, "php", 3) == 0 && strncmp(me32.szModule + 4, ".dll", 4) == 0) {
+            strncpy(php_dll_path, me32.szExePath, PHPSPY_STR_SIZE - 1);
+            *raddr = (uint64_t) me32.modBaseAddr;
+        } else if (strncmp(me32.szModule, "php.exe", 7) == 0 || strncmp(me32.szModule, "php-cgi.exe", 11) == 0) {
+            char *last_slash = strrchr(me32.szExePath, '\\');
+            *last_slash = '\0';
+            strncpy_s(php_bin_path, PHPSPY_STR_SIZE, me32.szExePath, sizeof(me32.szExePath) - 1);
+            strncat(php_bin_path, "\\php.exe", 8);
+        }
+    } while (Module32Next(hModuleSnap, &me32));
+
+    CloseHandle(hModuleSnap);
+
+    return 0;
+}
+
+static int get_symbol_offset(char *path_root, const char *symbol, uint64_t *raddr) {
+    char buf[PHPSPY_STR_SIZE];
+    char arg_buf[PHPSPY_STR_SIZE];
+    char hex_string[PHPSPY_STR_SIZE];
+    char *cmd_fmt = "dumpbin /exports %s | findstr %s";
+
+    if (popen_read_line(buf, sizeof(buf), cmd_fmt, path_root, symbol) != 0) {
+        log_error("get_symbol_offset: Failed\n");
+        return 1;
+    }
+    if (sscanf_s(buf, "%*s %*s %s", hex_string, sizeof(hex_string)) == -1) {
+        log_error("get_symbol_offset: sscanf_s Failed\n");
+        return 1;
+    }
+    *raddr = strtoull(hex_string, NULL, 16);
+    return 0;
+}
+
+
+#endif
 
 static int popen_read_line(char *buf, size_t buf_size, char *cmd_fmt, ...) {
     FILE *fp;
