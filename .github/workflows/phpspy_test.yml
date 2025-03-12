@@ -2,7 +2,7 @@ name: phpspy_test
 on: [push, pull_request]
 jobs:
   phpspy_test_job:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     env:
       TERM: xterm
     steps:
@@ -12,7 +12,7 @@ jobs:
           submodules: recursive
       - name: deps
         run: |
-          sudo apt-get install -y php8.1-cli
-          echo "php_path:=/usr/bin/php8.1" | sudo tee config.mk
+          sudo apt-get install -y php8.3-cli
+          echo "php_path:=/usr/bin/php8.3" | sudo tee config.mk
       - name: test
         run: make test
