@@ -47,13 +47,13 @@ struct __attribute__((__packed__)) _zend_execute_data_84 {
 };
 
 struct __attribute__((__packed__)) _zend_op_array_84 {
-    uint8_t                 pad0[80];               /* 0        +80 */
-    int                     last_var;               /* 80       +4 */
-    uint8_t                 pad1[28];               /* 84       +28 */
-    zend_string_84          **vars;                 /* 112      +8 */
-    uint8_t                 pad2[32];               /* 120      +32 */
-    zend_string_84          *filename;              /* 152      +8 */
-    uint32_t                line_start;             /* 160      +4 */
+    uint8_t                 pad0[92];               /* 0        +92 */
+    int                     last_var;               /* 92       +4 */
+    uint8_t                 pad1[32];               /* 96       +32 */
+    zend_string_84          **vars;                 /* 128      +8 */
+    uint8_t                 pad2[32];               /* 136      +32 */
+    zend_string_84          *filename;              /* 168      +8 */
+    uint32_t                line_start;             /* 176      +4 */
 };
 
 union __attribute__((__packed__)) _zend_function_84 {
