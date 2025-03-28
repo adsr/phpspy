@@ -57,6 +57,8 @@ test: phpspy $(phpspy_tests)
 
 install: phpspy
 	install -D -v -m 755 phpspy $(DESTDIR)$(prefix)/bin/phpspy
+	install -D -v -m 755 stackcollapse-phpspy.pl $(DESTDIR)$(prefix)/bin/stackcollapse-phpspy
+	install -D -v -m 755 vendor/flamegraph.pl $(DESTDIR)$(prefix)/bin/flamegraph
 
 clean:
 	cd vendor/termbox2 && $(MAKE) clean
