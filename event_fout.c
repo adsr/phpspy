@@ -119,8 +119,8 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
             }
             if (opt_filter_re) {
                 rv = regexec(opt_filter_re, udata->buf, 0, NULL, 0);
-                if (opt_filter_negate == 0 && rv != 0) break;
-                if (opt_filter_negate != 0 && rv == 0) break;
+                if (opt_filter_negate == 0 && rv != 0) return PHPSPY_ERR_SKIPPED;
+                if (opt_filter_negate != 0 && rv == 0) return PHPSPY_ERR_SKIPPED;
             }
             do {
                 if (opt_verbose_fields_ts) {

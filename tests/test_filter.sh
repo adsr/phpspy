@@ -13,3 +13,10 @@ declare -A not_expected
 expected[negate_include_nanosleep]='nanosleep'
 not_expected[negate_exclude_usleep]='usleep'
 source $TEST_SH
+
+phpspy_opts=(--limit=1 --filter 'usleep' -- $PHP -r 'time_nanosleep(1, 0); usleep(1000000);')
+declare -A expected
+declare -A not_expected
+expected[limit_include_usleep]='usleep'
+not_expected[limit_exclude_nanosleep]='time_nanosleep'
+source $TEST_SH
