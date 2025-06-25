@@ -134,7 +134,7 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "                                       (default: QCUP; none)\n");
     fprintf(fp, "  -m, --memory-usage                 Capture peak and current memory usage\n");
     fprintf(fp, "                                       with each trace (requires target PHP\n");
-    fprintf(fp, "                                       process to have debug symbols)\n");
+    fprintf(fp, "                                       process to have debug symbols either built-in or as a separate file)\n");
     fprintf(fp, "  -o, --output=<path>                Write phpspy output to `path`\n");
     fprintf(fp, "                                       (default: %s; -=stdout)\n", opt_path_output);
     fprintf(fp, "  -O, --child-stdout=<path>          Write child stdout to `path`\n");

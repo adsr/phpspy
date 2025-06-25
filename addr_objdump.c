@@ -4,6 +4,7 @@
 static int get_php_bin_path(pid_t pid, char *path_root, char *path);
 static int get_php_base_addr(pid_t pid, char *path_root, char *path, uint64_t *raddr);
 static int get_symbol_offset(char *path_root, const char *symbol, uint64_t *raddr);
+static int get_symbol_path(char *symbol_path, const char *path_root);
 static int popen_read_line(char *buf, size_t buf_size, char *cmd_fmt, ...);
 
 int shell_escape(const char *arg, char *buf, size_t buf_size, const char *what) {
@@ -52,20 +53,56 @@ shell_escape_end:
 }
 
 int get_symbol_addr(addr_memo_t *memo, pid_t pid, const char *symbol, uint64_t *raddr) {
-    char *php_bin_path, *php_bin_path_root;
+    char *php_symbol_path, *php_bin_path, *php_bin_path_root;
     uint64_t *php_base_addr;
     uint64_t addr_offset;
+    php_symbol_path = memo->php_symbol_path;
     php_bin_path = memo->php_bin_path;
     php_bin_path_root = memo->php_bin_path_root;
     php_base_addr = &memo->php_base_addr;
     if (*php_bin_path == '\0' && get_php_bin_path(pid, php_bin_path_root, php_bin_path) != 0) {
         return 1;
-    } else if (*php_base_addr == 0 && get_php_base_addr(pid, php_bin_path_root, php_bin_path, php_base_addr) != 0) {
-        return 1;
-    } else if (get_symbol_offset(php_bin_path_root, symbol, &addr_offset) != 0) {
+    }
+
+    if (*php_base_addr == 0 && get_php_base_addr(pid, php_bin_path_root, php_bin_path, php_base_addr) != 0) {
         return 1;
     }
+
+    if (*php_symbol_path == '\0' && get_symbol_path(php_symbol_path, php_bin_path_root) != 0) {
+        strcpy(php_symbol_path, php_bin_path_root);
+    }
+
+    if (get_symbol_offset(php_symbol_path, symbol, &addr_offset) != 0) {
+        return 1;
+    }
+
     *raddr = *php_base_addr + addr_offset;
+    return 0;
+}
+
+static int get_symbol_path(char *symbol_path, const char *path_root) {
+    char buf[PHPSPY_STR_SIZE];
+    char arg_buf[PHPSPY_STR_SIZE];
+    char *cmd_fmt = "readelf -n %s | awk '/Build ID/{print $3; exit}'";
+    if (shell_escape(path_root, arg_buf, sizeof(arg_buf), "path_root")) {
+        return 1;
+    }
+    if (popen_read_line(buf, sizeof(buf), cmd_fmt, arg_buf) != 0) {
+        log_error("get_symbol_path: Failed\n");
+        return 1;
+    }
+    if (strlen(buf) < 2) {
+        log_error("get_symbol_path: Build ID is too short\n");
+        return 1;
+    }
+    if (snprintf(symbol_path, PHPSPY_STR_SIZE, "/usr/lib/debug/.build-id/%c%c/%s.debug", buf[0], buf[1], buf+2) > PHPSPY_STR_SIZE - 1) {
+        log_error("get_symbol_path: snprintf overflow\n");
+        return 1;
+    }
+    if (access(symbol_path, F_OK) != 0) {
+        log_error("get_symbol_path: %s is not accessible\n", symbol_path);
+        return 1;
+    }
     return 0;
 }
 

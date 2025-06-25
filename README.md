@@ -85,7 +85,7 @@ All with no changes to your application and minimal overhead.
                                            (default: QCUP; none)
       -m, --memory-usage                 Capture peak and current memory usage
                                            with each trace (requires target PHP
-                                           process to have debug symbols)
+                                           process to have debug symbols either built-in or as a separate file)
       -o, --output=<path>                Write phpspy output to `path`
                                            (default: -; -=stdout)
       -O, --child-stdout=<path>          Write child stdout to `path`

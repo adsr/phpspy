@@ -183,6 +183,7 @@ typedef struct trace_context_s {
 } trace_context_t;
 
 typedef struct addr_memo_s {
+    char php_symbol_path[PHPSPY_STR_SIZE];
     char php_bin_path[PHPSPY_STR_SIZE];
     char php_bin_path_root[PHPSPY_STR_SIZE];
     uint64_t php_base_addr;
