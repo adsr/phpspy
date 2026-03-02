@@ -49,6 +49,7 @@
 #include <php_structs_82.h>
 #include <php_structs_83.h>
 #include <php_structs_84.h>
+#include <php_structs_85.h>
 #endif
 
 #ifndef gettid
