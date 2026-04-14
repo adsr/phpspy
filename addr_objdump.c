@@ -118,12 +118,16 @@ static int get_php_base_addr(pid_t pid, char *path_root, char *path, uint64_t *r
     if (shell_escape(path_root, arg_buf, sizeof(arg_buf), "path_root")) {
         return 1;
     }
+    #if defined(__x86_64__)
     cmd_fmt = "objdump -p %s | awk '/LOAD/{print $5; exit}'";
     if (popen_read_line(buf, sizeof(buf), cmd_fmt, arg_buf) != 0) {
         log_error("get_php_base_addr: Failed to get virt_addr\n");
         return 1;
     }
     virt_addr = strtoull(buf, NULL, 16);
+    #else
+    virt_addr = 0; /* aarch64 does not seem to use this */
+    #endif
     *raddr = start_addr - virt_addr;
     return 0;
 }
