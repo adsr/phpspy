@@ -68,9 +68,10 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
                 &udata->rem,
                 &len,
                 1,
-                "# varpeek %s@%s = %s",
+                "# varpeek %s@%s = %.*s",
                 context->event.varpeek.var->name,
                 context->event.varpeek.entry->filename_lineno,
+                context->event.varpeek.zval_str_len,
                 context->event.varpeek.zval_str
             ));
             try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
@@ -81,8 +82,9 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
                 &udata->rem,
                 &len,
                 1,
-                "# glopeek %s = %s",
+                "# glopeek %s = %.*s",
                 context->event.glopeek.gentry->key,
+                context->event.glopeek.zval_str_len,
                 context->event.glopeek.zval_str
             ));
             try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));

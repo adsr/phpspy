@@ -29,28 +29,7 @@
 #include <unistd.h>
 #include <termbox2.h>
 #include <regex.h>
-
-#ifdef USE_ZEND
-#include <main/php_config.h>
-#undef ZEND_DEBUG
-#define ZEND_DEBUG 0
-#include <main/SAPI.h>
-#undef snprintf
-#undef vsnprintf
-#undef HASH_ADD
-#else
-#include <php_structs_70.h>
-#include <php_structs_71.h>
-#include <php_structs_72.h>
-#include <php_structs_73.h>
-#include <php_structs_74.h>
-#include <php_structs_80.h>
-#include <php_structs_81.h>
-#include <php_structs_82.h>
-#include <php_structs_83.h>
-#include <php_structs_84.h>
-#include <php_structs_85.h>
-#endif
+#include <structs/structs.h>
 
 #ifndef gettid
 #define gettid() syscall(SYS_gettid)
@@ -64,7 +43,7 @@
 #define STR1(s) #s
 #define STR2(s) STR1(s)
 
-#define PHPSPY_VERSION "0.7.0"
+#define PHPSPY_VERSION "0.8.0"
 #define PHPSPY_MIN(a, b) ((a) < (b) ? (a) : (b))
 #define PHPSPY_MAX(a, b) ((a) > (b) ? (a) : (b))
 #define PHPSPY_STR_SIZE 256
@@ -152,11 +131,13 @@ typedef struct trace_varpeek_s {
     varpeek_entry_t *entry;
     varpeek_var_t *var;
     char *zval_str;
+    size_t zval_str_len;
 } trace_varpeek_t;
 
 typedef struct trace_glopeek_s {
     glopeek_entry_t *gentry;
     char *zval_str;
+    size_t zval_str_len;
 } trace_glopeek_t;
 
 typedef struct trace_target_s {

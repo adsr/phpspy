@@ -248,6 +248,7 @@ static int trace_globals(trace_context_t *context) {
         if (rv == PHPSPY_OK) {
             context->event.glopeek.gentry = gentry;
             context->event.glopeek.zval_str = context->buf;
+            context->event.glopeek.zval_str_len = context->buf_len;
             try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_GLOPEEK));
         }
     }
@@ -296,6 +297,7 @@ static int trace_locals(trace_context_t *context, zend_op *zop, zend_execute_dat
         context->event.varpeek.entry = entry;
         context->event.varpeek.var = var;
         context->event.varpeek.zval_str = tmp;
+        context->event.varpeek.zval_str_len = tmp_len;
         try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_VARPEEK));
         if (num_vars_found >= num_vars_peeking) break;
     }
