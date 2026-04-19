@@ -1,8 +1,6 @@
 #ifndef __php_structs_84_h
 #define __php_structs_84_h
 
-
-
 #include <stdint.h>
 
 typedef struct _zend_executor_globals_84 zend_executor_globals_84;

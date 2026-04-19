@@ -77,6 +77,7 @@ static int do_trace_82(trace_context_t *context);
 static int do_trace_83(trace_context_t *context);
 static int do_trace_84(trace_context_t *context);
 static int do_trace_85(trace_context_t *context);
+static int do_trace_86(trace_context_t *context);
 #endif
 
 int main(int argc, char **argv) {
@@ -121,7 +122,7 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "  -V, --php-version=<ver>            Set PHP version\n");
     fprintf(fp, "                                       (default: %s;\n", opt_phpv);
     fprintf(fp, "                                       supported: 70 71 72 73 74 80 81 82 83\n");
-    fprintf(fp, "                                       84 85)\n");
+    fprintf(fp, "                                       84 85 86)\n");
     fprintf(fp, "  -l, --limit=<num>                  Limit total number of traces to capture\n");
     fprintf(fp, "                                       (approximate limit in pgrep mode)\n");
     fprintf(fp, "                                       (default: %lu; 0=unlimited)\n", opt_trace_limit);
@@ -415,6 +416,8 @@ int main_pid(pid_t pid) {
         do_trace_ptr = do_trace_84;
     } else if (strcmp("85", opt_phpv) == 0) {
         do_trace_ptr = do_trace_85;
+    } else if (strcmp("86", opt_phpv) == 0) {
+        do_trace_ptr = do_trace_86;
     } else {
         log_error("main_pid: Unrecognized PHP version (%s)\n", opt_phpv);
         return PHPSPY_ERR;
@@ -814,6 +817,7 @@ static int get_php_version(trace_target_t *target) {
     else if (strncmp(phpv, "8.3", 3) == 0) opt_phpv = "83";
     else if (strncmp(phpv, "8.4", 3) == 0) opt_phpv = "84";
     else if (strncmp(phpv, "8.5", 3) == 0) opt_phpv = "85";
+    else if (strncmp(phpv, "8.6", 3) == 0) opt_phpv = "86";
     else {
         log_error("get_php_version: Unrecognized PHP version (%s)\n", phpv);
         return PHPSPY_ERR;
@@ -895,6 +899,9 @@ void log_error(const char *fmt, ...) {
 #include "phpspy_trace_tpl.c"
 #undef phpv
 #define phpv 85
+#include "phpspy_trace_tpl.c"
+#undef phpv
+#define phpv 86
 #include "phpspy_trace_tpl.c"
 #undef phpv
 #endif

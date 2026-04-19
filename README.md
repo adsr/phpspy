@@ -72,7 +72,7 @@ All with no changes to your application and minimal overhead.
       -V, --php-version=<ver>            Set PHP version
                                            (default: auto;
                                            supported: 70 71 72 73 74 80 81 82 83
-                                           84 85)
+                                           84 85 86)
       -l, --limit=<num>                  Limit total number of traces to capture
                                            (approximate limit in pgrep mode)
                                            (default: 0; 0=unlimited)

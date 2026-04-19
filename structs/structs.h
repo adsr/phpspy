@@ -19,6 +19,7 @@
 #    include <structs/x86_64/php_structs_83.h>
 #    include <structs/x86_64/php_structs_84.h>
 #    include <structs/x86_64/php_structs_85.h>
+#    include <structs/x86_64/php_structs_86.h>
 #  elif defined(__aarch64__)
 #    include <structs/aarch64/php_structs_70.h>
 #    include <structs/aarch64/php_structs_71.h>
@@ -31,6 +32,7 @@
 #    include <structs/aarch64/php_structs_83.h>
 #    include <structs/aarch64/php_structs_84.h>
 #    include <structs/aarch64/php_structs_85.h>
+#    include <structs/aarch64/php_structs_86.h>
 #  else
 #    #error "Architecture unsupported"
 #  endif
