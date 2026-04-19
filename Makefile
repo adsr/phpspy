@@ -8,7 +8,7 @@ phpspy_sources:=phpspy.c pgrep.c top.c addr_objdump.c event_fout.c event_callgri
 
 prefix?=/usr/local
 
-php_path?=php
+php_cmd?=php -n
 
 sinclude config.mk
 
@@ -37,7 +37,7 @@ test: phpspy $(phpspy_tests)
 	pass=0; \
 	for t in $(phpspy_tests); do \
 		tput bold; echo TEST $$t; tput sgr0; \
-		PHPSPY=./phpspy PHP=$(php_path) TEST_SH=$$(dirname $$t)/test.sh ./$$t; ec=$$?; echo; \
+		PHPSPY=./phpspy PHP="$(php_cmd)" TEST_SH=$$(dirname $$t)/test.sh ./$$t; ec=$$?; echo; \
 		[ $$ec -eq 0 ] && pass=$$((pass+1)); \
 		total=$$((total+1)); \
 	done; \
@@ -48,6 +48,6 @@ install: phpspy
 	install -D -v -m 755 phpspy $(DESTDIR)$(prefix)/bin/phpspy
 
 clean:
-	rm -f phpspy
+	rm -f phpspy test.err
 
 .PHONY: all test install clean

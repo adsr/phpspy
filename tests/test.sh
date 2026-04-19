@@ -1,7 +1,13 @@
 #!/bin/bash
 
 maybe_sudo=''
-[ -n "$use_sudo" ] && maybe_sudo='sudo -n'
+if [ -n "$use_sudo" ]; then
+    if sudo -n true &>/dev/null; then
+        maybe_sudo='sudo -n'
+    else
+        skip='need sudo'
+    fi
+fi
 
 maybe_timeout=''
 [ -n "$use_timeout_s" ] && maybe_timeout="timeout $use_timeout_s"
@@ -16,12 +22,13 @@ actual=$(
     --limit=1 \
     --child-stdout=/dev/null \
     --child-stderr=/dev/null \
-    "${phpspy_opts[@]}"
+    "${phpspy_opts[@]}" 2>test.err
 )
 
 exit_code=$?
 if [ -z "$non_zero_ok" -a "$exit_code" -ne 0 ]; then
     echo -e "  \x1b[31mERR \x1b[0m exit_code=$exit_code"
+    cat test.err >&2
     exit 1
 fi
 

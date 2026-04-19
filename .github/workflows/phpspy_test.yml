@@ -25,7 +25,7 @@ jobs:
       - name: deps
         run: |
           sudo apt-get install -y php8.3-cli
-          echo "php_path:=/usr/bin/php8.3" | sudo tee config.mk
+          echo "php_cmd:=/usr/bin/php8.3" | sudo tee config.mk
 
       - name: test
         run: make test
