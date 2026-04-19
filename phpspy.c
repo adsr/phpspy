@@ -120,7 +120,8 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "                                       (see also `-s`) (default: %lu)\n", 1000000000UL/opt_sleep_ns);
     fprintf(fp, "  -V, --php-version=<ver>            Set PHP version\n");
     fprintf(fp, "                                       (default: %s;\n", opt_phpv);
-    fprintf(fp, "                                       supported: 70 71 72 73 74 80 81 82 83)\n");
+    fprintf(fp, "                                       supported: 70 71 72 73 74 80 81 82 83\n");
+    fprintf(fp, "                                       84 85)\n");
     fprintf(fp, "  -l, --limit=<num>                  Limit total number of traces to capture\n");
     fprintf(fp, "                                       (approximate limit in pgrep mode)\n");
     fprintf(fp, "                                       (default: %lu; 0=unlimited)\n", opt_trace_limit);

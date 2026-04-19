@@ -1,7 +1,8 @@
 # phpspy
 
 phpspy is a low-overhead sampling profiler for PHP. It works with non-ZTS PHP
-7.0+ with CLI, Apache, and FPM SAPIs on x86_64 Linux 3.2+.
+7.0+ with CLI, Apache, and FPM SAPIs on x86_64 Linux 3.2+. Experimental support
+for aarch64 (arm64) is also included[^9].
 
 [![Build Status](https://github.com/adsr/phpspy/actions/workflows/phpspy_test.yml/badge.svg)](https://github.com/adsr/phpspy/actions/workflows/phpspy_test.yml)
 
@@ -70,7 +71,8 @@ All with no changes to your application and minimal overhead.
                                            (see also `-s`) (default: 99)
       -V, --php-version=<ver>            Set PHP version
                                            (default: auto;
-                                           supported: 70 71 72 73 74 80 81 82)
+                                           supported: 70 71 72 73 74 80 81 82 83
+                                           84 85)
       -l, --limit=<num>                  Limit total number of traces to capture
                                            (approximate limit in pgrep mode)
                                            (default: 0; 0=unlimited)
@@ -112,6 +114,8 @@ All with no changes to your application and minimal overhead.
                                            (default: PT; none)
       -c, --continue-on-error            Attempt to continue tracing after
                                            encountering an error
+      -w, --libname-awk-patt=<patt>      Awk pattern to match name of PHP lib
+                                           (default: libphp[78]?)
       -#, --comment=<any>                Ignored; intended for self-documenting
                                            commands
       -@, --nothing                      Ignored
@@ -251,3 +255,4 @@ All with no changes to your application and minimal overhead.
 [6]: https://blackfire.io/
 [7]: https://tideways.io/
 [8]: https://github.com/adsr/phpspy/issues/109
+[^9]: Currently the aarch64 structs are only valid for PHP 8.3+.
