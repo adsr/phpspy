@@ -93,20 +93,16 @@ static int get_php_bin_path(pid_t pid, char *path_root, char *path) {
 }
 
 static int get_php_base_addr(pid_t pid, char *path_root, char *path, uint64_t *raddr) {
-    /**
-     * This is very likely to be incorrect/incomplete. I thought the base
-     * address from `/proc/<pid>/maps` + the symbol address from `readelf` would
-     * lead to the actual memory address, but on at least one system I tested on
-     * this is not the case. On that system, working backwards from the address
-     * printed in `gdb`, it seems the missing piece was the 'virtual address' of
-     * the LOAD section in ELF headers. I suspect this may have to do with
-     * address relocation and/or a feature called 'prelinking', but not sure.
-     */
+    /* Note: This may be incomplete. It seems to work on x86_64 and aarch64.
+     *       It may not work if the PHP binary has multiple executable segments
+     *       for some reason. */
     char buf[PHPSPY_STR_SIZE];
     char arg_buf[PHPSPY_STR_SIZE];
     uint64_t start_addr;
     uint64_t virt_addr;
-    char *cmd_fmt = "grep -m1 ' '%s\\$ /proc/%d/maps";
+
+    /* find start addr of executable mapping */
+    char *cmd_fmt = "awk -vp=%s '$NF==p{if(index($2,\"x\")){print $1;exit}}' /proc/%d/maps";
     if (shell_escape(path, arg_buf, sizeof(arg_buf), "path")) {
         return 1;
     }
@@ -115,19 +111,18 @@ static int get_php_base_addr(pid_t pid, char *path_root, char *path, uint64_t *r
         return 1;
     }
     start_addr = strtoull(buf, NULL, 16);
+
+    /* find vaddr of executable segment */
+    cmd_fmt = "objdump -p %s | awk -va=0 '$1==\"LOAD\"{a=$5} $5==\"flags\"{if(index($6,\"x\")){print a;exit}}'";
     if (shell_escape(path_root, arg_buf, sizeof(arg_buf), "path_root")) {
         return 1;
     }
-    #if defined(__x86_64__)
-    cmd_fmt = "objdump -p %s | awk '/LOAD/{print $5; exit}'";
     if (popen_read_line(buf, sizeof(buf), cmd_fmt, arg_buf) != 0) {
         log_error("get_php_base_addr: Failed to get virt_addr\n");
         return 1;
     }
     virt_addr = strtoull(buf, NULL, 16);
-    #else
-    virt_addr = 0; /* aarch64 does not seem to use this */
-    #endif
+
     *raddr = start_addr - virt_addr;
     return 0;
 }
