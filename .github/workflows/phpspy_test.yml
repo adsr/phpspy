@@ -1,18 +1,31 @@
 name: phpspy_test
-on: [push, pull_request]
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
 jobs:
   phpspy_test_job:
-    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        runs_on: [ ubuntu-24.04, ubuntu-24.04-arm ]
+
+    runs-on: ${{ matrix.runs_on }}
+
     env:
       TERM: xterm
+
     steps:
       - name: checkout
         uses: actions/checkout@v2
         with:
           submodules: recursive
+
       - name: deps
         run: |
           sudo apt-get install -y php8.3-cli
           echo "php_path:=/usr/bin/php8.3" | sudo tee config.mk
+
       - name: test
         run: make test
