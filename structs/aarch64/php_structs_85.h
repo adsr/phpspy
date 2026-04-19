@@ -1,7 +1,7 @@
 #ifndef __php_structs_85_h
 #define __php_structs_85_h
 
-/* TODO: These structs are wrong for aarch64 */
+
 
 #include <stdint.h>
 
@@ -96,8 +96,8 @@ struct __attribute__((__packed__)) _sapi_request_info_85 {
 struct __attribute__((__packed__)) _sapi_globals_struct_85 {
     uint8_t                 pad0[8];                /* 0        +8 */
     sapi_request_info_85    request_info;           /* 8        +48 */
-    uint8_t                 pad1[384];              /* 56       +384 */
-    double                  global_request_time;    /* 440      +8 */
+    uint8_t                 pad1[368];              /* 56       +368 */
+    double                  global_request_time;    /* 424      +8 */
 };
 
 union __attribute__((__packed__)) _zend_value_85 {
