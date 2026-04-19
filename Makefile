@@ -1,12 +1,10 @@
-phpspy_cflags:=-std=c11 -Wall -Wextra -pedantic -g -O3 -Wno-address-of-packed-member $(CFLAGS)
+phpspy_cflags:=-std=c11 -Wall -Wextra -pedantic -g -O3 -Wno-address-of-packed-member -DTB_LIB_OPTS $(CFLAGS)
 phpspy_libs:=-pthread $(LDLIBS)
 phpspy_ldflags:=$(LDFLAGS)
 phpspy_includes:=-I. -I./vendor
 phpspy_defines:=
 phpspy_tests:=$(wildcard tests/test_*.sh)
 phpspy_sources:=phpspy.c pgrep.c top.c addr_objdump.c event_fout.c event_callgrind.c
-
-termbox_inlcudes=-Ivendor/termbox2/
 
 prefix?=/usr/local
 
@@ -31,17 +29,8 @@ endif
 
 all: phpspy
 
-phpspy: $(wildcard *.c *.h) vendor/termbox2/termbox2.h
-	$(CC) $(phpspy_cflags) $(phpspy_includes) $(termbox_inlcudes) $(phpspy_defines) $(phpspy_sources) -o phpspy $(phpspy_ldflags) $(phpspy_libs)
-
-vendor/termbox2/termbox2.h:
-	if [ -d "$(CURDIR)/.git" ]; then \
-		git submodule update --init --recursive; \
-		cd vendor/termbox2 && git reset --hard; \
-	else \
-		cd vendor; \
-		git clone https://github.com/termbox/termbox2.git; \
-	fi
+phpspy: $(wildcard *.c *.h)
+	$(CC) $(phpspy_cflags) $(phpspy_includes) $(phpspy_defines) $(phpspy_sources) -o phpspy $(phpspy_ldflags) $(phpspy_libs)
 
 test: phpspy $(phpspy_tests)
 	@total=0; \
@@ -59,7 +48,6 @@ install: phpspy
 	install -D -v -m 755 phpspy $(DESTDIR)$(prefix)/bin/phpspy
 
 clean:
-	cd vendor/termbox2 && $(MAKE) clean
 	rm -f phpspy
 
-.PHONY: all test install clean phpspy
+.PHONY: all test install clean
