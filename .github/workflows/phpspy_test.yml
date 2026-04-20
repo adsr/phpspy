@@ -18,9 +18,7 @@ jobs:
 
     steps:
       - name: checkout
-        uses: actions/checkout@v2
-        with:
-          submodules: recursive
+        uses: actions/checkout@v4
 
       - name: deps
         run: |
