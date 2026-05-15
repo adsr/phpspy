@@ -189,6 +189,7 @@ extern int opt_filter_negate;
 extern int opt_verbose_fields_pid;
 extern int opt_verbose_fields_ts;
 extern int opt_continue_on_error;
+extern int opt_quiet;
 extern int opt_fout_buffer_size;
 extern long opt_time_limit_ms;
 extern char *opt_libname_awk_patt;
@@ -203,6 +204,7 @@ extern int event_handler_fout(struct trace_context_s *context, int event_type);
 extern int event_handler_callgrind(struct trace_context_s *context, int event_type);
 extern void write_done_pipe();
 extern void log_error(const char *fmt, ...);
+extern void log_perror(const char *s);
 extern uint64_t phpspy_zend_inline_hash_func(const char *str, size_t len);
 extern int shell_escape(const char *arg, char *buf, size_t buf_size, const char *what);
 

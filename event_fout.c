@@ -212,7 +212,7 @@ static int event_handler_fout_open(int *fd) {
     if (strcmp(opt_path_output, "-") == 0) {
         tfd = dup(STDOUT_FILENO);
         if (tfd < 0) {
-            perror("event_handler_fout_open: dup");
+            log_perror("event_handler_fout_open: dup");
             return PHPSPY_ERR;
         }
         *fd = tfd;
@@ -222,7 +222,7 @@ static int event_handler_fout_open(int *fd) {
     if (strstr(opt_path_output, "%d") != NULL) {
         if (asprintf(&apath, opt_path_output, gettid()) < 0) {
             errno = ENOMEM;
-            perror("event_handler_fout_open: asprintf");
+            log_perror("event_handler_fout_open: asprintf");
             return PHPSPY_ERR;
         }
         path = apath;
@@ -239,7 +239,7 @@ static int event_handler_fout_open(int *fd) {
 
     if (tfd < 0) {
         errno = errno_saved;
-        perror("event_handler_fout_open: open");
+        log_perror("event_handler_fout_open: open");
         return PHPSPY_ERR;
     }
 
