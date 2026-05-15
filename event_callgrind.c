@@ -252,7 +252,7 @@ static int callgrind_open(FILE **fout) {
         *fout = fopen(opt_path_output, "w");
     }
     if (!*fout) {
-        perror("fopen");
+        log_perror("fopen");
         if (tfd != -1) close(tfd);
         return 1;
     }

@@ -60,7 +60,7 @@ int main_top(int argc, char **argv) {
     }
 
     if ((ttyfd = open("/dev/tty", O_RDONLY)) < 0) {
-        perror("open");
+        log_perror("open");
         return 1;
     }
     if ((fork_child(argc, argv, &pid, &outfd, &errfd)) < 0) {
@@ -93,7 +93,7 @@ int main_top(int argc, char **argv) {
                 last_display.tv_sec = 0; /* Immediately re-display */
                 continue;
             }
-            perror("select");
+            log_perror("select");
             break;
         }
         if (FD_ISSET(outfd, &readfds)) {
@@ -122,7 +122,7 @@ static int fork_child(int argc, char **argv, pid_t *pid, int *outfd, int *errfd)
     int pout[2], perr[2];
     (void)argc;
     if (pipe(pout) < 0 || pipe(perr) < 0) {
-        perror("pipe");
+        log_perror("pipe");
         return 1;
     }
     *pid = fork();
@@ -136,10 +136,10 @@ static int fork_child(int argc, char **argv, pid_t *pid, int *outfd, int *errfd)
         close(perr[1]);
 
         execvp(argv[0], argv);
-        perror("execvp");
+        log_perror("execvp");
         exit(1);
     } else if (*pid < 0) {
-        perror("fork");
+        log_perror("fork");
         return 1;
     }
     close(pout[1]);
@@ -181,7 +181,7 @@ static void read_child_out(int fd) {
     }
 
     if ((read_rv = read(fd, buf + buf_len, rem)) < 0) {
-        perror("read");
+        log_perror("read");
         return;
     } else if (read_rv == 0) {
         done = 1;
@@ -204,7 +204,7 @@ static void read_child_err(int fd) {
     size_t buf_pos;
     ssize_t read_rv;
     if ((read_rv = read(fd, buf, BUF_SIZE)) < 0) {
-        perror("read");
+        log_perror("read");
         return;
     } else if (read_rv == 0) {
         done = 1;

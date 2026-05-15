@@ -37,13 +37,13 @@ char *opt_event_handler_opts = NULL;
 int opt_continue_on_error = 0;
 int opt_fout_buffer_size = 4096;
 char *opt_libname_awk_patt = "libphp[78]?";
+int opt_quiet = 0;
 
 int done = 0;
 int (*do_trace_ptr)(trace_context_t *context) = NULL;
 varpeek_entry_t *varpeek_map = NULL;
 glopeek_entry_t *glopeek_map = NULL;
 regex_t filter_re;
-int log_error_enabled = 1;
 int in_pgrep_mode = 0;
 uint64_t trace_count = 0;
 
@@ -103,6 +103,10 @@ int main(int argc, char **argv) {
 }
 
 void usage(FILE *fp, int exit_code) {
+    if (opt_quiet && fp == stderr) {
+        cleanup();
+        exit(exit_code);
+    }
     fprintf(fp, "Usage:\n");
     fprintf(fp, "  phpspy [options] -p <pid>\n");
     fprintf(fp, "  phpspy [options] -P <pgrep-args>\n");
@@ -164,6 +168,7 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "                                       (default: PT; none)\n");
     fprintf(fp, "  -c, --continue-on-error            Attempt to continue tracing after\n");
     fprintf(fp, "                                       encountering an error\n");
+    fprintf(fp, "  -q, --quiet                        Suppress errors and warnings on stderr\n");
     fprintf(fp, "  -w, --libname-awk-patt=<patt>      Awk pattern to match name of PHP lib\n");
     fprintf(fp, "                                       (default: %s)\n", opt_libname_awk_patt);
     fprintf(fp, "  -#, --comment=<any>                Ignored; intended for self-documenting\n");
@@ -252,6 +257,7 @@ static void parse_opts(int argc, char **argv) {
         { "filter-negate",         required_argument, NULL, 'F' },
         { "verbose-fields",        required_argument, NULL, 'd' },
         { "continue-on-error",     no_argument,       NULL, 'c' },
+        { "quiet",                 no_argument,       NULL, 'q' },
         { "event-handler",         required_argument, NULL, 'j' },
         { "event-handler-opts",    required_argument, NULL, 'J' },
         { "comment",               required_argument, NULL, '#' },
@@ -274,7 +280,7 @@ static void parse_opts(int argc, char **argv) {
     while (
         optind < argc
         && argv[optind][0] == '-'
-        && (c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:i:n:r:mo:O:E:x:a:1b:f:F:d:cj:J:#:@vSe:g:tw:", long_opts, NULL)) != -1
+        && (c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:i:n:r:mo:O:E:x:a:1b:f:F:d:cqj:J:#:@vSe:g:tw:", long_opts, NULL)) != -1
     ) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
@@ -334,6 +340,7 @@ static void parse_opts(int argc, char **argv) {
                 }
                 break;
             case 'c': opt_continue_on_error = 1; break;
+            case 'q': opt_quiet = 1; break;
             case 'j':
                 if (strcmp(optarg, "fout") == 0) {
                     opt_event_handler = event_handler_fout;
@@ -495,10 +502,10 @@ static int main_fork(int argc, char **argv) {
         redirect_child_stdio(STDERR_FILENO, opt_path_child_err);
         ptrace(PTRACE_TRACEME, 0, NULL, NULL);
         execvp(argv[optind], argv + optind);
-        perror("execvp");
+        log_perror("execvp");
         exit(1);
     } else if (fork_pid < 0) {
-        perror("fork");
+        log_perror("fork");
         exit(1);
     }
     waitpid(fork_pid, &status, 0);
@@ -539,11 +546,11 @@ static int pause_pid(pid_t pid) {
     int rv;
     if (ptrace(PTRACE_ATTACH, pid, 0, 0) == -1) {
         rv = errno;
-        perror("ptrace");
+        log_perror("ptrace");
         return PHPSPY_ERR + (rv == ESRCH ? PHPSPY_ERR_PID_DEAD : 0);
     }
     if (waitpid(pid, NULL, 0) < 0) {
-        perror("waitpid");
+        log_perror("waitpid");
         return PHPSPY_ERR;
     }
     return PHPSPY_OK;
@@ -553,7 +560,7 @@ static int unpause_pid(pid_t pid) {
     int rv;
     if (ptrace(PTRACE_DETACH, pid, 0, 0) == -1) {
         rv = errno;
-        perror("ptrace");
+        log_perror("ptrace");
         return PHPSPY_ERR + (rv == ESRCH ? PHPSPY_ERR_PID_DEAD : 0);
     }
     return PHPSPY_OK;
@@ -567,17 +574,17 @@ static void redirect_child_stdio(int proc_fd, char *opt_path) {
     } else if (strstr(opt_path, "%d") != NULL) {
         if (asprintf(&redir_path, opt_path, getpid()) < 0) {
             errno = ENOMEM;
-            perror("asprintf");
+            log_perror("asprintf");
             exit(1);
         }
     } else {
         if ((redir_path = strdup(opt_path)) == NULL) {
-            perror("strdup");
+            log_perror("strdup");
             exit(1);
         }
     }
     if ((redir_file = fopen(redir_path, "w")) == NULL) {
-        perror("fopen");
+        log_perror("fopen");
         free(redir_path);
         exit(1);
     }
@@ -605,17 +612,17 @@ static int find_addresses(trace_target_t *target) {
     if (opt_capture_mem) {
         try(rv, get_symbol_addr(&memo, target->pid, "alloc_globals", &target->alloc_globals_addr));
     }
-    log_error_enabled = 0;
+    ++opt_quiet;
     if (get_symbol_addr(&memo, target->pid, "basic_functions_module", &target->basic_functions_module_addr) != 0) {
         target->basic_functions_module_addr = 0;
     }
-    log_error_enabled = 1;
+    --opt_quiet;
     return PHPSPY_OK;
 }
 
 static void clock_get(struct timespec *ts) {
     if (clock_gettime(CLOCK_MONOTONIC_RAW, ts) == -1) {
-        perror("clock_gettime");
+        log_perror("clock_gettime");
         ts->tv_sec = 0;
         ts->tv_nsec = 0;
     }
@@ -744,7 +751,7 @@ static int copy_proc_mem(pid_t pid, const char *what, void *raddr, void *laddr, 
 
     if (process_vm_readv(pid, local, 1, remote, 1, 0) == -1) {
         if (errno == ESRCH) { /* No such process */
-            perror("process_vm_readv");
+            log_perror("process_vm_readv");
             return PHPSPY_ERR | PHPSPY_ERR_PID_DEAD;
         }
         log_error("copy_proc_mem: Failed to copy %s; err=%s raddr=%p size=%lu\n", what, strerror(errno), raddr, size);
@@ -781,22 +788,23 @@ static int get_php_version(trace_target_t *target) {
         int n = snprintf(
             version_cmd,
             sizeof(version_cmd),
-            "{ echo -n /proc/%d/root/; "
+            "{ { echo -n /proc/%d/root/; "
             "  awk -ve=1 -vp=%s '$0~p{print $NF; e=0; exit} END{exit e}' /proc/%d/maps "
             "  || readlink /proc/%d/exe; } "
             "| { xargs stat --printf=%%n 2>/dev/null || echo /proc/%d/exe; } "
             "| xargs strings "
             "| grep -Eo 'X-Powered-By: PHP/[0-9]+\\.[0-9]+' "
-            "| grep -Eo '[0-9]+\\.[0-9]+' ",
-            pid, libname, pid, pid, pid
+            "| grep -Eo '[0-9]+\\.[0-9]+'; }%s",
+            pid, libname, pid, pid, pid,
+            opt_quiet ? " 2>/dev/null" : ""
         );
-        if ((size_t)n >= sizeof(version_cmd) - 1) {
+        if (n < 0 || (size_t)n >= sizeof(version_cmd)) {
             log_error("get_php_version: snprintf overflow\n");
             return PHPSPY_ERR;
         }
 
         if ((pcmd = popen(version_cmd, "r")) == NULL) {
-            perror("get_php_version: popen");
+            log_perror("get_php_version: popen");
             return PHPSPY_ERR;
         } else if (fread(&phpv, sizeof(char), 3, pcmd) != 3) {
             log_error("get_php_version: Could not detect PHP version\n");
@@ -857,11 +865,15 @@ uint64_t phpspy_zend_inline_hash_func(const char *str, size_t len) {
 }
 
 void log_error(const char *fmt, ...) {
+    if (opt_quiet) return;
     va_list args;
-    if (log_error_enabled) {
-        va_start(args, fmt);
-        vfprintf(stderr, fmt, args);
-    }
+    va_start(args, fmt);
+    vfprintf(stderr, fmt, args);
+}
+
+void log_perror(const char *s) {
+    if (opt_quiet) return;
+    perror(s);
 }
 
 /* TODO figure out a way to make this cleaner */

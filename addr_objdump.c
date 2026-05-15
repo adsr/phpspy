@@ -81,7 +81,8 @@ static int get_php_bin_path(pid_t pid, char *path_root, char *path) {
         log_error("get_php_bin_path: Failed\n");
         return 1;
     }
-    if (snprintf(path_root, PHPSPY_STR_SIZE, "/proc/%d/root/%s", (int)pid, buf) > PHPSPY_STR_SIZE - 1) {
+    int n = snprintf(path_root, PHPSPY_STR_SIZE, "/proc/%d/root/%s", (int)pid, buf);
+    if (n < 0 || n >= PHPSPY_STR_SIZE) {
         log_error("get_php_bin_path: snprintf overflow\n");
         return 1;
     }
@@ -145,16 +146,28 @@ static int get_symbol_offset(char *path_root, const char *symbol, uint64_t *radd
 static int popen_read_line(char *buf, size_t buf_size, char *cmd_fmt, ...) {
     FILE *fp;
     char cmd[PHPSPY_STR_SIZE];
-    int buf_len;
+    char cmd_quiet[PHPSPY_STR_SIZE];
+    char *cmd_actual;
+    int rv, buf_len;
     va_list cmd_args;
     va_start(cmd_args, cmd_fmt);
-    if (vsnprintf(cmd, sizeof(cmd), cmd_fmt, cmd_args) >= (int)(sizeof(cmd) - 1)) {
-        log_error("vsnprintf overflow\n");
-        return 1;
-    }
+    rv = vsnprintf(cmd, sizeof(cmd), cmd_fmt, cmd_args);
     va_end(cmd_args);
-    if (!(fp = popen(cmd, "r"))) {
-        perror("popen");
+    if (rv < 0 || rv >= (int)sizeof(cmd)) {
+        log_error("popen_read_line: vsnprintf overflow\n");
+        return PHPSPY_ERR;
+    }
+    cmd_actual = cmd;
+    if (opt_quiet) {
+        rv = snprintf(cmd_quiet, sizeof(cmd_quiet), "{ %s; } 2>/dev/null", cmd);
+        if (rv < 0 || rv >= (int)sizeof(cmd_quiet)) {
+            log_error("popen_read_line: snprintf overflow\n");
+            return PHPSPY_ERR;
+        }
+        cmd_actual = cmd_quiet;
+    }
+    if (!(fp = popen(cmd_actual, "r"))) {
+        log_perror("popen_read_line: popen");
         return 1;
     }
     if (fgets(buf, buf_size-1, fp) == NULL) {

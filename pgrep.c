@@ -85,9 +85,9 @@ static void pgrep_for_pids() {
     int pid;
     int found;
     struct timespec timeout;
-    if (asprintf(&pgrep_cmd, "pgrep %s", opt_pgrep_args) < 0) {
+    if (asprintf(&pgrep_cmd, "pgrep %s%s", opt_pgrep_args, opt_quiet ? " 2>/dev/null" : "") < 0) {
         errno = ENOMEM;
-        perror("asprintf");
+        log_perror("asprintf");
         exit(1);
     }
     while (!done) {
@@ -151,7 +151,7 @@ static void init_work_threads() {
     work_threads = calloc(opt_num_workers, sizeof(pthread_t));
     if (!avail_pids || !attached_pids || !work_threads) {
         errno = ENOMEM;
-        perror("calloc");
+        log_perror("calloc");
         exit(1);
     }
     pthread_mutex_init(&mutex, NULL);
