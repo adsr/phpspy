@@ -6,6 +6,6 @@ phpspy_opts=(--pid $php_pid)
 declare -A expected
 expected[frame_0        ]='^0 sleep <internal>:-1$'
 expected[frame_1        ]='^1 <main> <internal>:-1$'
-use_sudo=1
+need_ptrace=1
 source $TEST_SH
 wait $php_pid

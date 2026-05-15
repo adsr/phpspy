@@ -25,5 +25,11 @@ jobs:
           sudo apt-get install -y php8.3-cli
           echo "php_cmd:=/usr/bin/php8.3" | sudo tee config.mk
 
+      - name: build
+        run: make
+
+      - name: grant ptrace cap
+        run: sudo -n setcap cap_sys_ptrace=eip ./phpspy
+
       - name: test
         run: make test

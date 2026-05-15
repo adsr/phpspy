@@ -1,11 +1,16 @@
 #!/bin/bash
 
 maybe_sudo=''
-if [ -n "$use_sudo" ]; then
-    if sudo -n true &>/dev/null; then
+if [ -n "$need_ptrace" ]; then
+    ptrace_scope=$(cat /proc/sys/kernel/yama/ptrace_scope 2>/dev/null || echo 0)
+    if [ "$ptrace_scope" = "0" ]; then
+        : # same-uid ptrace allowed; no privilege needed
+    elif getcap "$PHPSPY" 2>/dev/null | grep -q cap_sys_ptrace; then
+        : # binary has cap_sys_ptrace as a file cap
+    elif sudo -n true &>/dev/null; then
         maybe_sudo='sudo -n'
     else
-        skip='need sudo'
+        skip='need ptrace'
     fi
 fi
 
@@ -54,7 +59,7 @@ done
 
 unset expected
 unset not_expected
-unset use_sudo
+unset need_ptrace
 unset use_timeout_s
 unset skip
 unset non_zero_ok
