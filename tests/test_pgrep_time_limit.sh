@@ -9,7 +9,7 @@ declare -A expected
 expected[frame_0        ]='^0 sleep <internal>:-1$'
 expected[frame_1        ]='^1 <main> <internal>:-1$'
 use_timeout_s=2
-use_sudo=1
+need_ptrace=1
 source $TEST_SH
 wait $php_pid
 rm -f $pid_file
@@ -18,7 +18,7 @@ phpspy_opts=(--pgrep "--full hope_this_does_not_exist_lol" --threads 2 --time-li
 declare -A expected
 expected[nothing]='^$'
 use_timeout_s=2
-use_sudo=1
+need_ptrace=1
 source $TEST_SH
 wait $php_pid
 rm -f $pid_file
