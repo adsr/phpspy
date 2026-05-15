@@ -114,6 +114,7 @@ All with no changes to your application and minimal overhead.
                                            (default: PT; none)
       -c, --continue-on-error            Attempt to continue tracing after
                                            encountering an error
+      -q, --quiet                        Suppress errors and warnings on stderr
       -w, --libname-awk-patt=<patt>      Awk pattern to match name of PHP lib
                                            (default: libphp[78]?)
       -#, --comment=<any>                Ignored; intended for self-documenting
