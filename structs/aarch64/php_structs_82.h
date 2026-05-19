@@ -20,11 +20,16 @@ typedef struct _Bucket_82                Bucket_82;
 typedef struct _zend_array_82            zend_array_82;
 typedef struct _zend_alloc_globals_82    zend_alloc_globals_82;
 typedef struct _zend_mm_heap_82          zend_mm_heap_82;
+typedef struct _zend_object_82           zend_object_82;
+typedef struct _pdo_bound_param_data_82  pdo_bound_param_data_82;
+typedef struct _pdo_stmt_t_82            pdo_stmt_t_82;
 
 /* Assumes 8-byte pointers */
                                                     /* offset   length */
 struct __attribute__((__packed__)) _zend_array_82 {
-    uint8_t                 pad0[12];               /* 0        +12 */
+    uint8_t                 pad0[8];                /* 0        +8 */
+    uint8_t                 flags;                  /* 8        +1 */
+    uint8_t                 pad1[3];                /* 9        +3 */
     uint32_t                nTableMask;             /* 12       +4 */
     Bucket_82               *arData;                /* 16       +8 */
     uint32_t                nNumUsed;               /* 24       +4 */
@@ -39,11 +44,31 @@ struct __attribute__((__packed__)) _zend_executor_globals_82 {
     zend_execute_data_82    *current_execute_data;  /* 488      +8 */
 };
 
+union __attribute__((__packed__)) _zend_value_82 {
+    long                    lval;                   /* 0        +8 */
+    double                  dval;                   /* 0        +8 */
+    zend_string_82          *str;                   /* 0        +8 */
+    zend_array_82           *arr;                   /* 0        +8 */
+};
+
+struct __attribute__((__packed__)) _zval_82 {
+    zend_value_82           value;                  /* 0        +8 */
+    union {
+        struct {
+            uint8_t         type;                   /* 8        +1 */
+            uint8_t         pad0[3];                /* 9        +3 */
+        } v;
+    } u1;
+    union {
+        uint32_t next;                              /* 12       +4 */
+    } u2;
+};
+
 struct __attribute__((__packed__)) _zend_execute_data_82 {
     zend_op_82              *opline;                /* 0        +8 */
     uint8_t                 pad0[16];               /* 8        +16 */
     zend_function_82        *func;                  /* 24       +8 */
-    uint8_t                 pad1[16];               /* 32       +16 */
+    zval_82                 This;                   /* 32       +16 */
     zend_execute_data_82    *prev_execute_data;     /* 48       +8 */
     zend_array_82           *symbol_table;          /* 56       +8 */
 };
@@ -100,26 +125,6 @@ struct __attribute__((__packed__)) _sapi_globals_struct_82 {
     double                  global_request_time;    /* 440      +8 */
 };
 
-union __attribute__((__packed__)) _zend_value_82 {
-    long                    lval;                   /* 0        +8 */
-    double                  dval;                   /* 0        +8 */
-    zend_string_82          *str;                   /* 0        +8 */
-    zend_array_82           *arr;                   /* 0        +8 */
-};
-
-struct __attribute__((__packed__)) _zval_82 {
-    zend_value_82           value;                  /* 0        +8 */
-    union {
-        struct {
-            uint8_t         type;                   /* 8        +1 */
-            uint8_t         pad0[3];                /* 9        +3 */
-        } v;
-    } u1;
-    union {
-        uint32_t next;                              /* 12       +4 */
-    } u2;
-};
-
 struct __attribute__((__packed__)) _Bucket_82 {
     zval_82                 val;                    /* 0        +16 */
     uint64_t                h;                      /* 16       +8 */
@@ -134,6 +139,30 @@ struct __attribute__((__packed__)) _zend_mm_heap_82 {
     uint8_t                 pad0[16];               /* 0        +16 */
     size_t                  size;                   /* 16       +8 */
     size_t                  peak;                   /* 24       +8 */
+};
+
+
+struct __attribute__((__packed__)) _zend_object_82 {
+    uint8_t                 pad0[16];               /* 0        +16 */
+    zend_class_entry_82     *ce;                    /* 16       +8 */
+    uint8_t                 pad1[16];               /* 24       +16 */
+    zval_82                 properties_table[1];    /* 40       +16 */
+};
+
+struct __attribute__((__packed__)) _pdo_bound_param_data_82 {
+    zval_82                 parameter;              /* 0        +16 */
+    uint8_t                 pad0[16];               /* 16       +16 */
+    int64_t                 paramno;                /* 32       +8 */
+    zend_string_82          *name;                  /* 40       +8 */
+    uint8_t                 pad1[24];               /* 48       +24 */
+    int32_t                 param_type;             /* 72       +4 */
+};
+
+struct __attribute__((__packed__)) _pdo_stmt_t_82 {
+    uint8_t                 pad0[56];               /* 0        +56 */
+    zend_array_82           *bound_params;          /* 56       +8 */
+    uint8_t                 pad1[248];              /* 64       +248 */
+    zend_object_82          std;                    /* 312      +56 */
 };
 
 #endif

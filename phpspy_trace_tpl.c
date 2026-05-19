@@ -15,6 +15,9 @@
 #define zend_op_array         concat2(zend_op_array_,         phpv)
 #define zend_string           concat2(zend_string_,           phpv)
 #define zval                  concat2(zval_,                  phpv)
+#define zend_object           concat2(zend_object_,           phpv)
+#define pdo_stmt_t            concat2(pdo_stmt_t_,            phpv)
+#define pdo_bound_param_data  concat2(pdo_bound_param_data_,  phpv)
 
 #define do_trace              concat2(do_trace_,              phpv)
 #define trace_stack           concat2(trace_stack_,           phpv)
@@ -22,6 +25,7 @@
 #define trace_memory_info     concat2(trace_memory_info_,     phpv)
 #define trace_globals         concat2(trace_globals_,         phpv)
 #define trace_locals          concat2(trace_locals_,          phpv)
+#define trace_pdo             concat2(trace_pdo_,             phpv)
 #define copy_executor_globals concat2(copy_executor_globals_, phpv)
 #define copy_zarray_bucket    concat2(copy_zarray_bucket_,    phpv)
 #define sprint_zstring        concat2(sprint_zstring_,        phpv)
@@ -29,6 +33,9 @@
 #define sprint_zarray         concat2(sprint_zarray_,         phpv)
 #define sprint_zarray_val     concat2(sprint_zarray_val,      phpv)
 #define sprint_zarray_bucket  concat2(sprint_zarray_bucket_,  phpv)
+#define sprint_zarray_packed  concat2(sprint_zarray_packed_,  phpv)
+#define sprint_pdo_binds      concat2(sprint_pdo_binds_,      phpv)
+#define sprint_pdo_bind       concat2(sprint_pdo_bind_,       phpv)
 
 #include "phpspy_trace.c"
 
@@ -49,6 +56,9 @@
 #undef zend_op_array
 #undef zend_string
 #undef zval
+#undef zend_object
+#undef pdo_stmt_t
+#undef pdo_bound_param_data
 
 #undef do_trace
 #undef trace_stack
@@ -56,6 +66,9 @@
 #undef trace_memory_info
 #undef trace_globals
 #undef trace_locals
+#undef trace_pdo
+#undef sprint_pdo_binds
+#undef sprint_pdo_bind
 #undef copy_executor_globals
 #undef copy_zarray_bucket
 #undef sprint_zstring
@@ -63,3 +76,4 @@
 #undef sprint_zarray
 #undef sprint_zarray_val
 #undef sprint_zarray_bucket
+#undef sprint_zarray_packed

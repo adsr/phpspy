@@ -38,6 +38,7 @@ int opt_continue_on_error = 0;
 int opt_fout_buffer_size = 4096;
 char *opt_libname_awk_patt = "libphp[78]?";
 int opt_quiet = 0;
+int opt_peek_pdo = 0;
 
 int done = 0;
 int (*do_trace_ptr)(trace_context_t *context) = NULL;
@@ -190,6 +191,8 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "                                       <varname>@<path>:<lineno>\n");
     fprintf(fp, "                                       <varname>@<path>:<start>-<end>\n");
     fprintf(fp, "                                       e.g., xyz@/path/to.php:10-20\n");
+    fprintf(fp, "  -D, --peek-pdo                     Peek at the SQL and arguments of PDO\n");
+    fprintf(fp, "                                       queries. Emits varpeek events.\n");
     fprintf(fp, "  -g, --peek-global=<glospec>        Peek at the contents of a global var\n");
     fprintf(fp, "                                       located at `glospec`, which has\n");
     fprintf(fp, "                                       the format: <global>.<key>\n");
@@ -266,6 +269,7 @@ static void parse_opts(int argc, char **argv) {
         { "pause-process",         no_argument,       NULL, 'S' },
         { "peek-var",              required_argument, NULL, 'e' },
         { "peek-global",           required_argument, NULL, 'g' },
+        { "peek-pdo",              no_argument,       NULL, 'D' },
         { "top",                   no_argument,       NULL, 't' },
         { "libname-awk-patt",      required_argument, NULL, 'w' },
         { 0,                       0,                 0,    0   }
@@ -280,7 +284,7 @@ static void parse_opts(int argc, char **argv) {
     while (
         optind < argc
         && argv[optind][0] == '-'
-        && (c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:i:n:r:mo:O:E:x:a:1b:f:F:d:cqj:J:#:@vSe:g:tw:", long_opts, NULL)) != -1
+        && (c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:i:n:r:mo:O:E:x:a:1b:f:F:d:cqj:J:#:@vSe:g:Dtw:", long_opts, NULL)) != -1
     ) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
@@ -376,6 +380,7 @@ static void parse_opts(int argc, char **argv) {
             case 'g': glopeek_add(optarg); break;
             case 't': opt_top_mode = 1; break;
             case 'w': opt_libname_awk_patt = optarg; break;
+            case 'D': opt_peek_pdo = 1; break;
         }
     }
 }

@@ -6,6 +6,7 @@ static int trace_request_info(trace_context_t *context);
 static int trace_memory_info(trace_context_t *context);
 static int trace_globals(trace_context_t *context);
 static int trace_locals(trace_context_t *context, zend_op *zop, zend_execute_data *remote_execute_data, zend_op_array *op_array, char *file, int file_len);
+static int trace_pdo(trace_context_t *context, zend_execute_data *remote_execute_data, zend_execute_data *local_execute_data, trace_frame_t *frame);
 
 static int copy_executor_globals(trace_context_t *context, zend_executor_globals *executor_globals);
 static int copy_zarray_bucket(trace_context_t *context, zend_array *rzarray, const char *key, Bucket *lbucket);
@@ -15,6 +16,9 @@ static int sprint_zval(trace_context_t *context, zval *lzval, char *buf, size_t 
 static int sprint_zarray(trace_context_t *context, zend_array *rzarray, char *buf, size_t buf_size, size_t *buf_len);
 static int sprint_zarray_val(trace_context_t *context, zend_array *rzarray, const char *key, char *buf, size_t buf_size, size_t *buf_len);
 static int sprint_zarray_bucket(trace_context_t *context, Bucket *lbucket, char *buf, size_t buf_size, size_t *buf_len);
+static int sprint_zarray_packed(trace_context_t *context, int idx, zval *lzval, char *buf, size_t buf_size, size_t *buf_len);
+static int sprint_pdo_binds(trace_context_t *context, zend_array *rht, char *buf, size_t buf_size, size_t *buf_len);
+static int sprint_pdo_bind(trace_context_t *context, zval *lzval, char *buf, size_t buf_size, size_t *buf_len);
 
 /*********************
     Trace functions
@@ -135,6 +139,9 @@ static int trace_stack(trace_context_t *context, zend_execute_data *remote_execu
         }
         frame->depth = *depth;
         try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_FRAME));
+        if (opt_peek_pdo) {
+            trace_pdo(context, remote_execute_data, &execute_data, frame);
+        }
         remote_execute_data = execute_data.prev_execute_data;
         *depth += 1;
     }
@@ -305,6 +312,109 @@ static int trace_locals(trace_context_t *context, zend_op *zop, zend_execute_dat
     return PHPSPY_OK;
 }
 
+/**
+ * If the current frame is PDOStatement::execute, PDO::query, or PDO::exec,
+ * emit varpeek events named #pdo_sql (and #pdo_args, when binds are present).
+ */
+static int trace_pdo(trace_context_t *context, zend_execute_data *remote_execute_data, zend_execute_data *local_execute_data, trace_frame_t *frame) {
+    int rv, is_stmt_execute, is_pdo_query_or_exec;
+    uint32_t num_args;
+    varpeek_entry_t entry;
+    varpeek_var_t var_sql, var_args;
+    zend_object lobj;
+    pdo_stmt_t lstmt;
+    zval first_arg;
+    char buf[PHPSPY_STR_SIZE];
+    size_t buf_len;
+    uint8_t this_type;
+
+    void *robj;
+
+    memset(&entry, 0, sizeof(entry));
+    memset(&var_sql, 0, sizeof(var_sql));
+    memset(&var_args, 0, sizeof(var_args));
+
+    is_stmt_execute = (strcmp(frame->loc.class, "PDOStatement") == 0
+                       && strcmp(frame->loc.func, "execute") == 0);
+    is_pdo_query_or_exec = (strcmp(frame->loc.class, "PDO") == 0
+                            && (strcmp(frame->loc.func, "query") == 0
+                                || strcmp(frame->loc.func, "exec") == 0));
+    if (!is_stmt_execute && !is_pdo_query_or_exec) return 0;
+
+    snprintf(entry.filename_lineno, sizeof(entry.filename_lineno),
+             "%.96s::%.96s", frame->loc.class, frame->loc.func);
+    snprintf(var_sql.name,  sizeof(var_sql.name),  "#pdo_sql");
+    snprintf(var_args.name, sizeof(var_args.name), "#pdo_args");
+
+    num_args = local_execute_data->This.u2.next;
+    robj = (void*)(uintptr_t)local_execute_data->This.value.lval;
+
+    if (is_stmt_execute) {
+        /* PDOStatement::$queryString lives at properties_table[0]. */
+        this_type = local_execute_data->This.u1.v.type;
+        if (this_type != PHPSPY_ZVAL_TYPE_OBJECT) return 1;
+        if (!robj) return 1;
+
+        try_copy_proc_mem("pdo_this", robj, &lobj, sizeof(lobj));
+
+        if (lobj.properties_table[0].u1.v.type == PHPSPY_ZVAL_TYPE_STRING) {
+            try(rv, sprint_zstring(context, "pdo_qs",
+                lobj.properties_table[0].value.str, buf, sizeof(buf), &buf_len));
+            context->event.varpeek.entry = &entry;
+            context->event.varpeek.var = &var_sql;
+            context->event.varpeek.zval_str = buf;
+            context->event.varpeek.zval_str_len = buf_len;
+            try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_VARPEEK));
+        }
+
+        if (num_args > 0) {
+            /* ->execute(...) */
+            try_copy_proc_mem("pdo_arg0",
+                ((zval*)remote_execute_data) + 5, &first_arg, sizeof(first_arg));
+            if (first_arg.u1.v.type == PHPSPY_ZVAL_TYPE_ARRAY) {
+                rv = sprint_zarray(context, first_arg.value.arr, buf, sizeof(buf), &buf_len);
+                if (rv == PHPSPY_OK && buf_len > 0) {
+                    context->event.varpeek.entry = &entry;
+                    context->event.varpeek.var = &var_args;
+                    context->event.varpeek.zval_str = buf;
+                    context->event.varpeek.zval_str_len = buf_len;
+                    try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_VARPEEK));
+                }
+            }
+        } else {
+            /* ->bind... */
+            void *rstmt = (void*)((char*)robj - offsetof(pdo_stmt_t, std));
+            try_copy_proc_mem("pdo_stmt", rstmt, &lstmt, sizeof(lstmt));
+            if (lstmt.bound_params) {
+                rv = sprint_pdo_binds(context, lstmt.bound_params, buf, sizeof(buf), &buf_len);
+                if (rv == PHPSPY_OK && buf_len > 0) {
+                    context->event.varpeek.entry = &entry;
+                    context->event.varpeek.var = &var_args;
+                    context->event.varpeek.zval_str = buf;
+                    context->event.varpeek.zval_str_len = buf_len;
+                    try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_VARPEEK));
+                }
+            }
+        }
+    } else {
+        /* PDO::query / PDO::exec */
+        if (num_args < 1) return 1;
+        try_copy_proc_mem("pdo_arg0",
+            ((zval*)remote_execute_data) + 5, &first_arg, sizeof(first_arg));
+        if (first_arg.u1.v.type == PHPSPY_ZVAL_TYPE_STRING) {
+            try(rv, sprint_zstring(context, "pdo_sql",
+                first_arg.value.str, buf, sizeof(buf), &buf_len));
+            context->event.varpeek.entry = &entry;
+            context->event.varpeek.var = &var_sql;
+            context->event.varpeek.zval_str = buf;
+            context->event.varpeek.zval_str_len = buf_len;
+            try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_VARPEEK));
+        }
+    }
+
+    return 1;
+}
+
 /********************
     Copy functions
  ********************/
@@ -424,18 +534,18 @@ static int sprint_zval(trace_context_t *context, zval *lzval, char *buf, size_t 
     int type;
     type = (int)lzval->u1.v.type;
     switch (type) {
-        case IS_LONG:
+        case PHPSPY_ZVAL_TYPE_LONG:
             snprintf(buf, buf_size, "%ld", lzval->value.lval);
             *buf_len = strlen(buf);
             break;
-        case IS_DOUBLE:
+        case PHPSPY_ZVAL_TYPE_DOUBLE:
             snprintf(buf, buf_size, "%f", lzval->value.dval);
             *buf_len = strlen(buf);
             break;
-        case IS_STRING:
+        case PHPSPY_ZVAL_TYPE_STRING:
             try(rv, sprint_zstring(context, "zval", lzval->value.str, buf, buf_size, buf_len));
             break;
-        case IS_ARRAY:
+        case PHPSPY_ZVAL_TYPE_ARRAY:
             try(rv, sprint_zarray(context, lzval->value.arr, buf, buf_size, buf_len));
             break;
         default:
@@ -458,35 +568,59 @@ static int sprint_zval(trace_context_t *context, zval *lzval, char *buf, size_t 
  * @return int Status code
  */
 static int sprint_zarray(trace_context_t *context, zend_array *rzarray, char *buf, size_t buf_size, size_t *buf_len) {
-    int rv;
-    int i;
-    int array_len;
+    int rv, i, array_len, is_packed;
     size_t tmp_len;
-    Bucket buckets[PHPSPY_MAX_ARRAY_BUCKETS];
     zend_array lzarray;
-    char *obuf;
+    Bucket buckets[PHPSPY_MAX_ARRAY_BUCKETS];
+    zval zvals[PHPSPY_MAX_ARRAY_BUCKETS];
+    char *obuf = buf;
 
-    obuf = buf;
     try_copy_proc_mem("array", rzarray, &lzarray, sizeof(lzarray));
+    array_len = PHPSPY_MIN(lzarray.nNumUsed, PHPSPY_MAX_ARRAY_BUCKETS);
+    is_packed = (lzarray.flags & PHPSPY_HASH_FLAG_PACKED) != 0;
 
-    array_len = PHPSPY_MIN(lzarray.nNumOfElements, PHPSPY_MAX_ARRAY_BUCKETS);
-    try_copy_proc_mem("buckets", lzarray.arData, buckets, sizeof(Bucket) * array_len);
-
-    for (i = 0; i < array_len; i++) {
-        try(rv, sprint_zarray_bucket(context, buckets + i, buf, buf_size, &tmp_len));
-        buf_size -= tmp_len;
-        buf += tmp_len;
-
-        /* TODO Introduce a string class to clean this silliness up */
-        if (buf_size >= 2) {
-            *buf = ',';
-            --buf_size;
-            ++buf;
-        }
+    if (is_packed) {
+        try_copy_proc_mem("zvals", lzarray.arData, zvals, sizeof(zval) * array_len);
+    } else {
+        try_copy_proc_mem("buckets", lzarray.arData, buckets, sizeof(Bucket) * array_len);
     }
 
-    *buf_len = (size_t)(buf - obuf);
+    for (i = 0; i < array_len; i++) {
+        if (is_packed) {
+            try(rv, sprint_zarray_packed(context, i, &zvals[i], buf, buf_size, &tmp_len));
+        } else {
+            try(rv, sprint_zarray_bucket(context, &buckets[i], buf, buf_size, &tmp_len));
+        }
+        if (tmp_len == 0) continue;
+        buf += tmp_len;
+        buf_size -= tmp_len;
+        if (buf_size < 2) break;
+        *buf++ = ',';
+        --buf_size;
+    }
+    if (buf > obuf && *(buf - 1) == ',') --buf;
 
+    *buf_len = (size_t)(buf - obuf);
+    return PHPSPY_OK;
+}
+
+static int sprint_zarray_packed(trace_context_t *context, int idx, zval *lzval, char *buf, size_t buf_size, size_t *buf_len) {
+    int rv, n;
+    size_t tmp_len;
+    char *obuf = buf;
+
+    *buf_len = 0;
+    if (lzval->u1.v.type == PHPSPY_ZVAL_TYPE_UNDEF) return PHPSPY_OK;
+
+    n = snprintf(buf, buf_size, "%d=", idx);
+    if (n < 0 || (size_t)n >= buf_size) return PHPSPY_OK;
+    buf += n;
+    buf_size -= n;
+
+    try(rv, sprint_zval(context, lzval, buf, buf_size, &tmp_len));
+    buf += tmp_len;
+
+    *buf_len = (size_t)(buf - obuf);
     return PHPSPY_OK;
 }
 
@@ -529,6 +663,9 @@ static int sprint_zarray_bucket(trace_context_t *context, Bucket *lbucket, char 
     size_t tmp_len;
     char *obuf;
 
+    *buf_len = 0;
+    if (lbucket->val.u1.v.type == PHPSPY_ZVAL_TYPE_UNDEF) return PHPSPY_OK;
+
     obuf = buf;
 
     if (lbucket->key != NULL) {
@@ -543,6 +680,94 @@ static int sprint_zarray_bucket(trace_context_t *context, Bucket *lbucket, char 
     }
 
     try(rv, sprint_zval(context, &lbucket->val, buf, buf_size, &tmp_len));
+    buf += tmp_len;
+
+    *buf_len = (size_t)(buf - obuf);
+    return PHPSPY_OK;
+}
+
+/**
+ * Print a pdo_stmt_t->bound_params HashTable as a comma-separated
+ * "name=value" list. Buckets store IS_PTR zvals whose value points at a
+ * pdo_bound_param_data, not at another zval (because PDO uses
+ * zend_hash_*_update_mem to register binds).
+ */
+static int sprint_pdo_binds(trace_context_t *context, zend_array *rht, char *buf, size_t buf_size, size_t *buf_len) {
+    int rv, i, used, is_packed;
+    size_t tmp_len;
+    zend_array lht;
+    Bucket buckets[PHPSPY_MAX_ARRAY_BUCKETS];
+    zval zvals[PHPSPY_MAX_ARRAY_BUCKETS];
+    char *obuf = buf;
+
+    *buf_len = 0;
+    if (!rht) return PHPSPY_OK;
+
+    try_copy_proc_mem("pdo_binds_ht", rht, &lht, sizeof(lht));
+    used = PHPSPY_MIN(lht.nNumUsed, PHPSPY_MAX_ARRAY_BUCKETS);
+    if (used <= 0 || !lht.arData) return PHPSPY_OK;
+
+    is_packed = (lht.flags & PHPSPY_HASH_FLAG_PACKED) != 0;
+    if (is_packed) {
+        try_copy_proc_mem("pdo_binds_zvals", lht.arData, zvals, sizeof(zval) * used);
+    } else {
+        try_copy_proc_mem("pdo_binds_buckets", lht.arData, buckets, sizeof(Bucket) * used);
+    }
+
+    for (i = 0; i < used; i++) {
+        zval *zv = is_packed ? &zvals[i] : &buckets[i].val;
+        try(rv, sprint_pdo_bind(context, zv, buf, buf_size, &tmp_len));
+        if (tmp_len == 0) continue;
+        buf += tmp_len;
+        buf_size -= tmp_len;
+        if (buf_size < 2) break;
+        *buf++ = ',';
+        --buf_size;
+    }
+    if (buf > obuf && *(buf - 1) == ',') --buf;
+
+    *buf_len = (size_t)(buf - obuf);
+    return PHPSPY_OK;
+}
+
+static int sprint_pdo_bind(trace_context_t *context, zval *lzval, char *buf, size_t buf_size, size_t *buf_len) {
+    int rv, n;
+    size_t tmp_len, name_len;
+    pdo_bound_param_data lbp;
+    char tmp_name[PHPSPY_STR_SIZE];
+    void *rbp, *rref;
+    zval lref;
+    zval *vptr;
+    char *obuf = buf;
+
+    *buf_len = 0;
+    if (lzval->u1.v.type == PHPSPY_ZVAL_TYPE_UNDEF) return PHPSPY_OK;
+
+    rbp = (void *)(uintptr_t)lzval->value.lval;
+    if (!rbp) return PHPSPY_OK;
+    if (copy_proc_mem(context->target.pid, "pdo_bp", rbp, &lbp, sizeof(lbp)) != PHPSPY_OK) return PHPSPY_OK;
+
+    if (lbp.name) {
+        if (sprint_zstring(context, "bp_name", lbp.name, tmp_name, sizeof(tmp_name), &name_len) != PHPSPY_OK) return PHPSPY_OK;
+    } else {
+        snprintf(tmp_name, sizeof(tmp_name), "%ld", (long)lbp.paramno);
+        name_len = strlen(tmp_name);
+    }
+
+    n = snprintf(buf, buf_size, "%.*s=", (int)name_len, tmp_name);
+    if (n < 0 || (size_t)n >= buf_size) return PHPSPY_OK;
+    buf += n;
+    buf_size -= n;
+
+    vptr = &lbp.parameter;
+    if (vptr->u1.v.type == PHPSPY_ZVAL_TYPE_REFERENCE) {
+        rref = (void *)(uintptr_t)vptr->value.lval;
+        if (rref && copy_proc_mem(context->target.pid, "pdo_ref", (char *)rref + 8, &lref, sizeof(lref)) == PHPSPY_OK) {
+            vptr = &lref;
+        }
+    }
+
+    try(rv, sprint_zval(context, vptr, buf, buf_size, &tmp_len));
     buf += tmp_len;
 
     *buf_len = (size_t)(buf - obuf);
