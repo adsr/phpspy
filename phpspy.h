@@ -46,7 +46,9 @@
 #define PHPSPY_VERSION "0.8.0"
 #define PHPSPY_MIN(a, b) ((a) < (b) ? (a) : (b))
 #define PHPSPY_MAX(a, b) ((a) > (b) ? (a) : (b))
+#ifndef PHPSPY_STR_SIZE
 #define PHPSPY_STR_SIZE 256
+#endif
 #define PHPSPY_MAX_ARRAY_BUCKETS 128
 #define PHPSPY_MAX_ARRAY_TABLE_SIZE 512
 
@@ -67,19 +69,19 @@
 #define PHPSPY_TRACE_EVENT_ERROR       8
 #define PHPSPY_TRACE_EVENT_DEINIT      9
 
-#ifndef USE_ZEND
-#define IS_UNDEF     0
-#define IS_NULL      1
-#define IS_FALSE     2
-#define IS_TRUE      3
-#define IS_LONG      4
-#define IS_DOUBLE    5
-#define IS_STRING    6
-#define IS_ARRAY     7
-#define IS_OBJECT    8
-#define IS_RESOURCE  9
-#define IS_REFERENCE 10
-#endif
+#define PHPSPY_HASH_FLAG_PACKED (1 << 2)
+
+#define PHPSPY_ZVAL_TYPE_UNDEF     0
+#define PHPSPY_ZVAL_TYPE_NULL      1
+#define PHPSPY_ZVAL_TYPE_FALSE     2
+#define PHPSPY_ZVAL_TYPE_TRUE      3
+#define PHPSPY_ZVAL_TYPE_LONG      4
+#define PHPSPY_ZVAL_TYPE_DOUBLE    5
+#define PHPSPY_ZVAL_TYPE_STRING    6
+#define PHPSPY_ZVAL_TYPE_ARRAY     7
+#define PHPSPY_ZVAL_TYPE_OBJECT    8
+#define PHPSPY_ZVAL_TYPE_RESOURCE  9
+#define PHPSPY_ZVAL_TYPE_REFERENCE 10
 
 typedef struct varpeek_var_s {
     char name[PHPSPY_STR_SIZE];
@@ -193,6 +195,7 @@ extern int opt_quiet;
 extern int opt_fout_buffer_size;
 extern long opt_time_limit_ms;
 extern char *opt_libname_awk_patt;
+extern int opt_peek_pdo;
 
 extern int main_pgrep();
 extern int main_pid(pid_t pid);
