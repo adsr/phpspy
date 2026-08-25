@@ -153,7 +153,12 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "  -a, --addr-sapi-globals=<hex>      Set address of sapi_globals in hex\n");
     fprintf(fp, "                                       (default: %lu; 0=find dynamically)\n", opt_executor_globals_addr);
     fprintf(fp, "  -1, --single-line                  Output in single-line mode\n");
-    fprintf(fp, "  -b, --buffer-size=<size>           Set output buffer size to `size`.\n");
+    fprintf(fp, "  -b, --buffer-size=<size>           Set max output bytes per trace to\n");
+    fprintf(fp, "                                       `size`. This is a per-trace budget,\n");
+    fprintf(fp, "                                       not a stream buffer: a trace that\n");
+    fprintf(fp, "                                       exceeds it is emitted truncated, with\n");
+    fprintf(fp, "                                       a `# truncated = 1` marker. Deep\n");
+    fprintf(fp, "                                       stacks run ~100-140 bytes per frame.\n");
     fprintf(fp, "                                       Note: In `-P` mode, setting this\n");
     fprintf(fp, "                                       above PIPE_BUF (4096) may lead to\n");
     fprintf(fp, "                                       interlaced writes across threads\n");
@@ -457,7 +462,7 @@ int main_pid(pid_t pid) {
         if ((rv & PHPSPY_ERR_PID_DEAD) != 0) break;
 
         /* maybe apply trace limit */
-        if (opt_trace_limit > 0 && rv == PHPSPY_OK) {
+        if (opt_trace_limit > 0 && PHPSPY_TRACE_COUNTED(rv)) {
             if (in_pgrep_mode) {
                 __atomic_add_fetch(&trace_count, 1, __ATOMIC_SEQ_CST);
             } else {

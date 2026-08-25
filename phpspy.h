@@ -56,6 +56,15 @@
 #define PHPSPY_ERR_BUF_FULL 4
 #define PHPSPY_ERR_SKIPPED  8
 
+/* Tail room event_fout withholds so a truncated trace can still carry its
+   epilogue: `# truncated = 1` (16), `# trace_ts = <float>` (31), `# pid = N`
+   (16) and the trace delimiter, each with its frame delimiter. */
+#define PHPSPY_FOUT_EPILOGUE_RESERVE 80
+
+/* A sample that reached output, whether or not it fit in `-b`. Traces dropped
+   by `-f`/`-F` deliberately do not count. */
+#define PHPSPY_TRACE_COUNTED(__rv) ((__rv) == PHPSPY_OK || ((__rv) & PHPSPY_ERR_BUF_FULL) != 0)
+
 #define PHPSPY_TRACE_EVENT_INIT        0
 #define PHPSPY_TRACE_EVENT_STACK_BEGIN 1
 #define PHPSPY_TRACE_EVENT_FRAME       2

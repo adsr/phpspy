@@ -99,7 +99,12 @@ All with no changes to your application and minimal overhead.
       -a, --addr-sapi-globals=<hex>      Set address of sapi_globals in hex
                                            (default: 0; 0=find dynamically)
       -1, --single-line                  Output in single-line mode
-      -b, --buffer-size=<size>           Set output buffer size to `size`.
+      -b, --buffer-size=<size>           Set max output bytes per trace to
+                                           `size`. This is a per-trace budget,
+                                           not a stream buffer: a trace that
+                                           exceeds it is emitted truncated, with
+                                           a `# truncated = 1` marker. Deep
+                                           stacks run ~100-140 bytes per frame.
                                            Note: In `-P` mode, setting this
                                            above PIPE_BUF (4096) may lead to
                                            interlaced writes across threads
