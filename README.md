@@ -117,6 +117,9 @@ All with no changes to your application and minimal overhead.
       -q, --quiet                        Suppress errors and warnings on stderr
       -w, --libname-awk-patt=<patt>      Awk pattern to match name of PHP lib
                                            (default: libphp[78]?)
+      -W, --warn-no-traces-s=<sec>       Warn on stderr if no traces have been
+                                           captured after `sec` seconds
+                                           (default: 5; 0=never warn)
       -#, --comment=<any>                Ignored; intended for self-documenting
                                            commands
       -@, --nothing                      Ignored
@@ -164,7 +167,7 @@ All with no changes to your application and minimal overhead.
     # - - - - -
     ...
     ^C
-    main_pgrep finished gracefully
+    phpspy: 4812 samples in 48.31s across 9 pids: 4809 written, 3 empty, 0 filtered, 0 errored (0.31 ms/sample)
 
 ### Example (httpd)
 

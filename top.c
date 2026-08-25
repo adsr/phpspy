@@ -135,6 +135,10 @@ static int fork_child(int argc, char **argv, pid_t *pid, int *outfd, int *errfd)
         dup2(perr[1], STDERR_FILENO);
         close(perr[1]);
 
+        /* we count child stderr lines as errors, so suppress the startup line
+           and exit summary in the child */
+        setenv("PHPSPY_NO_SUMMARY", "1", 1);
+
         execvp(argv[0], argv);
         log_perror("execvp");
         exit(1);

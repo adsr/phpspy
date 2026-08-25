@@ -38,6 +38,7 @@ int opt_continue_on_error = 0;
 int opt_fout_buffer_size = 4096;
 char *opt_libname_awk_patt = "libphp[78]?";
 int opt_quiet = 0;
+long opt_warn_no_traces_s = 5;
 
 int done = 0;
 int (*do_trace_ptr)(trace_context_t *context) = NULL;
@@ -46,6 +47,13 @@ glopeek_entry_t *glopeek_map = NULL;
 regex_t filter_re;
 int in_pgrep_mode = 0;
 uint64_t trace_count = 0;
+
+static pthread_mutex_t stats_mutex = PTHREAD_MUTEX_INITIALIZER;
+static trace_stats_t total_stats;
+static uint64_t total_targets = 0;
+static struct timespec total_start_time;
+static int no_traces_warned = 0;
+static uint64_t no_traces_suppressed = 0;
 
 static void parse_opts(int argc, char **argv);
 static int main_fork(int argc, char **argv);
@@ -61,6 +69,13 @@ static void calc_sleep_time(struct timespec *end, struct timespec *start, struct
 static void varpeek_add(char *varspec);
 static void glopeek_add(char *glospec);
 static int copy_proc_mem(pid_t pid, const char *what, void *raddr, void *laddr, size_t size);
+static int main_pid_inner(pid_t pid, trace_stats_t *stats);
+static uint64_t clock_diff_ns(struct timespec *start, struct timespec *end);
+static void stats_fold(trace_stats_t *stats);
+static void stats_report();
+static void warn_no_traces(pid_t pid, long secs);
+static void log_startup(trace_target_t *target);
+static int diagnostics_enabled();
 
 #ifdef USE_ZEND
 static int do_trace(trace_context_t *context);
@@ -83,6 +98,7 @@ static int do_trace_86(trace_context_t *context);
 int main(int argc, char **argv) {
     int rv;
     parse_opts(argc, argv);
+    clock_get(&total_start_time);
 
     if (opt_top_mode != 0) {
         rv = main_top(argc, argv);
@@ -98,6 +114,7 @@ int main(int argc, char **argv) {
         usage(stderr, 1);
         rv = 1;
     }
+    stats_report();
     cleanup();
     return rv;
 }
@@ -171,6 +188,9 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "  -q, --quiet                        Suppress errors and warnings on stderr\n");
     fprintf(fp, "  -w, --libname-awk-patt=<patt>      Awk pattern to match name of PHP lib\n");
     fprintf(fp, "                                       (default: %s)\n", opt_libname_awk_patt);
+    fprintf(fp, "  -W, --warn-no-traces-s=<sec>       Warn on stderr if no traces have been\n");
+    fprintf(fp, "                                       captured after `sec` seconds\n");
+    fprintf(fp, "                                       (default: %ld; 0=never warn)\n", opt_warn_no_traces_s);
     fprintf(fp, "  -#, --comment=<any>                Ignored; intended for self-documenting\n");
     fprintf(fp, "                                       commands\n");
     fprintf(fp, "  -@, --nothing                      Ignored\n");
@@ -268,6 +288,7 @@ static void parse_opts(int argc, char **argv) {
         { "peek-global",           required_argument, NULL, 'g' },
         { "top",                   no_argument,       NULL, 't' },
         { "libname-awk-patt",      required_argument, NULL, 'w' },
+        { "warn-no-traces-s",      required_argument, NULL, 'W' },
         { 0,                       0,                 0,    0   }
     };
     /* Parse options until the first non-option argument is reached. Effectively
@@ -280,7 +301,7 @@ static void parse_opts(int argc, char **argv) {
     while (
         optind < argc
         && argv[optind][0] == '-'
-        && (c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:i:n:r:mo:O:E:x:a:1b:f:F:d:cqj:J:#:@vSe:g:tw:", long_opts, NULL)) != -1
+        && (c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:i:n:r:mo:O:E:x:a:1b:f:F:d:cqj:J:#:@vSe:g:tw:W:", long_opts, NULL)) != -1
     ) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
@@ -376,15 +397,27 @@ static void parse_opts(int argc, char **argv) {
             case 'g': glopeek_add(optarg); break;
             case 't': opt_top_mode = 1; break;
             case 'w': opt_libname_awk_patt = optarg; break;
+            case 'W': opt_warn_no_traces_s = strtol_with_min_or_exit("-W", optarg, 0); break;
         }
     }
 }
 
 int main_pid(pid_t pid) {
     int rv;
+    trace_stats_t stats;
+
+    memset(&stats, 0, sizeof(trace_stats_t));
+    rv = main_pid_inner(pid, &stats);
+    stats_fold(&stats);
+
+    return rv;
+}
+
+static int main_pid_inner(pid_t pid, trace_stats_t *stats) {
+    int rv;
     trace_context_t context;
-    struct timespec start_time, end_time, sleep_time, _stop_time, limit_time;
-    struct timespec *stop_time;
+    struct timespec start_time, end_time, sleep_time, _stop_time, limit_time, _warn_time;
+    struct timespec *stop_time, *warn_time;
 
     memset(&context, 0, sizeof(trace_context_t));
     context.target.pid = pid;
@@ -431,6 +464,8 @@ int main_pid(pid_t pid) {
     }
     #endif
 
+    log_startup(&context.target);
+
     /* calc stop_time */
     stop_time = NULL;
     if (in_pgrep_mode) {
@@ -443,6 +478,16 @@ int main_pid(pid_t pid) {
         clock_add(stop_time, &limit_time, stop_time);
     }
 
+    /* calc warn_time; the deadline for capturing at least one trace */
+    warn_time = NULL;
+    if (opt_warn_no_traces_s > 0) {
+        warn_time = &_warn_time;
+        limit_time.tv_sec = opt_warn_no_traces_s;
+        limit_time.tv_nsec = 0;
+        clock_get(warn_time);
+        clock_add(warn_time, &limit_time, warn_time);
+    }
+
     while (!done) {
         /* record start_time */
         clock_get(&start_time);
@@ -453,8 +498,42 @@ int main_pid(pid_t pid) {
         rv |= do_trace_ptr(&context);
         if (opt_pause) rv |= unpause_pid(pid);
 
+        clock_get(&end_time);
+        stats->trace_ns += clock_diff_ns(&start_time, &end_time);
+        stats->attempted += 1;
+
+        /* Classify the sample. A live target that is not executing PHP returns
+           PHPSPY_OK with depth 0 and emits nothing, so success cannot be read
+           from rv alone; and a failed read also leaves depth at 0, so errors
+           must be tested first or they masquerade as an idle target. */
+        if ((rv & PHPSPY_ERR_PID_DEAD) != 0) {
+            /* not classified; the loop is about to break */
+        } else if ((rv & PHPSPY_ERR_SKIPPED) != 0) {
+            stats->filtered += 1;
+        } else if (rv != PHPSPY_OK) {
+            stats->errored += 1;
+        } else if (context.last_depth < 1) {
+            stats->empty += 1;
+        } else {
+            stats->written += 1;
+        }
+
         /* bail if pid died */
-        if ((rv & PHPSPY_ERR_PID_DEAD) != 0) break;
+        if ((rv & PHPSPY_ERR_PID_DEAD) != 0) {
+            if (!in_pgrep_mode && diagnostics_enabled()) {
+                log_error("phpspy: pid %d exited (%lu traces captured)\n",
+                    (int)pid, (unsigned long)stats->written);
+            }
+            break;
+        }
+
+        /* maybe warn that nothing at all is being captured */
+        if (warn_time && clock_diff(&start_time, warn_time) >= 1) {
+            if (stats->written + stats->filtered == 0) {
+                warn_no_traces(pid, opt_warn_no_traces_s);
+            }
+            warn_time = NULL; /* one-shot per target */
+        }
 
         /* maybe apply trace limit */
         if (opt_trace_limit > 0 && rv == PHPSPY_OK) {
@@ -620,6 +699,101 @@ static int find_addresses(trace_target_t *target) {
     return PHPSPY_OK;
 }
 
+static int diagnostics_enabled() {
+    /* top mode re-execs phpspy and counts stderr lines as errors, so it opts
+       out. Doubles as the escape hatch for wrappers that treat any stderr
+       output as failure. */
+    return getenv("PHPSPY_NO_SUMMARY") == NULL ? 1 : 0;
+}
+
+static void log_startup(trace_target_t *target) {
+    if (in_pgrep_mode || !diagnostics_enabled()) return; /* one line per worker would be noise */
+    log_error(
+        "phpspy: pid %d php %s executor_globals=0x%lx use_zend=%s\n",
+        (int)target->pid,
+        opt_phpv,
+        (unsigned long)target->executor_globals_addr,
+        #ifdef USE_ZEND
+        "y"
+        #else
+        "n"
+        #endif
+    );
+}
+
+static void warn_no_traces(pid_t pid, long secs) {
+    int expect = 0;
+    if (!diagnostics_enabled()) return;
+    /* in pgrep mode many workers can hit this at once; the first one speaks */
+    if (!__atomic_compare_exchange_n(&no_traces_warned, &expect, 1, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) {
+        __atomic_add_fetch(&no_traces_suppressed, 1, __ATOMIC_SEQ_CST);
+        return;
+    }
+    log_error(
+        "phpspy: warning: pid %d: 0 traces captured in %lds; is the target executing PHP?\n"
+        "        (target blocked in a syscall, wrong pid, or a non-PHP process)\n",
+        (int)pid,
+        secs
+    );
+}
+
+static void stats_fold(trace_stats_t *stats) {
+    pthread_mutex_lock(&stats_mutex);
+    total_stats.attempted += stats->attempted;
+    total_stats.written   += stats->written;
+    total_stats.empty     += stats->empty;
+    total_stats.filtered  += stats->filtered;
+    total_stats.errored   += stats->errored;
+    total_stats.trace_ns  += stats->trace_ns;
+    total_targets += 1;
+    pthread_mutex_unlock(&stats_mutex);
+}
+
+static void stats_report() {
+    struct timespec now;
+    double elapsed_s, ms_per_sample;
+
+    if (!diagnostics_enabled()) return;
+    if (total_targets == 0) return; /* never got as far as tracing anything */
+
+    clock_get(&now);
+    elapsed_s = (double)clock_diff_ns(&total_start_time, &now) / 1000000000.0;
+    ms_per_sample = total_stats.attempted > 0
+        ? ((double)total_stats.trace_ns / (double)total_stats.attempted) / 1000000.0
+        : 0.0;
+
+    log_error(
+        "phpspy: %lu samples in %.2fs across %lu pid%s: "
+        "%lu written, %lu empty, %lu filtered, %lu errored (%.2f ms/sample)\n",
+        (unsigned long)total_stats.attempted,
+        elapsed_s,
+        (unsigned long)total_targets,
+        total_targets == 1 ? "" : "s",
+        (unsigned long)total_stats.written,
+        (unsigned long)total_stats.empty,
+        (unsigned long)total_stats.filtered,
+        (unsigned long)total_stats.errored,
+        ms_per_sample
+    );
+
+    if (no_traces_suppressed > 0) {
+        log_error("phpspy: (%lu more pids captured 0 traces)\n", (unsigned long)no_traces_suppressed);
+    }
+
+    if (total_stats.attempted == 0) {
+        log_error(
+            "phpspy: warning: no samples were taken; the target exited or could not be\n"
+            "        attached to before sampling began\n"
+        );
+    } else if (total_stats.written + total_stats.filtered == 0) {
+        log_error(
+            "phpspy: warning: captured 0 traces; the target may not have been executing PHP\n"
+            "        (blocked in a syscall, wrong pid, or a PHP build/extension that moves\n"
+            "        execution off the VM stack)\n"
+        );
+    }
+}
+
 static void clock_get(struct timespec *ts) {
     if (clock_gettime(CLOCK_MONOTONIC_RAW, ts) == -1) {
         log_perror("clock_gettime");
@@ -647,15 +821,17 @@ static int clock_diff(struct timespec *a, struct timespec *b) {
     return a->tv_sec > b->tv_sec ? 1 : -1;
 }
 
-static void calc_sleep_time(struct timespec *end, struct timespec *start, struct timespec *sleep) {
-    long end_ns, start_ns, sleep_ns;
-    if (end->tv_sec == start->tv_sec) {
-        sleep_ns = opt_sleep_ns - (end->tv_nsec - start->tv_nsec);
-    } else {
-        end_ns = (end->tv_sec * 1000000000UL) + (end->tv_nsec * 1UL);
-        start_ns = (start->tv_sec * 1000000000UL) + (start->tv_nsec * 1UL);
-        sleep_ns = opt_sleep_ns - (end_ns - start_ns);
+static uint64_t clock_diff_ns(struct timespec *start, struct timespec *end) {
+    if (clock_diff(end, start) < 0) {
+        return 0; /* non-monotonic; treat as zero elapsed */
     }
+    return ((uint64_t)(end->tv_sec - start->tv_sec) * 1000000000UL)
+         + (uint64_t)end->tv_nsec - (uint64_t)start->tv_nsec;
+}
+
+static void calc_sleep_time(struct timespec *end, struct timespec *start, struct timespec *sleep) {
+    long sleep_ns;
+    sleep_ns = opt_sleep_ns - (long)clock_diff_ns(start, end);
     if (sleep_ns < 0) {
         log_error("calc_sleep_time: Expected sleep_ns>0; decrease sample rate\n");
         sleep_ns = 0;
