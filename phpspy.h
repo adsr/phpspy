@@ -148,6 +148,18 @@ typedef struct trace_target_s {
     uint64_t basic_functions_module_addr;
 } trace_target_t;
 
+/* Per-target sample tallies. Kept as a `main_pid` local (i.e. per worker
+   thread in `-P` mode) and folded into the global totals once per target, so
+   the sampling loop never touches shared memory. */
+typedef struct trace_stats_s {
+    uint64_t attempted;
+    uint64_t written;   /* emitted a stack */
+    uint64_t empty;     /* depth < 1; target was not executing PHP */
+    uint64_t filtered;  /* discarded by `-f`/`-F` */
+    uint64_t errored;
+    uint64_t trace_ns;  /* cumulative time spent inside do_trace */
+} trace_stats_t;
+
 typedef struct trace_context_s {
     trace_target_t target;
     struct {
@@ -162,6 +174,7 @@ typedef struct trace_context_s {
     const char *event_handler_opts;
     char buf[PHPSPY_STR_SIZE];
     size_t buf_len;
+    int last_depth; /* stack depth reached by the most recent do_trace */
 } trace_context_t;
 
 typedef struct addr_memo_s {

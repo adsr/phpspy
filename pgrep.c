@@ -50,7 +50,6 @@ int main_pgrep() {
 
     deinit_work_threads();
 
-    log_error("main_pgrep finished gracefully\n");
     return 0;
 }
 

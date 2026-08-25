@@ -31,6 +31,9 @@ static int do_trace(trace_context_t *context) {
     int rv, depth;
     zend_executor_globals executor_globals;
 
+    depth = 0;
+    context->last_depth = 0;
+
     try(rv, copy_executor_globals(context, &executor_globals));
     try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_STACK_BEGIN));
 
@@ -46,6 +49,7 @@ static int do_trace(trace_context_t *context) {
         } while(0)
 
         rv |= trace_stack(context, executor_globals.current_execute_data, &depth);
+        context->last_depth = depth;
         maybe_break_on_err();
         if (depth < 1) break;
 
