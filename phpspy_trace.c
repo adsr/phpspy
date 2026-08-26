@@ -93,12 +93,79 @@ static int trace_stack(trace_context_t *context, zend_execute_data *remote_execu
     zend_op zop;
     trace_target_t *target;
     trace_frame_t *frame;
+    zend_execute_data *walk, *remote_prev;
+    int total_depth, keep_inner, keep_outer_from, num_elided, outer_emitted;
 
     target = &context->target;
     frame = &context->event.frame;
     *depth = 0;
 
-    while (remote_execute_data && *depth != opt_max_stack_depth) { /* TODO make options struct */
+    keep_inner = 0;
+    keep_outer_from = -1;
+    num_elided = 0;
+    outer_emitted = 0;
+
+    if (opt_max_stack_depth_outer >= 0) {
+        /* Keeping the outermost frames means knowing how deep the stack is
+           before emitting anything, so count it first. This pass copies only
+           the prev_execute_data pointer, not the whole frame. */
+        total_depth = 0;
+        walk = remote_execute_data;
+        while (walk && total_depth < PHPSPY_MAX_WALK) {
+            try_copy_proc_mem(
+                "prev_execute_data",
+                ((char*)walk) + offsetof(zend_execute_data, prev_execute_data),
+                &remote_prev,
+                sizeof(remote_prev)
+            );
+            walk = remote_prev;
+            total_depth += 1;
+        }
+
+        keep_inner = opt_max_stack_depth >= 0 ? opt_max_stack_depth : 0;
+        if (keep_inner + opt_max_stack_depth_outer < total_depth) {
+            keep_outer_from = total_depth - opt_max_stack_depth_outer;
+            num_elided = keep_outer_from - keep_inner;
+        }
+    }
+
+    while (remote_execute_data && *depth < PHPSPY_MAX_WALK) {
+        /* plain `-n` with no `-N`: stop once we have the innermost frames */
+        if (keep_outer_from < 0 && *depth == opt_max_stack_depth) break;
+
+        /* The stack can grow between the counting pass and this one, so cap
+           the outer frames by count rather than trusting the boundary; the
+           whole point of `-N` is a bounded number of them. */
+        if (keep_outer_from >= 0 && *depth >= keep_outer_from) {
+            if (outer_emitted >= opt_max_stack_depth_outer) break;
+            outer_emitted += 1;
+        }
+
+        if (keep_outer_from >= 0 && *depth >= keep_inner && *depth < keep_outer_from) {
+            /* Inside the elided middle. Stand one marker in for the run of
+               skipped frames, at the depth where they began -- consumers such
+               as stackcollapse-phpspy.pl treat depth 0 as the start of a
+               trace, so something must always be emitted there. */
+            if (*depth == keep_inner) {
+                frame->loc.func_len = snprintf(frame->loc.func, sizeof(frame->loc.func), "<elided:%d>", num_elided);
+                frame->loc.class[0] = '\0';
+                frame->loc.class_len = 0;
+                frame->loc.file_len = snprintf(frame->loc.file, sizeof(frame->loc.file), "<elided>");
+                frame->loc.lineno = -1;
+                frame->depth = *depth;
+                try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_FRAME));
+            }
+            try_copy_proc_mem(
+                "prev_execute_data",
+                ((char*)remote_execute_data) + offsetof(zend_execute_data, prev_execute_data),
+                &remote_prev,
+                sizeof(remote_prev)
+            );
+            remote_execute_data = remote_prev;
+            *depth += 1;
+            continue;
+        }
+
         memset(&execute_data, 0, sizeof(execute_data));
         memset(&zfunc, 0, sizeof(zfunc));
         memset(&zstring, 0, sizeof(zstring));

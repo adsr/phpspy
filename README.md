@@ -81,6 +81,10 @@ All with no changes to your application and minimal overhead.
                                            (default: 0; 0=unlimited)
       -n, --max-depth=<max>              Set max stack trace depth
                                            (default: -1; -1=unlimited)
+      -N, --max-depth-outer=<max>        Also keep the outermost `max` frames,
+                                           eliding the middle of deeper stacks.
+                                           Used alone, only the outermost are
+                                           kept. (default: -1; -1=off)
       -r, --request-info=<opts>          Set request info parts to capture
                                            (q=query c=cookie u=uri p=path
                                            capital=negation)

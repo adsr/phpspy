@@ -19,6 +19,7 @@ int opt_capture_req_uri = 0;
 int opt_capture_req_path = 0;
 int opt_capture_mem = 0;
 int opt_max_stack_depth = -1;
+int opt_max_stack_depth_outer = -1;
 char opt_frame_delim = '\n';
 char opt_trace_delim = '\n';
 uint64_t opt_trace_limit = 0;
@@ -135,6 +136,10 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "                                       (default: %lu; 0=unlimited)\n", opt_time_limit_ms);
     fprintf(fp, "  -n, --max-depth=<max>              Set max stack trace depth\n");
     fprintf(fp, "                                       (default: %d; -1=unlimited)\n", opt_max_stack_depth);
+    fprintf(fp, "  -N, --max-depth-outer=<max>        Also keep the outermost `max` frames,\n");
+    fprintf(fp, "                                       eliding the middle of deeper stacks.\n");
+    fprintf(fp, "                                       Used alone, only the outermost are\n");
+    fprintf(fp, "                                       kept. (default: %d; -1=off)\n", opt_max_stack_depth_outer);
     fprintf(fp, "  -r, --request-info=<opts>          Set request info parts to capture\n");
     fprintf(fp, "                                       (q=query c=cookie u=uri p=path\n");
     fprintf(fp, "                                       capital=negation)\n");
@@ -244,6 +249,7 @@ static void parse_opts(int argc, char **argv) {
         { "limit",                 required_argument, NULL, 'l' },
         { "time-limit-ms",         required_argument, NULL, 'i' },
         { "max-depth",             required_argument, NULL, 'n' },
+        { "max-depth-outer",       required_argument, NULL, 'N' },
         { "request-info",          required_argument, NULL, 'r' },
         { "memory-usage",          no_argument,       NULL, 'm' },
         { "output",                required_argument, NULL, 'o' },
@@ -280,7 +286,7 @@ static void parse_opts(int argc, char **argv) {
     while (
         optind < argc
         && argv[optind][0] == '-'
-        && (c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:i:n:r:mo:O:E:x:a:1b:f:F:d:cqj:J:#:@vSe:g:tw:", long_opts, NULL)) != -1
+        && (c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:i:n:N:r:mo:O:E:x:a:1b:f:F:d:cqj:J:#:@vSe:g:tw:", long_opts, NULL)) != -1
     ) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
@@ -293,6 +299,7 @@ static void parse_opts(int argc, char **argv) {
             case 'l': opt_trace_limit = strtoull(optarg, NULL, 10); break;
             case 'i': opt_time_limit_ms = strtol_with_min_or_exit("-i", optarg, 0); break;
             case 'n': opt_max_stack_depth = atoi_with_min_or_exit("-n", optarg, -1); break;
+            case 'N': opt_max_stack_depth_outer = atoi_with_min_or_exit("-N", optarg, 0); break;
             case 'r':
                 for (i = 0; i < strlen(optarg); i++) {
                     switch (optarg[i]) {

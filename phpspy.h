@@ -50,6 +50,10 @@
 #define PHPSPY_MAX_ARRAY_BUCKETS 128
 #define PHPSPY_MAX_ARRAY_TABLE_SIZE 512
 
+/* Ceiling on how far a stack walk will chase prev_execute_data. Sampling a
+   running process can read a torn pointer, which would otherwise loop. */
+#define PHPSPY_MAX_WALK 100000
+
 #define PHPSPY_OK           0
 #define PHPSPY_ERR          1
 #define PHPSPY_ERR_PID_DEAD 2
