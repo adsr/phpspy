@@ -454,7 +454,12 @@ int main_pid(pid_t pid) {
         if (opt_pause) rv |= unpause_pid(pid);
 
         /* bail if pid died */
-        if ((rv & PHPSPY_ERR_PID_DEAD) != 0) break;
+        if ((rv & PHPSPY_ERR_PID_DEAD) != 0) {
+            if (!in_pgrep_mode) {
+                log_error("phpspy: pid %d exited\n", (int)pid);
+            }
+            break;
+        }
 
         /* maybe apply trace limit */
         if (opt_trace_limit > 0 && rv == PHPSPY_OK) {
@@ -508,13 +513,40 @@ static int main_fork(int argc, char **argv) {
         log_perror("fork");
         exit(1);
     }
-    waitpid(fork_pid, &status, 0);
+    if (waitpid(fork_pid, &status, 0) < 0) {
+        log_perror("main_fork: waitpid");
+        return PHPSPY_ERR;
+    }
+
+    /* The child exits before exec if it could not redirect its stdio, so say
+       so rather than pressing on and probing a zombie. */
+    if (WIFEXITED(status)) {
+        log_error("main_fork: Child exited with status %d before exec; see errors above\n", WEXITSTATUS(status));
+        return WEXITSTATUS(status) != 0 ? WEXITSTATUS(status) : 1;
+    }
+    if (WIFSIGNALED(status)) {
+        log_error("main_fork: Child killed by signal %d before exec\n", WTERMSIG(status));
+        return 128 + WTERMSIG(status);
+    }
     if (!WIFSTOPPED(status) || WSTOPSIG(status) != SIGTRAP) {
         log_error("main_fork: Expected SIGTRAP from child\n");
     }
+
     ptrace(PTRACE_DETACH, fork_pid, NULL, NULL);
     rv = main_pid(fork_pid);
-    waitpid(fork_pid, NULL, 0);
+    waitpid(fork_pid, &status, 0);
+
+    /* Act as a wrapper and report the child's status, the way strace(1) and
+       time(1) do. A profiling failure is reported on stderr; it must not mask
+       the exit code of the command being profiled, not least because a
+       short-lived child routinely exits before phpspy finishes attaching. */
+    if (WIFEXITED(status)) {
+        return WEXITSTATUS(status);
+    }
+    if (WIFSIGNALED(status)) {
+        return 128 + WTERMSIG(status);
+    }
+
     return rv;
 }
 
@@ -584,7 +616,12 @@ static void redirect_child_stdio(int proc_fd, char *opt_path) {
         }
     }
     if ((redir_file = fopen(redir_path, "w")) == NULL) {
-        log_perror("fopen");
+        log_error(
+            "redirect_child_stdio: Failed to open '%s' for child %s: %s\n",
+            redir_path,
+            proc_fd == STDOUT_FILENO ? "stdout (-O)" : "stderr (-E)",
+            strerror(errno)
+        );
         free(redir_path);
         exit(1);
     }
@@ -738,6 +775,7 @@ static void glopeek_add(char *glospec) {
 static int copy_proc_mem(pid_t pid, const char *what, void *raddr, void *laddr, size_t size) {
     struct iovec local[1];
     struct iovec remote[1];
+    ssize_t nread;
 
     if (raddr == NULL) {
         log_error("copy_proc_mem: Not copying %s; raddr is NULL\n", what);
@@ -749,12 +787,24 @@ static int copy_proc_mem(pid_t pid, const char *what, void *raddr, void *laddr, 
     remote[0].iov_base = raddr;
     remote[0].iov_len = size;
 
-    if (process_vm_readv(pid, local, 1, remote, 1, 0) == -1) {
-        if (errno == ESRCH) { /* No such process */
-            log_perror("process_vm_readv");
+    nread = process_vm_readv(pid, local, 1, remote, 1, 0);
+
+    if (nread == -1) {
+        if (errno == ESRCH) {
+            /* The target is gone. This is the ordinary end of a child-mode
+               run, so it is reported once by the sampling loop rather than
+               looking like a failure here. */
             return PHPSPY_ERR | PHPSPY_ERR_PID_DEAD;
         }
         log_error("copy_proc_mem: Failed to copy %s; err=%s raddr=%p size=%lu\n", what, strerror(errno), raddr, size);
+        return PHPSPY_ERR;
+    }
+
+    if ((size_t)nread != size) {
+        /* A partial read (e.g. straddling a mapping boundary) would leave the
+           tail of the destination as-is; callers treat those bytes as pointers
+           into the target, so refuse the sample instead. */
+        log_error("copy_proc_mem: Short read of %s; got %ld of %lu bytes; raddr=%p\n", what, (long)nread, size, raddr);
         return PHPSPY_ERR;
     }
 
