@@ -42,7 +42,6 @@ static int do_trace(trace_context_t *context) {
     do {
         #define maybe_break_on_err() do {                      \
             if (   (rv & PHPSPY_ERR_PID_DEAD) != 0             \
-                || (rv & PHPSPY_ERR_BUF_FULL) != 0             \
                 || (rv != PHPSPY_OK && !opt_continue_on_error) \
             ) {                                                \
                 goto do_trace_end;                             \
@@ -72,7 +71,9 @@ static int do_trace(trace_context_t *context) {
     } while (0);
 
 do_trace_end:
-    if (rv == PHPSPY_OK || opt_continue_on_error) {
+    /* a handler that ran out of output space still has a partial trace worth
+       emitting, so let it decide at STACK_END */
+    if (rv == PHPSPY_OK || (rv & PHPSPY_ERR_BUF_FULL) != 0 || opt_continue_on_error) {
         try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_STACK_END));
     }
 
