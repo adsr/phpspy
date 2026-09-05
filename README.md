@@ -45,6 +45,11 @@ All with no changes to your application and minimal overhead.
     $ ./stackcollapse-phpspy.pl <traces | ./vendor/flamegraph.pl >flame.svg
     $ google-chrome flame.svg # View flame.svg in browser
 
+`stackcollapse-phpspy.pl` labels `<main>` frames with the file they belong to,
+e.g. `<main>:index.php`, so that the entry points of a multi-entry-point app do
+not all collapse into one frame at the base of the flamegraph. Pass
+`--no-main-file` for plain `<main>` labels.
+
 ### Build options
 
     $ make                   # Use built-in structs

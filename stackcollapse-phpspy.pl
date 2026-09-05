@@ -6,7 +6,7 @@
 # single lines, with methods separated by semicolons, and then a space and an
 # occurrence count. For use with flamegraph.pl.
 #
-# USAGE: ./stackcollapse-phpspy.pl infile > outfile
+# USAGE: ./stackcollapse-phpspy.pl [options] infile > outfile
 #
 # Example Input:
 #   ...
@@ -28,9 +28,13 @@
 #   ...
 #
 # Example Output:
-#   <main>;ccc;bbb;aaa 1
-#   <main>;aaa 1
-#   <main>;bbb;aaa;sleep 1
+#   <main>:sample.php;ccc;bbb;aaa;sleep 1
+#   <main>:sample.php;aaa;sleep 1
+#   <main>:sample.php;bbb;aaa;sleep 1
+#
+# `<main>` frames are labelled with the file they belong to, since PHP names
+# the top-level scope of every file `<main>`. Pass --no-main-file for plain
+# `<main>` labels.
 #
 # To make a flamegraph:
 # ./stackcollapse-phpspy.pl infile | ./vendor/flamegraph.pl > svg.out
@@ -43,16 +47,23 @@ use Encode qw(decode encode);
 
 # parameters
 my $help = 0;
+my $main_file = 1;
 
 sub usage {
     die <<USAGE_END;
 USAGE: $0 [options] infile > outfile\n
-    --h|help     # print this message
+    --h|help        # print this message
+    --no-main-file  # do not append the filename to `<main>` frames. By
+                    #   default they are labelled e.g. `<main>:index.php`, so
+                    #   that entry points and included files do not all
+                    #   collapse into one frame. (Same-named files in
+                    #   different directories still collapse together.)
 USAGE_END
 }
 
 GetOptions(
-    'help|h' => \$help
+    'help|h' => \$help,
+    'main-file!' => \$main_file
 ) or usage();
 usage() if $help;
 
@@ -63,7 +74,16 @@ my @frames;
 while (defined(my $line = <>)) {
     next unless $line =~ /^(?:#|\d+) \S/;
 
-    my ($depth, $func) = (split ' ', $line)[0,1];
+    my ($depth, $func, $loc) = (split ' ', $line)[0,1,2];
+
+    # PHP names the top-level scope of every file `<main>`, so without the
+    # filename every entry point and every included file collapses into the
+    # same frame at the base of the flamegraph. Note the match is on a suffix:
+    # a file included from inside a method is named `Class::<main>`.
+    if ($main_file && defined $loc && $func =~ /<main>$/) {
+        my ($file) = $loc =~ m{([^/]+):-?\d+$};
+        $func .= ":$file" if defined $file;
+    }
 
     # decode the utf-8 bytes and make them into characters
     # and turn anything that's invalid into U+FFFD
