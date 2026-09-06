@@ -149,9 +149,9 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "                                       (default: %s)\n", opt_path_child_out);
     fprintf(fp, "  -E, --child-stderr=<path>          Write child stderr to `path`\n");
     fprintf(fp, "                                       (default: %s)\n", opt_path_child_err);
-    fprintf(fp, "  -x, --addr-executor-globals=<hex>  Set address of executor_globals in hex\n");
+    fprintf(fp, "      --addr-executor-globals=<hex>  Set address of executor_globals in hex\n");
     fprintf(fp, "                                       (default: %lu; 0=find dynamically)\n", opt_sapi_globals_addr);
-    fprintf(fp, "  -a, --addr-sapi-globals=<hex>      Set address of sapi_globals in hex\n");
+    fprintf(fp, "      --addr-sapi-globals=<hex>      Set address of sapi_globals in hex\n");
     fprintf(fp, "                                       (default: %lu; 0=find dynamically)\n", opt_executor_globals_addr);
     fprintf(fp, "  -1, --single-line                  Output in single-line mode\n");
     fprintf(fp, "  -b, --buffer-size=<size>           Set output buffer size to `size`.\n");
@@ -170,7 +170,7 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "  -c, --continue-on-error            Attempt to continue tracing after\n");
     fprintf(fp, "                                       encountering an error\n");
     fprintf(fp, "  -q, --quiet                        Suppress errors and warnings on stderr\n");
-    fprintf(fp, "  -w, --libname-awk-patt=<patt>      Awk pattern to match name of PHP lib\n");
+    fprintf(fp, "      --libname-awk-patt=<patt>      Awk pattern to match name of PHP lib\n");
     fprintf(fp, "                                       (default: %s)\n", opt_libname_awk_patt);
     fprintf(fp, "  -#, --comment=<any>                Ignored; intended for self-documenting\n");
     fprintf(fp, "                                       commands\n");
@@ -178,9 +178,9 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "  -v, --version                      Print phpspy version and exit\n");
     fprintf(fp, "\n");
     fprintf(fp, "Experimental options:\n");
-    fprintf(fp, "  -j, --event-handler=<handler>      Set event handler (fout, callgrind)\n");
+    fprintf(fp, "      --event-handler=<handler>      Set event handler (fout, callgrind)\n");
     fprintf(fp, "                                       (default: fout)\n");
-    fprintf(fp, "  -J, --event-handler-opts=<opts>    Set event handler options\n");
+    fprintf(fp, "      --event-handler-opts=<opts>    Set event handler options\n");
     fprintf(fp, "                                       (fout: m=use mutex to prevent\n");
     fprintf(fp, "                                       interlaced writes on stdout in `-P`\n");
     fprintf(fp, "                                       mode)\n");
@@ -252,8 +252,8 @@ static void parse_opts(int argc, char **argv) {
         { "output",                required_argument, NULL, 'o' },
         { "child-stdout",          required_argument, NULL, 'O' },
         { "child-stderr",          required_argument, NULL, 'E' },
-        { "addr-executor-globals", required_argument, NULL, 'x' },
-        { "addr-sapi-globals",     required_argument, NULL, 'a' },
+        { "addr-executor-globals", required_argument, NULL, PHPSPY_LONGOPT_ADDR_EXECUTOR_GLOBALS },
+        { "addr-sapi-globals",     required_argument, NULL, PHPSPY_LONGOPT_ADDR_SAPI_GLOBALS },
         { "single-line",           no_argument,       NULL, '1' },
         { "buffer-size",           required_argument, NULL, 'b' },
         { "filter",                required_argument, NULL, 'f' },
@@ -261,8 +261,8 @@ static void parse_opts(int argc, char **argv) {
         { "verbose-fields",        required_argument, NULL, 'd' },
         { "continue-on-error",     no_argument,       NULL, 'c' },
         { "quiet",                 no_argument,       NULL, 'q' },
-        { "event-handler",         required_argument, NULL, 'j' },
-        { "event-handler-opts",    required_argument, NULL, 'J' },
+        { "event-handler",         required_argument, NULL, PHPSPY_LONGOPT_EVENT_HANDLER },
+        { "event-handler-opts",    required_argument, NULL, PHPSPY_LONGOPT_EVENT_HANDLER_OPTS },
         { "comment",               required_argument, NULL, '#' },
         { "nothing",               no_argument,       NULL, '@' },
         { "version",               no_argument,       NULL, 'v' },
@@ -271,7 +271,7 @@ static void parse_opts(int argc, char **argv) {
         { "peek-global",           required_argument, NULL, 'g' },
         { "peek-pdo",              no_argument,       NULL, 'D' },
         { "top",                   no_argument,       NULL, 't' },
-        { "libname-awk-patt",      required_argument, NULL, 'w' },
+        { "libname-awk-patt",      required_argument, NULL, PHPSPY_LONGOPT_LIBNAME_AWK_PATT },
         { 0,                       0,                 0,    0   }
     };
     /* Parse options until the first non-option argument is reached. Effectively
@@ -284,7 +284,7 @@ static void parse_opts(int argc, char **argv) {
     while (
         optind < argc
         && argv[optind][0] == '-'
-        && (c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:i:n:r:mo:O:E:x:a:1b:f:F:d:cqj:J:#:@vSe:g:Dtw:", long_opts, NULL)) != -1
+        && (c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:i:n:r:mo:O:E:1b:f:F:d:cq#:@vSe:g:Dt", long_opts, NULL)) != -1
     ) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
@@ -316,8 +316,8 @@ static void parse_opts(int argc, char **argv) {
             case 'o': opt_path_output = optarg; break;
             case 'O': opt_path_child_out = optarg; break;
             case 'E': opt_path_child_err = optarg; break;
-            case 'x': opt_executor_globals_addr = strtoull(optarg, NULL, 16); break;
-            case 'a': opt_sapi_globals_addr = strtoull(optarg, NULL, 16); break;
+            case PHPSPY_LONGOPT_ADDR_EXECUTOR_GLOBALS: opt_executor_globals_addr = strtoull(optarg, NULL, 16); break;
+            case PHPSPY_LONGOPT_ADDR_SAPI_GLOBALS: opt_sapi_globals_addr = strtoull(optarg, NULL, 16); break;
             case '1': opt_frame_delim = '\t'; opt_trace_delim = '\n'; break;
             case 'b': opt_fout_buffer_size = atoi_with_min_or_exit("-b", optarg, 1); break;
             case 'f':
@@ -345,7 +345,7 @@ static void parse_opts(int argc, char **argv) {
                 break;
             case 'c': opt_continue_on_error = 1; break;
             case 'q': opt_quiet = 1; break;
-            case 'j':
+            case PHPSPY_LONGOPT_EVENT_HANDLER:
                 if (strcmp(optarg, "fout") == 0) {
                     opt_event_handler = event_handler_fout;
                 } else if (strcmp(optarg, "callgrind") == 0) {
@@ -355,7 +355,7 @@ static void parse_opts(int argc, char **argv) {
                     usage(stderr, 1);
                 }
                 break;
-            case 'J': opt_event_handler_opts = optarg; break;
+            case PHPSPY_LONGOPT_EVENT_HANDLER_OPTS: opt_event_handler_opts = optarg; break;
             case '#': break;
             case '@': break;
             case 'v':
@@ -379,7 +379,7 @@ static void parse_opts(int argc, char **argv) {
             case 'e': varpeek_add(optarg); break;
             case 'g': glopeek_add(optarg); break;
             case 't': opt_top_mode = 1; break;
-            case 'w': opt_libname_awk_patt = optarg; break;
+            case PHPSPY_LONGOPT_LIBNAME_AWK_PATT: opt_libname_awk_patt = optarg; break;
             case 'D': opt_peek_pdo = 1; break;
         }
     }
