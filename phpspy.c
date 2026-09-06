@@ -41,9 +41,9 @@ int opt_quiet = 0;
 int opt_peek_pdo = 0;
 
 int done = 0;
-int (*do_trace_ptr)(trace_context_t *context) = NULL;
-varpeek_entry_t *varpeek_map = NULL;
-glopeek_entry_t *glopeek_map = NULL;
+int (*do_trace_ptr)(trace_context *context) = NULL;
+varpeek_entry *varpeek_map = NULL;
+glopeek_entry *glopeek_map = NULL;
 regex_t filter_re;
 int in_pgrep_mode = 0;
 uint64_t trace_count = 0;
@@ -54,7 +54,7 @@ static void cleanup();
 static int pause_pid(pid_t pid);
 static int unpause_pid(pid_t pid);
 static void redirect_child_stdio(int proc_fd, char *opt_path);
-static int find_addresses(trace_target_t *target);
+static int find_addresses(trace_target *target);
 static void clock_get(struct timespec *ts);
 static void clock_add(struct timespec *a, struct timespec *b, struct timespec *res);
 static int clock_diff(struct timespec *a, struct timespec *b);
@@ -64,21 +64,21 @@ static void glopeek_add(char *glospec);
 static int copy_proc_mem(pid_t pid, const char *what, void *raddr, void *laddr, size_t size);
 
 #ifdef USE_ZEND
-static int do_trace(trace_context_t *context);
+static int do_trace(trace_context *context);
 #else
-static int get_php_version(trace_target_t *target);
-static int do_trace_70(trace_context_t *context);
-static int do_trace_71(trace_context_t *context);
-static int do_trace_72(trace_context_t *context);
-static int do_trace_73(trace_context_t *context);
-static int do_trace_74(trace_context_t *context);
-static int do_trace_80(trace_context_t *context);
-static int do_trace_81(trace_context_t *context);
-static int do_trace_82(trace_context_t *context);
-static int do_trace_83(trace_context_t *context);
-static int do_trace_84(trace_context_t *context);
-static int do_trace_85(trace_context_t *context);
-static int do_trace_86(trace_context_t *context);
+static int get_php_version(trace_target *target);
+static int do_trace_70(trace_context *context);
+static int do_trace_71(trace_context *context);
+static int do_trace_72(trace_context *context);
+static int do_trace_73(trace_context *context);
+static int do_trace_74(trace_context *context);
+static int do_trace_80(trace_context *context);
+static int do_trace_81(trace_context *context);
+static int do_trace_82(trace_context *context);
+static int do_trace_83(trace_context *context);
+static int do_trace_84(trace_context *context);
+static int do_trace_85(trace_context *context);
+static int do_trace_86(trace_context *context);
 #endif
 
 int main(int argc, char **argv) {
@@ -387,11 +387,11 @@ static void parse_opts(int argc, char **argv) {
 
 int main_pid(pid_t pid) {
     int rv;
-    trace_context_t context;
+    trace_context context;
     struct timespec start_time, end_time, sleep_time, _stop_time, limit_time;
     struct timespec *stop_time;
 
-    memset(&context, 0, sizeof(trace_context_t));
+    memset(&context, 0, sizeof(trace_context));
     context.target.pid = pid;
     context.event_handler = opt_event_handler;
     context.event_handler_opts = opt_event_handler_opts;
@@ -524,9 +524,9 @@ static int main_fork(int argc, char **argv) {
 }
 
 static void cleanup() {
-    varpeek_entry_t *entry, *entry_tmp;
-    varpeek_var_t *var, *var_tmp;
-    glopeek_entry_t *gentry, *gentry_tmp;
+    varpeek_entry *entry, *entry_tmp;
+    varpeek_var *var, *var_tmp;
+    glopeek_entry *gentry, *gentry_tmp;
 
     if (opt_filter_re) {
         regfree(opt_filter_re);
@@ -598,11 +598,11 @@ static void redirect_child_stdio(int proc_fd, char *opt_path) {
     free(redir_path);
 }
 
-static int find_addresses(trace_target_t *target) {
+static int find_addresses(trace_target *target) {
     int rv;
-    addr_memo_t memo;
+    addr_memo memo;
 
-    memset(&memo, 0, sizeof(addr_memo_t));
+    memset(&memo, 0, sizeof(addr_memo));
 
     if (opt_executor_globals_addr != 0) {
         target->executor_globals_addr = opt_executor_globals_addr;
@@ -677,8 +677,8 @@ static void calc_sleep_time(struct timespec *end, struct timespec *start, struct
 static void varpeek_add(char *varspec) {
     char *at_sign, *colon, *dash;
     uint32_t line_start, line_end, lineno;
-    varpeek_entry_t *varpeek;
-    varpeek_var_t *var;
+    varpeek_entry *varpeek;
+    varpeek_var *var;
     char varpeek_key[PHPSPY_STR_SIZE];
     /* varspec: var@/path/file.php:line */
     /*   -or-   var@/path/file.php:start-end */
@@ -695,11 +695,11 @@ static void varpeek_add(char *varspec) {
         snprintf(varpeek_key, sizeof(varpeek_key), "%.*s:%d", (int)(colon-at_sign-1), at_sign+1, lineno);
         HASH_FIND_STR(varpeek_map, varpeek_key, varpeek);
         if (!varpeek) {
-            varpeek = calloc(1, sizeof(varpeek_entry_t));
+            varpeek = calloc(1, sizeof(varpeek_entry));
             strncpy(varpeek->filename_lineno, varpeek_key, sizeof(varpeek->filename_lineno));
             HASH_ADD_STR(varpeek_map, filename_lineno, varpeek);
         }
-        var = calloc(1, sizeof(varpeek_var_t));
+        var = calloc(1, sizeof(varpeek_var));
         snprintf(var->name, sizeof(var->name), "%.*s", (int)(at_sign-varspec), varspec);
         HASH_ADD_STR(varpeek->varmap, name, var);
     }
@@ -708,7 +708,7 @@ static void varpeek_add(char *varspec) {
 static void glopeek_add(char *glospec) {
     char *dot;
     char *gloname;
-    glopeek_entry_t *gentry;
+    glopeek_entry *gentry;
     dot = strchr(glospec, '.');
     if (!dot) {
         log_error("glopeek_add: Malformed glospec: %s\n\n", glospec);
@@ -733,7 +733,7 @@ static void glopeek_add(char *glospec) {
         usage(stderr, 1);
         return;
     }
-    gentry = calloc(1, sizeof(glopeek_entry_t));
+    gentry = calloc(1, sizeof(glopeek_entry));
     snprintf(gentry->key, sizeof(gentry->key), "%s", glospec);
     snprintf(gentry->gloname, sizeof(gentry->gloname), "%s", gloname);
     snprintf(gentry->varname, sizeof(gentry->varname), "%s", dot+1);
@@ -767,7 +767,7 @@ static int copy_proc_mem(pid_t pid, const char *what, void *raddr, void *laddr, 
 }
 
 #ifndef USE_ZEND
-static int get_php_version(trace_target_t *target) {
+static int get_php_version(trace_target *target) {
     struct _zend_module_entry basic_functions_module;
     char version_cmd[1024];
     char phpv[4];

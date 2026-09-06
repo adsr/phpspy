@@ -86,20 +86,20 @@
 typedef struct varpeek_var_s {
     char name[PHPSPY_STR_SIZE];
     UT_hash_handle hh;
-} varpeek_var_t;
+} varpeek_var;
 
 typedef struct varpeek_entry_s {
     char filename_lineno[PHPSPY_STR_SIZE];
-    varpeek_var_t *varmap;
+    varpeek_var *varmap;
     UT_hash_handle hh;
-} varpeek_entry_t;
+} varpeek_entry;
 
 typedef struct glopeek_entry_s {
     char key[PHPSPY_STR_SIZE];
     char gloname[PHPSPY_STR_SIZE]; /* The name of the superglobal array */
     char varname[PHPSPY_STR_SIZE]; /* The name of the global variable within the superglobal array */
     UT_hash_handle hh;
-} glopeek_entry_t;
+} glopeek_entry;
 
 typedef struct trace_loc_s {
     char func[PHPSPY_STR_SIZE];
@@ -109,12 +109,12 @@ typedef struct trace_loc_s {
     size_t class_len;
     size_t file_len;
     int lineno;
-} trace_loc_t;
+} trace_loc;
 
 typedef struct trace_frame_s {
-    trace_loc_t loc;
+    trace_loc loc;
     int depth;
-} trace_frame_t;
+} trace_frame;
 
 typedef struct trace_request_s {
     char uri[PHPSPY_STR_SIZE];
@@ -122,25 +122,25 @@ typedef struct trace_request_s {
     char qstring[PHPSPY_STR_SIZE];
     char cookie[PHPSPY_STR_SIZE];
     double ts;
-} trace_request_t;
+} trace_request;
 
 typedef struct trace_mem_s {
     size_t size;
     size_t peak;
-} trace_mem_t;
+} trace_mem;
 
 typedef struct trace_varpeek_s {
-    varpeek_entry_t *entry;
-    varpeek_var_t *var;
+    varpeek_entry *entry;
+    varpeek_var *var;
     char *zval_str;
     size_t zval_str_len;
-} trace_varpeek_t;
+} trace_varpeek;
 
 typedef struct trace_glopeek_s {
-    glopeek_entry_t *gentry;
+    glopeek_entry *gentry;
     char *zval_str;
     size_t zval_str_len;
-} trace_glopeek_t;
+} trace_glopeek;
 
 typedef struct trace_target_s {
     pid_t pid;
@@ -148,29 +148,29 @@ typedef struct trace_target_s {
     uint64_t sapi_globals_addr;
     uint64_t alloc_globals_addr;
     uint64_t basic_functions_module_addr;
-} trace_target_t;
+} trace_target;
 
 typedef struct trace_context_s {
-    trace_target_t target;
+    trace_target target;
     struct {
-        trace_frame_t frame;
-        trace_request_t request;
-        trace_mem_t mem;
-        trace_varpeek_t varpeek;
-        trace_glopeek_t glopeek;
+        trace_frame frame;
+        trace_request request;
+        trace_mem mem;
+        trace_varpeek varpeek;
+        trace_glopeek glopeek;
     } event;
     void *event_udata;
     int (*event_handler)(struct trace_context_s *context, int event_type);
     const char *event_handler_opts;
     char buf[PHPSPY_STR_SIZE];
     size_t buf_len;
-} trace_context_t;
+} trace_context;
 
 typedef struct addr_memo_s {
     char php_bin_path[PHPSPY_STR_SIZE];
     char php_bin_path_root[PHPSPY_STR_SIZE];
     uint64_t php_base_addr;
-} addr_memo_t;
+} addr_memo;
 
 #ifndef USE_ZEND
 struct __attribute__((__packed__)) _zend_module_entry {
@@ -202,7 +202,7 @@ extern int main_pid(pid_t pid);
 extern int main_top(int argc, char **argv);
 
 extern void usage(FILE *fp, int exit_code);
-extern int get_symbol_addr(addr_memo_t *memo, pid_t pid, const char *symbol, uint64_t *raddr);
+extern int get_symbol_addr(addr_memo *memo, pid_t pid, const char *symbol, uint64_t *raddr);
 extern int event_handler_fout(struct trace_context_s *context, int event_type);
 extern int event_handler_callgrind(struct trace_context_s *context, int event_type);
 extern void write_done_pipe();

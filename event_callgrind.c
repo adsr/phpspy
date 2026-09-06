@@ -10,7 +10,7 @@
 
 typedef struct {
     char loc_str[PHPSPY_STR_SIZE];
-    trace_loc_t loc;
+    trace_loc loc;
     uint64_t inclusive;
     uint64_t count;
     UT_hash_handle hh;
@@ -18,15 +18,15 @@ typedef struct {
 
 typedef struct {
     char loc_str[PHPSPY_STR_SIZE];
-    trace_loc_t loc;
+    trace_loc loc;
     uint64_t exclusive;
     callgrind_callee_t *callees;
     UT_hash_handle hh;
 } callgrind_caller_t;
 
 typedef struct {
-    trace_loc_t self[MAX_STACK_DEPTH];
-    trace_loc_t prev[MAX_STACK_DEPTH];
+    trace_loc self[MAX_STACK_DEPTH];
+    trace_loc prev[MAX_STACK_DEPTH];
     char self_str[MAX_STACK_DEPTH][PHPSPY_STR_SIZE];
     char prev_str[MAX_STACK_DEPTH][PHPSPY_STR_SIZE];
     int self_len;
@@ -36,7 +36,7 @@ typedef struct {
 } callgrind_udata_t;
 
 static int callgrind_open(FILE **fout);
-static void callgrind_sprint_loc(char *str, trace_loc_t *loc);
+static void callgrind_sprint_loc(char *str, trace_loc *loc);
 static void callgrind_ingest_frame(callgrind_udata_t *udata, struct trace_context_s *context);
 static void callgrind_digest_stack(callgrind_udata_t *udata);
 static void callgrind_dump(callgrind_udata_t *udata);
@@ -105,7 +105,7 @@ int event_handler_callgrind(struct trace_context_s *context, int event_type) {
             break;
         case PHPSPY_TRACE_EVENT_STACK_END:
             callgrind_digest_stack(udata);
-            memcpy(udata->prev,     udata->self,     sizeof(trace_loc_t) * udata->self_len);
+            memcpy(udata->prev,     udata->self,     sizeof(trace_loc) * udata->self_len);
             memcpy(udata->prev_str, udata->self_str, PHPSPY_STR_SIZE * udata->self_len);
             udata->prev_len = udata->self_len;
             udata->self_len = 0;
@@ -124,12 +124,12 @@ static void callgrind_ingest_frame(callgrind_udata_t *udata, struct trace_contex
         log_error("callgrind_ingest_frame: Exceeded max stack depth (%d); truncating\n", MAX_STACK_DEPTH);
         return;
     }
-    memcpy(&udata->self[udata->self_len], &context->event.frame.loc, sizeof(trace_loc_t));
+    memcpy(&udata->self[udata->self_len], &context->event.frame.loc, sizeof(trace_loc));
     callgrind_sprint_loc(udata->self_str[udata->self_len], &context->event.frame.loc);
     udata->self_len += 1;
 }
 
-static void callgrind_sprint_loc(char *str, trace_loc_t *loc) {
+static void callgrind_sprint_loc(char *str, trace_loc *loc) {
     int len;
     len = snprintf(str, PHPSPY_STR_SIZE,
         "%.*s%s%.*s %.*s:%d",
@@ -158,7 +158,7 @@ static void callgrind_digest_stack(callgrind_udata_t *udata) {
         if (!caller) {
             caller = calloc(1, sizeof(callgrind_caller_t));
             strcpy(caller->loc_str, udata->self_str[i]);
-            memcpy(&caller->loc, &udata->self[i], sizeof(trace_loc_t));
+            memcpy(&caller->loc, &udata->self[i], sizeof(trace_loc));
             HASH_ADD_STR(udata->callers, loc_str, caller);
         }
 
@@ -173,7 +173,7 @@ static void callgrind_digest_stack(callgrind_udata_t *udata) {
             if (!callee) {
                 callee = calloc(1, sizeof(callgrind_callee_t));
                 strcpy(callee->loc_str, udata->self_str[i]);
-                memcpy(&callee->loc, &udata->self[i], sizeof(trace_loc_t));
+                memcpy(&callee->loc, &udata->self[i], sizeof(trace_loc));
                 HASH_ADD_STR(prev_caller->callees, loc_str, callee);
             }
 

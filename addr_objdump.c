@@ -51,7 +51,7 @@ shell_escape_end:
     return rv;
 }
 
-int get_symbol_addr(addr_memo_t *memo, pid_t pid, const char *symbol, uint64_t *raddr) {
+int get_symbol_addr(addr_memo *memo, pid_t pid, const char *symbol, uint64_t *raddr) {
     char *php_bin_path, *php_bin_path_root;
     uint64_t *php_base_addr;
     uint64_t addr_offset;

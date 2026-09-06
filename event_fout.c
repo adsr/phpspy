@@ -17,8 +17,8 @@ static pthread_mutex_t event_handler_fout_mutex = PTHREAD_MUTEX_INITIALIZER;
 int event_handler_fout(struct trace_context_s *context, int event_type) {
     int rv, fd;
     size_t len;
-    trace_frame_t *frame;
-    trace_request_t *request;
+    trace_frame *frame;
+    trace_request *request;
     event_handler_fout_udata_t *udata;
     struct timeval tv;
 

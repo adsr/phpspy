@@ -1,24 +1,24 @@
 #define try_copy_proc_mem(__what, __raddr, __laddr, __size) \
     try(rv, copy_proc_mem(context->target.pid, (__what), (__raddr), (__laddr), (__size)))
 
-static int trace_stack(trace_context_t *context, zend_execute_data *remote_execute_data, int *depth);
-static int trace_request_info(trace_context_t *context);
-static int trace_memory_info(trace_context_t *context);
-static int trace_globals(trace_context_t *context);
-static int trace_locals(trace_context_t *context, zend_op *zop, zend_execute_data *remote_execute_data, zend_op_array *op_array, char *file, int file_len);
-static int trace_pdo(trace_context_t *context, zend_execute_data *remote_execute_data, zend_execute_data *local_execute_data, trace_frame_t *frame);
+static int trace_stack(trace_context *context, zend_execute_data *remote_execute_data, int *depth);
+static int trace_request_info(trace_context *context);
+static int trace_memory_info(trace_context *context);
+static int trace_globals(trace_context *context);
+static int trace_locals(trace_context *context, zend_op *zop, zend_execute_data *remote_execute_data, zend_op_array *op_array, char *file, int file_len);
+static int trace_pdo(trace_context *context, zend_execute_data *remote_execute_data, zend_execute_data *local_execute_data, trace_frame *frame);
 
-static int copy_executor_globals(trace_context_t *context, zend_executor_globals *executor_globals);
-static int copy_zarray_bucket(trace_context_t *context, zend_array *rzarray, const char *key, Bucket *lbucket);
+static int copy_executor_globals(trace_context *context, zend_executor_globals *executor_globals);
+static int copy_zarray_bucket(trace_context *context, zend_array *rzarray, const char *key, Bucket *lbucket);
 
-static int sprint_zstring(trace_context_t *context, const char *what, zend_string *lzstring, char *buf, size_t buf_size, size_t *buf_len);
-static int sprint_zval(trace_context_t *context, zval *lzval, char *buf, size_t buf_size, size_t *buf_len);
-static int sprint_zarray(trace_context_t *context, zend_array *rzarray, char *buf, size_t buf_size, size_t *buf_len);
-static int sprint_zarray_val(trace_context_t *context, zend_array *rzarray, const char *key, char *buf, size_t buf_size, size_t *buf_len);
-static int sprint_zarray_bucket(trace_context_t *context, Bucket *lbucket, char *buf, size_t buf_size, size_t *buf_len);
-static int sprint_zarray_packed(trace_context_t *context, int idx, zval *lzval, char *buf, size_t buf_size, size_t *buf_len);
-static int sprint_pdo_binds(trace_context_t *context, zend_array *rht, char *buf, size_t buf_size, size_t *buf_len);
-static int sprint_pdo_bind(trace_context_t *context, zval *lzval, char *buf, size_t buf_size, size_t *buf_len);
+static int sprint_zstring(trace_context *context, const char *what, zend_string *lzstring, char *buf, size_t buf_size, size_t *buf_len);
+static int sprint_zval(trace_context *context, zval *lzval, char *buf, size_t buf_size, size_t *buf_len);
+static int sprint_zarray(trace_context *context, zend_array *rzarray, char *buf, size_t buf_size, size_t *buf_len);
+static int sprint_zarray_val(trace_context *context, zend_array *rzarray, const char *key, char *buf, size_t buf_size, size_t *buf_len);
+static int sprint_zarray_bucket(trace_context *context, Bucket *lbucket, char *buf, size_t buf_size, size_t *buf_len);
+static int sprint_zarray_packed(trace_context *context, int idx, zval *lzval, char *buf, size_t buf_size, size_t *buf_len);
+static int sprint_pdo_binds(trace_context *context, zend_array *rht, char *buf, size_t buf_size, size_t *buf_len);
+static int sprint_pdo_bind(trace_context *context, zval *lzval, char *buf, size_t buf_size, size_t *buf_len);
 
 /*********************
     Trace functions
@@ -31,7 +31,7 @@ static int sprint_pdo_bind(trace_context_t *context, zval *lzval, char *buf, siz
  *
  * @return int Status code
  */
-static int do_trace(trace_context_t *context) {
+static int do_trace(trace_context *context) {
     int rv, depth;
     zend_executor_globals executor_globals;
 
@@ -88,15 +88,15 @@ do_trace_end:
  *
  * @return int Status code
  */
-static int trace_stack(trace_context_t *context, zend_execute_data *remote_execute_data, int *depth) {
+static int trace_stack(trace_context *context, zend_execute_data *remote_execute_data, int *depth) {
     int rv;
     zend_execute_data execute_data;
     zend_function zfunc;
     zend_string zstring;
     zend_class_entry zce;
     zend_op zop;
-    trace_target_t *target;
-    trace_frame_t *frame;
+    trace_target *target;
+    trace_frame *frame;
 
     target = &context->target;
     frame = &context->event.frame;
@@ -156,11 +156,11 @@ static int trace_stack(trace_context_t *context, zend_execute_data *remote_execu
  *
  * @return int Status code
  */
-static int trace_request_info(trace_context_t *context) {
+static int trace_request_info(trace_context *context) {
     int rv;
     sapi_globals_struct sapi_globals;
-    trace_target_t *target;
-    trace_request_t *request;
+    trace_target *target;
+    trace_request *request;
 
     memset(&sapi_globals, 0, sizeof(sapi_globals));
     request = &context->event.request;
@@ -195,7 +195,7 @@ static int trace_request_info(trace_context_t *context) {
  *
  * @return int Status code
  */
-static int trace_memory_info(trace_context_t *context) {
+static int trace_memory_info(trace_context *context) {
     #ifdef USE_ZEND
     (void)context;
     return PHPSPY_ERR; /* zend_alloc_globals is not public */
@@ -203,7 +203,7 @@ static int trace_memory_info(trace_context_t *context) {
     int rv;
     zend_mm_heap mm_heap;
     zend_alloc_globals alloc_globals;
-    trace_target_t *target;
+    trace_target *target;
 
     memset(&mm_heap, 0, sizeof(mm_heap));
     alloc_globals.mm_heap = NULL;
@@ -228,9 +228,9 @@ static int trace_memory_info(trace_context_t *context) {
  *
  * @return int Status code
  */
-static int trace_globals(trace_context_t *context) {
+static int trace_globals(trace_context *context) {
     int rv;
-    glopeek_entry_t *gentry, *gentry_tmp;
+    glopeek_entry *gentry, *gentry_tmp;
     zend_array *garray;
     zend_array *symtable;
     Bucket lbucket;
@@ -275,13 +275,13 @@ static int trace_globals(trace_context_t *context) {
  *
  * @return int Status code
  */
-static int trace_locals(trace_context_t *context, zend_op *zop, zend_execute_data *remote_execute_data, zend_op_array *op_array, char *file, int file_len) {
+static int trace_locals(trace_context *context, zend_op *zop, zend_execute_data *remote_execute_data, zend_op_array *op_array, char *file, int file_len) {
     int rv, i, num_vars_found, num_vars_peeking;
     char tmp[PHPSPY_STR_SIZE];
     size_t tmp_len;
     zend_string *zstrp;
-    varpeek_entry_t *entry;
-    varpeek_var_t *var;
+    varpeek_entry *entry;
+    varpeek_var *var;
     char varpeek_key[PHPSPY_STR_SIZE];
     zval zv;
 
@@ -316,11 +316,11 @@ static int trace_locals(trace_context_t *context, zend_op *zop, zend_execute_dat
  * If the current frame is PDOStatement::execute, PDO::query, or PDO::exec,
  * emit varpeek events named #pdo_sql (and #pdo_args, when binds are present).
  */
-static int trace_pdo(trace_context_t *context, zend_execute_data *remote_execute_data, zend_execute_data *local_execute_data, trace_frame_t *frame) {
+static int trace_pdo(trace_context *context, zend_execute_data *remote_execute_data, zend_execute_data *local_execute_data, trace_frame *frame) {
     int rv, is_stmt_execute, is_pdo_query_or_exec;
     uint32_t num_args;
-    varpeek_entry_t entry;
-    varpeek_var_t var_sql, var_args;
+    varpeek_entry entry;
+    varpeek_var var_sql, var_args;
     zend_object lobj;
     pdo_stmt_t lstmt;
     zval first_arg;
@@ -427,7 +427,7 @@ static int trace_pdo(trace_context_t *context, zend_execute_data *remote_execute
  *
  * @return int Status code
  */
-static int copy_executor_globals(trace_context_t *context, zend_executor_globals *executor_globals) {
+static int copy_executor_globals(trace_context *context, zend_executor_globals *executor_globals) {
     int rv;
     executor_globals->current_execute_data = NULL;
     try_copy_proc_mem("executor_globals", (void*)context->target.executor_globals_addr, executor_globals, sizeof(*executor_globals));
@@ -444,7 +444,7 @@ static int copy_executor_globals(trace_context_t *context, zend_executor_globals
  *
  * @return int Status code
  */
-static int copy_zarray_bucket(trace_context_t *context, zend_array *rzarray, const char *key, Bucket *lbucket) {
+static int copy_zarray_bucket(trace_context *context, zend_array *rzarray, const char *key, Bucket *lbucket) {
     int rv;
     zend_array lzarray;
     uint32_t hash_table_size;
@@ -504,7 +504,7 @@ static int copy_zarray_bucket(trace_context_t *context, zend_array *rzarray, con
  *
  * @return int Status code
  */
-static int sprint_zstring(trace_context_t *context, const char *what, zend_string *rzstring, char *buf, size_t buf_size, size_t *buf_len) {
+static int sprint_zstring(trace_context *context, const char *what, zend_string *rzstring, char *buf, size_t buf_size, size_t *buf_len) {
     int rv;
     zend_string lzstring;
 
@@ -529,7 +529,7 @@ static int sprint_zstring(trace_context_t *context, const char *what, zend_strin
  *
  * @return int Status code
  */
-static int sprint_zval(trace_context_t *context, zval *lzval, char *buf, size_t buf_size, size_t *buf_len) {
+static int sprint_zval(trace_context *context, zval *lzval, char *buf, size_t buf_size, size_t *buf_len) {
     int rv;
     int type;
     type = (int)lzval->u1.v.type;
@@ -567,7 +567,7 @@ static int sprint_zval(trace_context_t *context, zval *lzval, char *buf, size_t 
  *
  * @return int Status code
  */
-static int sprint_zarray(trace_context_t *context, zend_array *rzarray, char *buf, size_t buf_size, size_t *buf_len) {
+static int sprint_zarray(trace_context *context, zend_array *rzarray, char *buf, size_t buf_size, size_t *buf_len) {
     int rv, i, array_len, is_packed;
     size_t tmp_len;
     zend_array lzarray;
@@ -604,7 +604,7 @@ static int sprint_zarray(trace_context_t *context, zend_array *rzarray, char *bu
     return PHPSPY_OK;
 }
 
-static int sprint_zarray_packed(trace_context_t *context, int idx, zval *lzval, char *buf, size_t buf_size, size_t *buf_len) {
+static int sprint_zarray_packed(trace_context *context, int idx, zval *lzval, char *buf, size_t buf_size, size_t *buf_len) {
     int rv, n;
     size_t tmp_len;
     char *obuf = buf;
@@ -636,7 +636,7 @@ static int sprint_zarray_packed(trace_context_t *context, int idx, zval *lzval, 
  *
  * @return int Status code
  */
-static int sprint_zarray_val(trace_context_t *context, zend_array *rzarray, const char *key, char *buf, size_t buf_size, size_t *buf_len) {
+static int sprint_zarray_val(trace_context *context, zend_array *rzarray, const char *key, char *buf, size_t buf_size, size_t *buf_len) {
     int rv;
     Bucket bucket;
 
@@ -657,7 +657,7 @@ static int sprint_zarray_val(trace_context_t *context, zend_array *rzarray, cons
  *
  * @return int Status code
  */
-static int sprint_zarray_bucket(trace_context_t *context, Bucket *lbucket, char *buf, size_t buf_size, size_t *buf_len) {
+static int sprint_zarray_bucket(trace_context *context, Bucket *lbucket, char *buf, size_t buf_size, size_t *buf_len) {
     int rv;
     char tmp_key[PHPSPY_STR_SIZE];
     size_t tmp_len;
@@ -692,7 +692,7 @@ static int sprint_zarray_bucket(trace_context_t *context, Bucket *lbucket, char 
  * pdo_bound_param_data, not at another zval (because PDO uses
  * zend_hash_*_update_mem to register binds).
  */
-static int sprint_pdo_binds(trace_context_t *context, zend_array *rht, char *buf, size_t buf_size, size_t *buf_len) {
+static int sprint_pdo_binds(trace_context *context, zend_array *rht, char *buf, size_t buf_size, size_t *buf_len) {
     int rv, i, used, is_packed;
     size_t tmp_len;
     zend_array lht;
@@ -730,7 +730,7 @@ static int sprint_pdo_binds(trace_context_t *context, zend_array *rht, char *buf
     return PHPSPY_OK;
 }
 
-static int sprint_pdo_bind(trace_context_t *context, zval *lzval, char *buf, size_t buf_size, size_t *buf_len) {
+static int sprint_pdo_bind(trace_context *context, zval *lzval, char *buf, size_t buf_size, size_t *buf_len) {
     int rv, n;
     size_t tmp_len, name_len;
     pdo_bound_param_data lbp;
