@@ -32,6 +32,9 @@ all: phpspy
 phpspy: $(wildcard *.c *.h)
 	$(CC) $(phpspy_cflags) $(phpspy_includes) $(phpspy_defines) $(phpspy_sources) -o phpspy $(phpspy_ldflags) $(phpspy_libs)
 
+shellcheck:
+	find . -name '*.sh' -exec shellcheck {} +
+
 test: phpspy $(phpspy_tests)
 	@total=0; \
 	pass=0; \

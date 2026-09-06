@@ -1,5 +1,5 @@
 #!/bin/bash
-this_dir=$(cd $(dirname "${BASH_SOURCE[0]}") >/dev/null && pwd)
+this_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && pwd)
 phpsrc_dir=$1
 
 if [ -z "$phpsrc_dir" ]; then
@@ -7,7 +7,7 @@ if [ -z "$phpsrc_dir" ]; then
     exit 1
 fi
 
-pushd $phpsrc_dir
+pushd "$phpsrc_dir" || exit 1
 git fetch --tags
 for phpv in php-7.0.33 \
             php-7.1.33 \
@@ -26,7 +26,7 @@ do
         && git clean -fdx \
         && ./buildconf --force \
         && ./configure \
-        && make -j$(grep -c '^proc' /proc/cpuinfo) \
+        && make -j "$(grep -c '^proc' /proc/cpuinfo)" \
         && gdb -batch -ex "printf \"$phpv\n\n\"" -x "$this_dir/struct_dump.gdb" --args ./sapi/cli/php >"$this_dir/struct_dump.$phpv.out"
 done
-popd
+popd || exit 1

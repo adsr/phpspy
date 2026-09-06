@@ -22,7 +22,7 @@ jobs:
 
       - name: deps
         run: |
-          sudo apt-get install -y php8.3-cli
+          sudo apt-get install -y php8.3-cli php8.3-sqlite3 shellcheck
           echo "php_cmd:=/usr/bin/php8.3" | sudo tee config.mk
 
       - name: build
@@ -32,4 +32,4 @@ jobs:
         run: sudo -n setcap cap_sys_ptrace=eip ./phpspy
 
       - name: test
-        run: make test
+        run: make test shellcheck
