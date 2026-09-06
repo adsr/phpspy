@@ -8,45 +8,45 @@
 pid_t opt_pid = -1;
 char *opt_pgrep_args = NULL;
 int opt_num_workers = 16;
-int opt_top_mode = 0;
-long opt_sleep_ns = 10101010; /* ~99Hz */
-uint64_t opt_executor_globals_addr = 0;
-uint64_t opt_sapi_globals_addr = 0;
-int opt_capture_req = 0;
-int opt_capture_req_qstring = 0;
-int opt_capture_req_cookie = 0;
-int opt_capture_req_uri = 0;
-int opt_capture_req_path = 0;
-int opt_capture_mem = 0;
-int opt_max_stack_depth = -1;
 char opt_frame_delim = '\n';
 char opt_trace_delim = '\n';
-uint64_t opt_trace_limit = 0;
 long opt_time_limit_ms = 0;
 char *opt_path_output = "-";
-char *opt_path_child_out = "phpspy.%d.out";
-char *opt_path_child_err = "phpspy.%d.err";
-char *opt_phpv = "auto";
-int opt_pause = 0;
 regex_t *opt_filter_re = NULL;
 int opt_filter_negate = 0;
 int opt_verbose_fields_pid = 0;
 int opt_verbose_fields_ts = 0;
-int (*opt_event_handler)(struct trace_context_s *context, int event_type) = event_handler_fout;
-char *opt_event_handler_opts = NULL;
-int opt_continue_on_error = 0;
 int opt_fout_buffer_size = 4096;
 char *opt_libname_awk_patt = "libphp[78]?";
 int opt_quiet = 0;
 int opt_peek_pdo = 0;
-
 int done = 0;
-int (*do_trace_ptr)(trace_context *context) = NULL;
-varpeek_entry *varpeek_map = NULL;
-glopeek_entry *glopeek_map = NULL;
-regex_t filter_re;
-int in_pgrep_mode = 0;
-uint64_t trace_count = 0;
+
+static int opt_top_mode = 0;
+static long opt_sleep_ns = 10101010; /* ~99Hz */
+static uint64_t opt_executor_globals_addr = 0;
+static uint64_t opt_sapi_globals_addr = 0;
+static int opt_capture_req = 0;
+static int opt_capture_req_qstring = 0;
+static int opt_capture_req_cookie = 0;
+static int opt_capture_req_uri = 0;
+static int opt_capture_req_path = 0;
+static int opt_capture_mem = 0;
+static int opt_max_stack_depth = -1;
+static uint64_t opt_trace_limit = 0;
+static char *opt_path_child_out = "phpspy.%d.out";
+static char *opt_path_child_err = "phpspy.%d.err";
+static char *opt_phpv = "auto";
+static int opt_pause = 0;
+static int (*opt_event_handler)(struct trace_context_s *context, int event_type) = event_handler_fout;
+static char *opt_event_handler_opts = NULL;
+static int opt_continue_on_error = 0;
+static int (*do_trace_ptr)(trace_context *context) = NULL;
+static varpeek_entry *varpeek_map = NULL;
+static glopeek_entry *glopeek_map = NULL;
+static regex_t filter_re;
+static int in_pgrep_mode = 0;
+static uint64_t trace_count = 0;
 
 static void parse_opts(int argc, char **argv);
 static int main_fork(int argc, char **argv);
@@ -62,6 +62,7 @@ static void calc_sleep_time(struct timespec *end, struct timespec *start, struct
 static void varpeek_add(char *varspec);
 static void glopeek_add(char *glospec);
 static int copy_proc_mem(pid_t pid, const char *what, void *raddr, void *laddr, size_t size);
+static uint64_t phpspy_zend_inline_hash_func(const char *str, size_t len);
 
 #ifdef USE_ZEND
 static int do_trace(trace_context *context);
@@ -840,7 +841,7 @@ static int get_php_version(trace_target *target) {
 }
 #endif
 
-uint64_t phpspy_zend_inline_hash_func(const char *str, size_t len) {
+static uint64_t phpspy_zend_inline_hash_func(const char *str, size_t len) {
     /* Adapted from zend_string.h */
     uint64_t hash;
     hash = 5381UL;
