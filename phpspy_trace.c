@@ -1,6 +1,8 @@
 #define try_copy_proc_mem(__what, __raddr, __laddr, __size) \
     try(rv, copy_proc_mem(context->target.pid, (__what), (__raddr), (__laddr), (__size)))
 
+static int stack_collect(trace_context *context, zend_execute_data *remote_execute_data);
+static int stack_emit_frame(trace_context *context, zend_execute_data *remote_execute_data, int depth, zend_execute_data **next_out);
 static int trace_stack(trace_context *context, zend_execute_data *remote_execute_data, int *depth);
 static int trace_request_info(trace_context *context);
 static int trace_memory_info(trace_context *context);
@@ -20,17 +22,8 @@ static int sprint_zarray_packed(trace_context *context, int idx, zval *lzval, ch
 static int sprint_pdo_binds(trace_context *context, zend_array *rht, char *buf, size_t buf_size, size_t *buf_len);
 static int sprint_pdo_bind(trace_context *context, zval *lzval, char *buf, size_t buf_size, size_t *buf_len);
 
-/*********************
-    Trace functions
- *********************/
+static int should_stop_trace(int rv);
 
-/**
- * Sample a single execution trace.
- *
- * @param context Trace context
- *
- * @return int Status code
- */
 static int do_trace(trace_context *context) {
     int rv, depth;
     zend_executor_globals executor_globals;
@@ -39,37 +32,24 @@ static int do_trace(trace_context *context) {
     try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_STACK_BEGIN));
 
     rv = PHPSPY_OK;
-    do {
-        #define maybe_break_on_err() do {                      \
-            if (   (rv & PHPSPY_ERR_PID_DEAD) != 0             \
-                || (rv & PHPSPY_ERR_BUF_FULL) != 0             \
-                || (rv != PHPSPY_OK && !opt_continue_on_error) \
-            ) {                                                \
-                goto do_trace_end;                             \
-            }                                                  \
-        } while(0)
+    rv |= trace_stack(context, executor_globals.current_execute_data, &depth);
+    if (should_stop_trace(rv)) goto do_trace_end;
+    if (depth < 1) goto do_trace_end;
 
-        rv |= trace_stack(context, executor_globals.current_execute_data, &depth);
-        maybe_break_on_err();
-        if (depth < 1) break;
+    if (opt_capture_req) {
+        rv |= trace_request_info(context);
+        if (should_stop_trace(rv)) goto do_trace_end;
+    }
 
-        if (opt_capture_req) {
-            rv |= trace_request_info(context);
-            maybe_break_on_err();
-        }
+    if (opt_capture_mem) {
+        rv |= trace_memory_info(context);
+        if (should_stop_trace(rv)) goto do_trace_end;
+    }
 
-        if (opt_capture_mem) {
-            rv |= trace_memory_info(context);
-            maybe_break_on_err();
-        }
-
-        if (HASH_CNT(hh, glopeek_map) > 0) {
-            rv |= trace_globals(context);
-            maybe_break_on_err();
-        }
-
-        #undef maybe_break_on_err
-    } while (0);
+    if (HASH_CNT(hh, glopeek_map) > 0) {
+        rv |= trace_globals(context);
+        if (should_stop_trace(rv)) goto do_trace_end;
+    }
 
 do_trace_end:
     if (rv == PHPSPY_OK || opt_continue_on_error) {
@@ -88,7 +68,27 @@ do_trace_end:
  *
  * @return int Status code
  */
-static int trace_stack(trace_context *context, zend_execute_data *remote_execute_data, int *depth) {
+static int stack_collect(trace_context *context, zend_execute_data *remote) {
+    int rv;
+    zend_execute_data *next;
+    utarray_clear(context->stack_ptrs);
+    while (remote) {
+        if (utarray_len(context->stack_ptrs) >= PHPSPY_MAX_STACK_WALK) {
+            log_error("stack_collect: stack walk limit (%d) reached\n", PHPSPY_MAX_STACK_WALK);
+            break;
+        }
+        utarray_push_back(context->stack_ptrs, &remote);
+        try_copy_proc_mem(
+            "prev_execute_data",
+            ((char *)remote) + offsetof(zend_execute_data, prev_execute_data),
+            &next, sizeof(next)
+        );
+        remote = next;
+    }
+    return PHPSPY_OK;
+}
+
+static int stack_emit_frame(trace_context *context, zend_execute_data *remote, int depth, zend_execute_data **next_out) {
     int rv;
     zend_execute_data execute_data;
     zend_function zfunc;
@@ -100,50 +100,92 @@ static int trace_stack(trace_context *context, zend_execute_data *remote_execute
 
     target = &context->target;
     frame = &context->event.frame;
+
+    memset(&execute_data, 0, sizeof(execute_data));
+    memset(&zfunc, 0, sizeof(zfunc));
+    memset(&zstring, 0, sizeof(zstring));
+    memset(&zce, 0, sizeof(zce));
+    memset(&zop, 0, sizeof(zop));
+
+    try_copy_proc_mem("execute_data", remote, &execute_data, sizeof(execute_data));
+    try_copy_proc_mem("zfunc", execute_data.func, &zfunc, sizeof(zfunc));
+    if (zfunc.common.function_name) {
+        try(rv, sprint_zstring(context, "function_name", zfunc.common.function_name, frame->loc.func, sizeof(frame->loc.func), &frame->loc.func_len));
+    } else {
+        frame->loc.func_len = snprintf(frame->loc.func, sizeof(frame->loc.func), "<main>");
+    }
+    if (zfunc.common.scope) {
+        try_copy_proc_mem("zce", zfunc.common.scope, &zce, sizeof(zce));
+        try(rv, sprint_zstring(context, "class_name", zce.name, frame->loc.class, sizeof(frame->loc.class), &frame->loc.class_len));
+    } else {
+        frame->loc.class[0] = '\0';
+        frame->loc.class_len = 0;
+    }
+    if (zfunc.type == 2) {
+        try(rv, sprint_zstring(context, "filename", zfunc.op_array.filename, frame->loc.file, sizeof(frame->loc.file), &frame->loc.file_len));
+        frame->loc.lineno = zfunc.op_array.line_start;
+        if (HASH_CNT(hh, varpeek_map) > 0) {
+            if (copy_proc_mem(target->pid, "opline", (void*)execute_data.opline, &zop, sizeof(zop)) == PHPSPY_OK) {
+                trace_locals(context, &zop, remote, &zfunc.op_array, frame->loc.file, frame->loc.file_len);
+            }
+        }
+    } else {
+        frame->loc.file_len = snprintf(frame->loc.file, sizeof(frame->loc.file), "<internal>");
+        frame->loc.lineno = -1;
+    }
+    frame->depth = depth;
+    try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_FRAME));
+    if (opt_peek_pdo) {
+        trace_pdo(context, remote, &execute_data, frame);
+    }
+    if (next_out) *next_out = execute_data.prev_execute_data;
+    return PHPSPY_OK;
+}
+
+static int trace_stack(trace_context *context, zend_execute_data *remote_execute_data, int *depth) {
+    int rv, i, total_depth, keep_inner, keep_outer_from, num_elided;
+    zend_execute_data **pp;
+    trace_frame *frame;
+
     *depth = 0;
 
-    while (remote_execute_data && *depth != opt_max_stack_depth) { /* TODO make options struct */
-        memset(&execute_data, 0, sizeof(execute_data));
-        memset(&zfunc, 0, sizeof(zfunc));
-        memset(&zstring, 0, sizeof(zstring));
-        memset(&zce, 0, sizeof(zce));
-        memset(&zop, 0, sizeof(zop));
+    if (opt_max_stack_depth_from_root >= 0) {
+        try(rv, stack_collect(context, remote_execute_data));
+        total_depth = utarray_len(context->stack_ptrs);
 
-        /* TODO reduce number of copy calls */
-        try_copy_proc_mem("execute_data", remote_execute_data, &execute_data, sizeof(execute_data));
-        try_copy_proc_mem("zfunc", execute_data.func, &zfunc, sizeof(zfunc));
-        if (zfunc.common.function_name) {
-            try(rv, sprint_zstring(context, "function_name", zfunc.common.function_name, frame->loc.func, sizeof(frame->loc.func), &frame->loc.func_len));
-        } else {
-            frame->loc.func_len = snprintf(frame->loc.func, sizeof(frame->loc.func), "<main>");
+        keep_inner = opt_max_stack_depth_from_leaf >= 0 ? opt_max_stack_depth_from_leaf : 0;
+        keep_outer_from = keep_inner;
+        num_elided = 0;
+        if (keep_inner + opt_max_stack_depth_from_root < total_depth) {
+            keep_outer_from = total_depth - opt_max_stack_depth_from_root;
+            num_elided = keep_outer_from - keep_inner;
         }
-        if (zfunc.common.scope) {
-            try_copy_proc_mem("zce", zfunc.common.scope, &zce, sizeof(zce));
-            try(rv, sprint_zstring(context, "class_name", zce.name, frame->loc.class, sizeof(frame->loc.class), &frame->loc.class_len));
-        } else {
-            frame->loc.class[0] = '\0';
-            frame->loc.class_len = 0;
-        }
-        if (zfunc.type == 2) {
-            try(rv, sprint_zstring(context, "filename", zfunc.op_array.filename, frame->loc.file, sizeof(frame->loc.file), &frame->loc.file_len));
-            frame->loc.lineno = zfunc.op_array.line_start;
-            /* TODO add comments */
-            if (HASH_CNT(hh, varpeek_map) > 0) {
-                if (copy_proc_mem(target->pid, "opline", (void*)execute_data.opline, &zop, sizeof(zop)) == PHPSPY_OK) {
-                    trace_locals(context, &zop, remote_execute_data, &zfunc.op_array, frame->loc.file, frame->loc.file_len);
-                }
+
+        frame = &context->event.frame;
+        for (i = 0; i < total_depth; i++) {
+            if (i == keep_inner && num_elided > 0) {
+                frame->loc.func_len = snprintf(frame->loc.func, sizeof(frame->loc.func), "<elided:%d>", num_elided);
+                frame->loc.class[0] = '\0';
+                frame->loc.class_len = 0;
+                frame->loc.file_len = snprintf(frame->loc.file, sizeof(frame->loc.file), "<elided>");
+                frame->loc.lineno = -1;
+                frame->depth = i;
+                try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_FRAME));
             }
-        } else {
-            frame->loc.file_len = snprintf(frame->loc.file, sizeof(frame->loc.file), "<internal>");
-            frame->loc.lineno = -1;
+            if (i >= keep_inner && i < keep_outer_from) continue;
+            pp = (zend_execute_data **)utarray_eltptr(context->stack_ptrs, (unsigned)i);
+            try(rv, stack_emit_frame(context, *pp, i, NULL));
         }
-        frame->depth = *depth;
-        try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_FRAME));
-        if (opt_peek_pdo) {
-            trace_pdo(context, remote_execute_data, &execute_data, frame);
+        *depth = total_depth;
+    } else {
+        while (remote_execute_data && *depth != opt_max_stack_depth_from_leaf) {
+            if (*depth >= PHPSPY_MAX_STACK_WALK) {
+                log_error("trace_stack: stack walk limit (%d) reached\n", PHPSPY_MAX_STACK_WALK);
+                break;
+            }
+            try(rv, stack_emit_frame(context, remote_execute_data, *depth, &remote_execute_data));
+            *depth += 1;
         }
-        remote_execute_data = execute_data.prev_execute_data;
-        *depth += 1;
     }
 
     return PHPSPY_OK;
@@ -773,3 +815,12 @@ static int sprint_pdo_bind(trace_context *context, zval *lzval, char *buf, size_
     *buf_len = (size_t)(buf - obuf);
     return PHPSPY_OK;
 }
+
+#ifndef PHPSPY_TRACE_ONCE
+#define PHPSPY_TRACE_ONCE
+static int should_stop_trace(int rv) {
+    return (rv & PHPSPY_ERR_PID_DEAD) != 0
+        || (rv & PHPSPY_ERR_BUF_FULL) != 0
+        || (rv != PHPSPY_OK && !opt_continue_on_error);
+}
+#endif

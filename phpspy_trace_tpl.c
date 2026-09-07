@@ -20,6 +20,8 @@
 #define pdo_bound_param_data  concat2(pdo_bound_param_data_,  phpv)
 
 #define do_trace              concat2(do_trace_,              phpv)
+#define stack_collect         concat2(stack_collect_,         phpv)
+#define stack_emit_frame      concat2(stack_emit_frame_,      phpv)
 #define trace_stack           concat2(trace_stack_,           phpv)
 #define trace_request_info    concat2(trace_request_info_,    phpv)
 #define trace_memory_info     concat2(trace_memory_info_,     phpv)
@@ -61,6 +63,8 @@
 #undef pdo_bound_param_data
 
 #undef do_trace
+#undef stack_collect
+#undef stack_emit_frame
 #undef trace_stack
 #undef trace_request_info
 #undef trace_memory_info

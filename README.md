@@ -79,8 +79,12 @@ All with no changes to your application and minimal overhead.
       -i, --time-limit-ms=<ms>           Stop tracing after `ms` milliseconds
                                            (second granularity in pgrep mode)
                                            (default: 0; 0=unlimited)
-      -n, --max-depth=<max>              Set max stack trace depth
-                                           (default: -1; -1=unlimited)
+      -n, --max-depth=<max>              Keep <max> frames from the
+                                           leaf stack frame
+                                           (default: -1; -1=off)
+      -N, --max-depth-outer=<max>        Keep <max> frames from the
+                                           root stack frame
+                                           (default: -1; -1=off)
       -r, --request-info=<opts>          Set request info parts to capture
                                            (q=query c=cookie u=uri p=path
                                            capital=negation)
@@ -94,9 +98,9 @@ All with no changes to your application and minimal overhead.
                                            (default: phpspy.%d.out)
       -E, --child-stderr=<path>          Write child stderr to `path`
                                            (default: phpspy.%d.err)
-      -x, --addr-executor-globals=<hex>  Set address of executor_globals in hex
+          --addr-executor-globals=<hex>  Set address of executor_globals in hex
                                            (default: 0; 0=find dynamically)
-      -a, --addr-sapi-globals=<hex>      Set address of sapi_globals in hex
+          --addr-sapi-globals=<hex>      Set address of sapi_globals in hex
                                            (default: 0; 0=find dynamically)
       -1, --single-line                  Output in single-line mode
       -b, --buffer-size=<size>           Set output buffer size to `size`.
@@ -115,7 +119,7 @@ All with no changes to your application and minimal overhead.
       -c, --continue-on-error            Attempt to continue tracing after
                                            encountering an error
       -q, --quiet                        Suppress errors and warnings on stderr
-      -w, --libname-awk-patt=<patt>      Awk pattern to match name of PHP lib
+          --libname-awk-patt=<patt>      Awk pattern to match name of PHP lib
                                            (default: libphp[78]?)
       -#, --comment=<any>                Ignored; intended for self-documenting
                                            commands
@@ -123,9 +127,9 @@ All with no changes to your application and minimal overhead.
       -v, --version                      Print phpspy version and exit
 
     Experimental options:
-      -j, --event-handler=<handler>      Set event handler (fout, callgrind)
+          --event-handler=<handler>      Set event handler (fout, callgrind)
                                            (default: fout)
-      -J, --event-handler-opts=<opts>    Set event handler options
+          --event-handler-opts=<opts>    Set event handler options
                                            (fout: m=use mutex to prevent
                                            interlaced writes on stdout in `-P`
                                            mode)
@@ -136,6 +140,8 @@ All with no changes to your application and minimal overhead.
                                            <varname>@<path>:<lineno>
                                            <varname>@<path>:<start>-<end>
                                            e.g., xyz@/path/to.php:10-20
+      -D, --peek-pdo                     Peek at the SQL and arguments of PDO
+                                           queries. Emits varpeek events.
       -g, --peek-global=<glospec>        Peek at the contents of a global var
                                            located at `glospec`, which has
                                            the format: <global>.<key>
