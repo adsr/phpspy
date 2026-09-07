@@ -36,6 +36,7 @@
 #endif
 
 #include <uthash.h>
+#include <utarray.h>
 
 #define try(__rv, __call)       do { if (((__rv) = (__call)) != 0) return (__rv); } while(0)
 #define try_break(__rv, __call) do { if (((__rv) = (__call)) != 0) break;         } while(0)

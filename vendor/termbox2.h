@@ -673,6 +673,10 @@ int tb_get_fds(int *ttyfd, int *resizefd);
 /* Print and printf functions. Specify param `out_w` to determine width of
  * printed string. Strings are interpreted as UTF-8.
  *
+ * No attempt is made to do proper grapheme cluster parsing. With `TB_OPT_EGC`
+ * enabled, as a very coarse approximation, codepoints of `width==0` are tacked
+ * on to the previous codepoint via `tb_extend_cell`.
+ *
  * Non-printable characters (`iswprint(3)`) and truncated UTF-8 byte sequences
  * are replaced with U+FFFD.
  *
@@ -2359,7 +2363,7 @@ int tb_init_rwfd(int rfd, int wfd) {
     int rv;
 
     tb_reset();
-    global.ttyfd = isatty(rfd) ? rfd : (isatty(wfd) ? wfd : -1);
+    global.ttyfd = isatty(rfd) ? rfd : (wfd != rfd && isatty(wfd) ? wfd : -1);
     global.rfd = rfd;
     global.wfd = wfd;
 
@@ -2431,6 +2435,8 @@ int tb_present(void) {
                 if (back->nech > 0)
                     w = tb_cluster_width(back->ech, back->nech);
                 else
+#else
+                (void)tb_cluster_width;
 #endif
                     w = tb_wcwidth((wchar_t)back->ch);
             }
@@ -2671,10 +2677,14 @@ int tb_print_ex(int x, int y, uintattr_t fg, uintattr_t bg, size_t *out_w,
 
         if (w < 0) {
             return TB_ERR;   // shouldn't happen if iswprint
-        } else if (w == 0) { // combining character
+        } else if (w == 0) { // combining character? TODO: UAX-29
+#ifdef TB_OPT_EGC
             if (cellbuf_in_bounds(&global.back, x_prev, y)) {
                 if_err_return(rv, tb_extend_cell(x_prev, y, uni));
             }
+#else
+            (void)x_prev;
+#endif
         } else {
             if (cellbuf_in_bounds(&global.back, x, y)) {
                 if_err_return(rv, tb_set_cell(x, y, uni, fg, bg));
@@ -2709,6 +2719,7 @@ int tb_printf_ex(int x, int y, uintattr_t fg, uintattr_t bg, size_t *out_w,
 }
 
 int tb_send(const char *buf, size_t nbuf) {
+    if_not_init_return();
     return bytebuf_nputs(&global.out, buf, nbuf);
 }
 
@@ -3181,14 +3192,12 @@ static int tb_deinit(void) {
         bytebuf_puts(&global.out, TB_HARDCAP_EXIT_MOUSE);
         bytebuf_flush(&global.out, global.wfd);
     }
-    if (global.ttyfd >= 0) {
-        if (global.has_orig_tios) {
-            tcsetattr(global.ttyfd, TCSAFLUSH, &global.orig_tios);
-        }
-        if (global.ttyfd_open) {
-            close(global.ttyfd);
-            global.ttyfd_open = 0;
-        }
+    if (global.has_orig_tios && global.ttyfd >= 0) {
+        tcsetattr(global.ttyfd, TCSAFLUSH, &global.orig_tios);
+    }
+    if (global.ttyfd_open) {
+        close(global.ttyfd >= 0 ? global.ttyfd : global.rfd);
+        global.ttyfd_open = 0;
     }
 
     struct sigaction sa;
@@ -3295,7 +3304,7 @@ static int read_terminfo_path(const char *path) {
     }
 
     size_t fsize = st.st_size;
-    char *data = (char *)tb_malloc(fsize);
+    char *data = (char *)tb_malloc(fsize + 1);
     if (!data) {
         fclose(fp);
         return TB_ERR;
@@ -3306,6 +3315,7 @@ static int read_terminfo_path(const char *path) {
         tb_free(data);
         return TB_ERR;
     }
+    data[fsize] = '\0';
 
     global.terminfo = data;
     global.nterminfo = fsize;
@@ -4028,7 +4038,7 @@ static int cell_cmp(struct tb_cell *a, struct tb_cell *b) {
     if (a->nech != b->nech) {
         return 1;
     } else if (a->nech > 0) { // a->nech == b->nech
-        return memcmp(a->ech, b->ech, a->nech);
+        return memcmp(a->ech, b->ech, a->nech * sizeof(*a->ech));
     }
 #endif
     return 0;
@@ -4167,7 +4177,11 @@ static int cellbuf_resize(struct cellbuf *c, int w, int h) {
         }
     }
 
-    tb_free(prev);
+    struct cellbuf prevbuf = {0};
+    prevbuf.width = ow;
+    prevbuf.height = oh;
+    prevbuf.cells = prev;
+    cellbuf_free(&prevbuf);
 
     return TB_OK;
 }
