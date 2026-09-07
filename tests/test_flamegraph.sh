@@ -16,14 +16,14 @@ _run() {
         | "$repo/stackcollapse-phpspy.pl" \
         | "$repo/vendor/flamegraph.pl" \
         > "$flame_svg"
-    test_assert_re "flamegraph (qcup)" '\d+ samples' "$(cat "$flame_svg")"
+    test_assert_re "flamegraph_qcup" '\d+ samples' "$(cat "$flame_svg")"
 
     "$PHPSPY" -O/dev/null -E/dev/null --request-info=QCUP 2>/dev/null \
         -- "${PHP[@]}" -r 'sleep(2);' \
         | "$repo/stackcollapse-phpspy.pl" \
         | "$repo/vendor/flamegraph.pl" \
         > "$flame_svg"
-    test_assert_re "flamegraph (QCUP)" '\d+ samples' "$(cat "$flame_svg")"
+    test_assert_re "flamegraph_QCUP" '\d+ samples' "$(cat "$flame_svg")"
 }
 test_fn=_run
 test_invoke

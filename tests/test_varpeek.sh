@@ -15,7 +15,7 @@ php_file=$(mktemp)
 echo "$php_src" >"$php_file"
 phpspy_opts=(--limit=0 --peek-var "a@$php_file:4" -- "${PHP[@]}" "$php_file")
 declare -A expected
-expected[varpeek        ]="^# varpeek a@$php_file:4 = 42"
+expected[varpeek1       ]="^# varpeek a@$php_file:4 = 42"
 test_invoke
 rm -f "$php_file"
 
@@ -31,6 +31,6 @@ php_file=$(mktemp)
 echo "$php_src" >"$php_file"
 phpspy_opts=(--limit=0 --peek-var "a@$php_file:4" -- "${PHP[@]}" "$php_file")
 declare -A expected
-expected[varpeek        ]="^# varpeek a@$php_file:4 = k=42,j=dolphin$"
+expected[varpeek2       ]="^# varpeek a@$php_file:4 = k=42,j=dolphin$"
 test_invoke
 rm -f "$php_file"

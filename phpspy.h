@@ -53,6 +53,7 @@
 #define PHPSPY_MAX_ARRAY_BUCKETS 128
 #define PHPSPY_MAX_ARRAY_TABLE_SIZE 512
 #define PHPSPY_HASH_FLAG_PACKED (1 << 2)
+#define PHPSPY_MAX_STACK_WALK 1024
 
 enum {
     PHPSPY_OK           = 0,
@@ -178,6 +179,7 @@ typedef struct trace_context_s {
     const char *event_handler_opts;
     char buf[PHPSPY_STR_SIZE];
     size_t buf_len;
+    UT_array *stack_ptrs;
 } trace_context;
 
 typedef struct addr_memo_s {

@@ -32,7 +32,8 @@ static int opt_capture_req_cookie = 0;
 static int opt_capture_req_uri = 0;
 static int opt_capture_req_path = 0;
 static int opt_capture_mem = 0;
-static int opt_max_stack_depth = -1;
+static int opt_max_stack_depth_from_leaf = -1;
+static int opt_max_stack_depth_from_root = -1;
 static uint64_t opt_trace_limit = 0;
 static char *opt_path_child_out = "phpspy.%d.out";
 static char *opt_path_child_err = "phpspy.%d.err";
@@ -135,8 +136,12 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "  -i, --time-limit-ms=<ms>           Stop tracing after `ms` milliseconds\n");
     fprintf(fp, "                                       (second granularity in pgrep mode)\n");
     fprintf(fp, "                                       (default: %lu; 0=unlimited)\n", opt_time_limit_ms);
-    fprintf(fp, "  -n, --max-depth=<max>              Set max stack trace depth\n");
-    fprintf(fp, "                                       (default: %d; -1=unlimited)\n", opt_max_stack_depth);
+    fprintf(fp, "  -n, --max-depth=<max>              Keep <max> frames from the\n");
+    fprintf(fp, "                                       leaf stack frame\n");
+    fprintf(fp, "                                       (default: %d; -1=off)\n", opt_max_stack_depth_from_leaf);
+    fprintf(fp, "  -N, --max-depth-outer=<max>        Keep <max> frames from the\n");
+    fprintf(fp, "                                       root stack frame\n");
+    fprintf(fp, "                                       (default: %d; -1=off)\n", opt_max_stack_depth_from_root);
     fprintf(fp, "  -r, --request-info=<opts>          Set request info parts to capture\n");
     fprintf(fp, "                                       (q=query c=cookie u=uri p=path\n");
     fprintf(fp, "                                       capital=negation)\n");
@@ -248,6 +253,7 @@ static void parse_opts(int argc, char **argv) {
         { "limit",                 required_argument, NULL, 'l' },
         { "time-limit-ms",         required_argument, NULL, 'i' },
         { "max-depth",             required_argument, NULL, 'n' },
+        { "max-depth-outer",       required_argument, NULL, 'N' },
         { "request-info",          required_argument, NULL, 'r' },
         { "memory-usage",          no_argument,       NULL, 'm' },
         { "output",                required_argument, NULL, 'o' },
@@ -285,7 +291,7 @@ static void parse_opts(int argc, char **argv) {
     while (
         optind < argc
         && argv[optind][0] == '-'
-        && (c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:i:n:r:mo:O:E:1b:f:F:d:cq#:@vSe:g:Dt", long_opts, NULL)) != -1
+        && (c = getopt_long(argc, argv, "hp:P:T:te:s:H:V:l:i:n:N:r:mo:O:E:1b:f:F:d:cq#:@vSe:g:Dt", long_opts, NULL)) != -1
     ) {
         switch (c) {
             case 'h': usage(stdout, 0); break;
@@ -297,7 +303,8 @@ static void parse_opts(int argc, char **argv) {
             case 'V': opt_phpv = optarg; break;
             case 'l': opt_trace_limit = strtoull(optarg, NULL, 10); break;
             case 'i': opt_time_limit_ms = strtol_with_min_or_exit("-i", optarg, 0); break;
-            case 'n': opt_max_stack_depth = atoi_with_min_or_exit("-n", optarg, -1); break;
+            case 'n': opt_max_stack_depth_from_leaf = atoi_with_min_or_exit("-n", optarg, -1); break;
+            case 'N': opt_max_stack_depth_from_root = atoi_with_min_or_exit("-N", optarg, 0); break;
             case 'r':
                 for (i = 0; i < strlen(optarg); i++) {
                     switch (optarg[i]) {
@@ -396,6 +403,9 @@ int main_pid(pid_t pid) {
     context.target.pid = pid;
     context.event_handler = opt_event_handler;
     context.event_handler_opts = opt_event_handler_opts;
+    if (opt_max_stack_depth_from_root >= 0) {
+        utarray_new(context.stack_ptrs, &ut_ptr_icd);
+    }
     try(rv, find_addresses(&context.target));
     try(rv, context.event_handler(&context, PHPSPY_TRACE_EVENT_INIT));
 
@@ -486,6 +496,7 @@ int main_pid(pid_t pid) {
         nanosleep(&sleep_time, NULL);
     }
 
+    if (context.stack_ptrs) utarray_free(context.stack_ptrs);
     context.event_handler(&context, PHPSPY_TRACE_EVENT_DEINIT);
 
     /* in pgrep mode, trigger done condition if we went over the trace limit.
