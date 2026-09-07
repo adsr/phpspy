@@ -5,10 +5,10 @@ source "$TEST_SH"
 
 "${PHP[@]}" -r 'sleep(4);' &
 php_pid=$!
-phpspy_opts=(--limit=0 --time-limit-ms=1000 --pid="$php_pid")
-declare -A expected
-expected[include_sleep]='sleep'
-need_ptrace=1
-use_timeout_s=2
+test_phpspy_opts=(--limit=0 --time-limit-ms=1000 --pid="$php_pid")
+declare -A test_expected
+test_expected[include_sleep]='sleep'
+test_need_ptrace=1
+test_use_timeout_s=2
 test_invoke
 wait $php_pid

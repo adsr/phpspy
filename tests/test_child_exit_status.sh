@@ -10,7 +10,7 @@ _exit_0() {
     test_assert exit_0 0 $?
 }
 test_fn=_exit_0
-need_ptrace=1
+test_need_ptrace=1
 test_invoke
 
 # exit 3: non-zero status preserved
@@ -20,7 +20,7 @@ _exit_3() {
     test_assert exit_3 3 $?
 }
 test_fn=_exit_3
-need_ptrace=1
+test_need_ptrace=1
 test_invoke
 
 # signal: exit status is 128 + signal number (SIGTERM=15, expect 143)
@@ -34,9 +34,9 @@ _signalled() {
 if "${PHP[@]}" -r 'exit(function_exists("posix_kill") ? 0 : 1);' 2>/dev/null; then
     test_fn=_signalled
 else
-    skip='ext/posix not available'
+    test_skip='ext/posix not available'
 fi
-need_ptrace=1
+test_need_ptrace=1
 test_invoke
 
 # outlives sampling: phpspy stops first, child exits later with its status
@@ -47,8 +47,8 @@ _outlives_sampling() {
     test_assert outlives_sampling 7 $?
 }
 test_fn=_outlives_sampling
-need_ptrace=1
-use_timeout_s=10
+test_need_ptrace=1
+test_use_timeout_s=10
 test_invoke
 
 # bad -E path: error names the path; child not probed as a zombie
@@ -62,5 +62,5 @@ _bad_stderr_path() {
     test_assert bad_stderr_no_probe 0 "$(grep -c 'get_php_bin_path' <<<"$err")"
 }
 test_fn=_bad_stderr_path
-need_ptrace=1
+test_need_ptrace=1
 test_invoke

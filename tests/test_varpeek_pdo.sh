@@ -5,7 +5,7 @@ source "$TEST_SH"
 
 # Skip if pdo_sqlite is not available
 if ! { "${PHP[@]}" -m | grep -Fqx pdo_sqlite; }; then
-    skip='pdo_sqlite not available'
+    test_skip='pdo_sqlite not available'
     test_invoke
     exit
 fi
@@ -20,10 +20,10 @@ $stmt->execute([':name' => 'hello', ':age' => 42]);
 EOD
 php_file=$(mktemp)
 echo "$php_src" >"$php_file"
-phpspy_opts=(--limit=1 --peek-pdo -- "${PHP[@]}" "$php_file")
-declare -A expected
-expected[pdo_sql_execute_array ]="^# varpeek #pdo_sql@PDOStatement::execute = SELECT slow\(:name\) AS r WHERE :age > 0"
-expected[pdo_args_execute_array]="^# varpeek #pdo_args@PDOStatement::execute = :name=hello,:age=42$"
+test_phpspy_opts=(--limit=1 --peek-pdo -- "${PHP[@]}" "$php_file")
+declare -A test_expected
+test_expected[pdo_sql_execute_array ]="^# varpeek #pdo_sql@PDOStatement::execute = SELECT slow\(:name\) AS r WHERE :age > 0"
+test_expected[pdo_args_execute_array]="^# varpeek #pdo_args@PDOStatement::execute = :name=hello,:age=42$"
 test_invoke
 rm -f "$php_file"
 
@@ -37,9 +37,9 @@ $stmt->execute(['hello', 42, 99]);
 EOD
 php_file=$(mktemp)
 echo "$php_src" >"$php_file"
-phpspy_opts=(--limit=1 --peek-pdo -- "${PHP[@]}" "$php_file")
-declare -A expected
-expected[pdo_args_packed_array]="^# varpeek #pdo_args@PDOStatement::execute = 0=hello,1=42,2=99$"
+test_phpspy_opts=(--limit=1 --peek-pdo -- "${PHP[@]}" "$php_file")
+declare -A test_expected
+test_expected[pdo_args_packed_array]="^# varpeek #pdo_args@PDOStatement::execute = 0=hello,1=42,2=99$"
 test_invoke
 rm -f "$php_file"
 
@@ -57,9 +57,9 @@ $stmt->execute();
 EOD
 php_file=$(mktemp)
 echo "$php_src" >"$php_file"
-phpspy_opts=(--limit=1 --peek-pdo -- "${PHP[@]}" "$php_file")
-declare -A expected
-expected[pdo_args_packed_binds]="^# varpeek #pdo_args@PDOStatement::execute = 0=apple,1=11,2=22$"
+test_phpspy_opts=(--limit=1 --peek-pdo -- "${PHP[@]}" "$php_file")
+declare -A test_expected
+test_expected[pdo_args_packed_binds]="^# varpeek #pdo_args@PDOStatement::execute = 0=apple,1=11,2=22$"
 test_invoke
 rm -f "$php_file"
 
@@ -76,10 +76,10 @@ $stmt->execute();
 EOD
 php_file=$(mktemp)
 echo "$php_src" >"$php_file"
-phpspy_opts=(--limit=1 --peek-pdo -- "${PHP[@]}" "$php_file")
-declare -A expected
-expected[pdo_sql_bound  ]="^# varpeek #pdo_sql@PDOStatement::execute = SELECT slow\(:name\) AS r, :age AS age"
-expected[pdo_args_bound ]="^# varpeek #pdo_args@PDOStatement::execute = :name=apple,:age=99$"
+test_phpspy_opts=(--limit=1 --peek-pdo -- "${PHP[@]}" "$php_file")
+declare -A test_expected
+test_expected[pdo_sql_bound  ]="^# varpeek #pdo_sql@PDOStatement::execute = SELECT slow\(:name\) AS r, :age AS age"
+test_expected[pdo_args_bound ]="^# varpeek #pdo_args@PDOStatement::execute = :name=apple,:age=99$"
 test_invoke
 rm -f "$php_file"
 
@@ -92,9 +92,9 @@ foreach ($pdo->query("SELECT slow('banana')") as $row) {}
 EOD
 php_file=$(mktemp)
 echo "$php_src" >"$php_file"
-phpspy_opts=(--limit=1 --peek-pdo -- "${PHP[@]}" "$php_file")
-declare -A expected
-expected[pdo_sql_pdo_query]="^# varpeek #pdo_sql@PDO::query = SELECT slow\('banana'\)"
+test_phpspy_opts=(--limit=1 --peek-pdo -- "${PHP[@]}" "$php_file")
+declare -A test_expected
+test_expected[pdo_sql_pdo_query]="^# varpeek #pdo_sql@PDO::query = SELECT slow\('banana'\)"
 test_invoke
 rm -f "$php_file"
 
@@ -108,9 +108,9 @@ $stmt->execute();
 EOD
 php_file=$(mktemp)
 echo "$php_src" >"$php_file"
-phpspy_opts=(--limit=1 -- "${PHP[@]}" "$php_file")
-declare -A expected
-declare -A not_expected
-not_expected[no_pdo_lines_without_flag]="^# varpeek #pdo_"
+test_phpspy_opts=(--limit=1 -- "${PHP[@]}" "$php_file")
+declare -A test_expected
+declare -A test_not_expected
+test_not_expected[no_pdo_lines_without_flag]="^# varpeek #pdo_"
 test_invoke
 rm -f "$php_file"

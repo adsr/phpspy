@@ -13,9 +13,9 @@ f();
 EOD
 php_file=$(mktemp)
 echo "$php_src" >"$php_file"
-phpspy_opts=(--limit=0 --peek-var "a@$php_file:4" -- "${PHP[@]}" "$php_file")
-declare -A expected
-expected[varpeek1       ]="^# varpeek a@$php_file:4 = 42"
+test_phpspy_opts=(--limit=0 --peek-var "a@$php_file:4" -- "${PHP[@]}" "$php_file")
+declare -A test_expected
+test_expected[varpeek1       ]="^# varpeek a@$php_file:4 = 42"
 test_invoke
 rm -f "$php_file"
 
@@ -29,8 +29,8 @@ f();
 EOD
 php_file=$(mktemp)
 echo "$php_src" >"$php_file"
-phpspy_opts=(--limit=0 --peek-var "a@$php_file:4" -- "${PHP[@]}" "$php_file")
-declare -A expected
-expected[varpeek2       ]="^# varpeek a@$php_file:4 = k=42,j=dolphin$"
+test_phpspy_opts=(--limit=0 --peek-var "a@$php_file:4" -- "${PHP[@]}" "$php_file")
+declare -A test_expected
+test_expected[varpeek2       ]="^# varpeek a@$php_file:4 = k=42,j=dolphin$"
 test_invoke
 rm -f "$php_file"

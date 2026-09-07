@@ -26,12 +26,12 @@ test_assert_re() {
 }
 
 test_invoke() {
-    declare -gA expected not_expected
-    declare -ga phpspy_opts
+    declare -gA test_expected test_not_expected
+    declare -ga test_phpspy_opts
 
     local cmd_prefix=() actual exit_code testname
 
-    if [ -n "$need_ptrace" ]; then
+    if [ -n "$test_need_ptrace" ]; then
         local ptrace_scope
         ptrace_scope=$(cat /proc/sys/kernel/yama/ptrace_scope 2>/dev/null || echo 0)
         if [ "$ptrace_scope" = "0" ]; then
@@ -41,13 +41,13 @@ test_invoke() {
         elif sudo -n true &>/dev/null; then
             cmd_prefix+=(sudo -n)
         else
-            skip='need ptrace'
+            test_skip='need ptrace'
         fi
     fi
-    [ -n "$use_timeout_s" ] && cmd_prefix+=(timeout "$use_timeout_s")
+    [ -n "$test_use_timeout_s" ] && cmd_prefix+=(timeout "$test_use_timeout_s")
 
-    if [ -n "$skip" ]; then
-        echo -e "  \x1b[33mSKIP\x1b[0m $skip"
+    if [ -n "$test_skip" ]; then
+        echo -e "  \x1b[33mSKIP\x1b[0m $test_skip"
     elif [ -n "$test_fn" ]; then
         "$test_fn"
     else
@@ -56,28 +56,28 @@ test_invoke() {
             --limit=1 \
             --child-stdout=/dev/null \
             --child-stderr=/dev/null \
-            "${phpspy_opts[@]}" 2>test.err
+            "${test_phpspy_opts[@]}" 2>test.err
         )
         exit_code=$?
-        if [ -z "$non_zero_ok" ] && [ "$exit_code" -ne 0 ]; then
+        if [ -z "$test_non_zero_ok" ] && [ "$exit_code" -ne 0 ]; then
             echo -e "  \x1b[31mERR \x1b[0m exit_code=$exit_code"
             cat test.err >&2
             exit 1
         fi
-        for testname in "${!expected[@]}"; do
-            test_assert_re "$testname" "${expected[$testname]}" "$actual"
+        for testname in "${!test_expected[@]}"; do
+            test_assert_re "$testname" "${test_expected[$testname]}" "$actual"
         done
-        for testname in "${!not_expected[@]}"; do
-            if ! grep -Pq "${not_expected[$testname]}" <<<"$actual"; then
+        for testname in "${!test_not_expected[@]}"; do
+            if ! grep -Pq "${test_not_expected[$testname]}" <<<"$actual"; then
                 echo -e "  \x1b[32mOK  \x1b[0m $testname"
             else
-                echo -e "  \x1b[31mERR \x1b[0m $testname\nnot_expected=${not_expected[$testname]}\n\nactual=\n$actual"
+                echo -e "  \x1b[31mERR \x1b[0m $testname\nnot_expected=${test_not_expected[$testname]}\n\nactual=\n$actual"
                 exit 1
             fi
         done
     fi
 
-    unset phpspy_opts expected not_expected need_ptrace use_timeout_s skip non_zero_ok test_fn
+    unset test_phpspy_opts test_expected test_not_expected test_need_ptrace test_use_timeout_s test_skip test_non_zero_ok test_fn
 }
 
 test_init
