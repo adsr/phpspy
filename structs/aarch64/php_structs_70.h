@@ -1,8 +1,6 @@
 #ifndef __php_structs_70_h
 #define __php_structs_70_h
 
-/* TODO: These structs are wrong for aarch64 */
-
 #include <stdint.h>
 
 typedef struct _zend_executor_globals_70 zend_executor_globals_70;
@@ -122,8 +120,8 @@ struct __attribute__((__packed__)) _sapi_request_info_70 {
 struct __attribute__((__packed__)) _sapi_globals_struct_70 {
     uint8_t                 pad0[8];                /* 0        +8 */
     sapi_request_info_70    request_info;           /* 8        +48 */
-    uint8_t                 pad1[384];              /* 56       +384 */
-    double                  global_request_time;    /* 440      +8 */
+    uint8_t                 pad1[368];              /* 56       +368 */
+    double                  global_request_time;    /* 424      +8 */
 };
 
 struct __attribute__((__packed__)) _Bucket_70 {
@@ -141,7 +139,6 @@ struct __attribute__((__packed__)) _zend_mm_heap_70 {
     size_t                  size;                   /* 16       +8 */
     size_t                  peak;                   /* 24       +8 */
 };
-
 
 struct __attribute__((__packed__)) _zend_object_70 {
     uint8_t                 pad0[16];               /* 0        +16 */
