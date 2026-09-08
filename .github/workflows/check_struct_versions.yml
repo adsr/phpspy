@@ -76,6 +76,9 @@ jobs:
   render:
     needs: [detect, dump]
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
       - name: install gawk
