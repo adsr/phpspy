@@ -11,7 +11,7 @@
 #
 # Usage: tools/find_php_updates.sh [path-to-struct_dump.sh]
 
-set -euo pipefail
+set -euxo pipefail
 
 this_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && pwd)
 dump_sh="${1:-$this_dir/../struct_dump.sh}"
