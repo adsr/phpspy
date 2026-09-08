@@ -26,6 +26,8 @@ jobs:
   check:
     needs: dump
     runs-on: ubuntu-24.04
+    permissions:
+      issues: write
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y gawk jq
