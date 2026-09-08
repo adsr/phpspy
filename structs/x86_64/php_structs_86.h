@@ -119,8 +119,8 @@ struct __attribute__((__packed__)) _sapi_request_info_86 {
 struct __attribute__((__packed__)) _sapi_globals_struct_86 {
     uint8_t                 pad0[8];                /* 0        +8 */
     sapi_request_info_86    request_info;           /* 8        +48 */
-    uint8_t                 pad1[384];              /* 56       +384 */
-    double                  global_request_time;    /* 440      +8 */
+    uint8_t                 pad1[376];              /* 56       +376 */
+    double                  global_request_time;    /* 432      +8 */
 };
 
 struct __attribute__((__packed__)) _Bucket_86 {
