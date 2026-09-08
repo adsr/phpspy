@@ -6,6 +6,9 @@
 #  undef snprintf
 #  undef vsnprintf
 #  undef HASH_ADD
+   /* ZEND_CALL_FRAME_SLOT (Zend/zend_compile.h) is already visible here via
+      main/SAPI.h's own includes; no extra #include is needed. */
+#  define phpspy_frame_slot ZEND_CALL_FRAME_SLOT
 #else
 #  if defined(__x86_64__)
 #    include <structs/x86_64/php_structs_70.h>

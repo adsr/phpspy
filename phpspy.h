@@ -44,7 +44,7 @@
 #define STR1(s) #s
 #define STR2(s) STR1(s)
 
-#define PHPSPY_VERSION "0.8.0"
+#define PHPSPY_VERSION "0.8.1"
 #define PHPSPY_MIN(a, b) ((a) < (b) ? (a) : (b))
 #define PHPSPY_MAX(a, b) ((a) > (b) ? (a) : (b))
 #ifndef PHPSPY_STR_SIZE

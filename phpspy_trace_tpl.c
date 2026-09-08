@@ -39,6 +39,17 @@
 #define sprint_pdo_binds      concat2(sprint_pdo_binds_,      phpv)
 #define sprint_pdo_bind       concat2(sprint_pdo_bind_,       phpv)
 
+/* ZEND_CALL_FRAME_SLOT = ceil(sizeof(zend_execute_data) / sizeof(zval)). Measured
+   directly against every supported PHP version's real headers: 6 on 7.0 (which
+   still carries execute_data.called_scope, removed in 7.1), 5 on every later
+   version (sizeof(zend_execute_data) is 72 or 80 there, both of which round up
+   to 5 slots of 16 bytes). */
+#if phpv == 70
+#define phpspy_frame_slot 6
+#else
+#define phpspy_frame_slot 5
+#endif
+
 #include "phpspy_trace.c"
 
 #undef concat1
@@ -73,6 +84,7 @@
 #undef trace_pdo
 #undef sprint_pdo_binds
 #undef sprint_pdo_bind
+#undef phpspy_frame_slot
 #undef copy_executor_globals
 #undef copy_zarray_bucket
 #undef sprint_zstring

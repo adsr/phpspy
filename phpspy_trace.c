@@ -340,8 +340,11 @@ static int trace_locals(trace_context *context, zend_op *zop, zend_execute_data 
         HASH_FIND(hh, entry->varmap, tmp, tmp_len, var);
         if (!var) continue;
         num_vars_found += 1;
-        /* See ZEND_CALL_VAR_NUM macro in php-src */
-        try_copy_proc_mem("zval", ((zval*)(remote_execute_data)) + ((int)(5 + i)), &zv, sizeof(zv));
+        /* See ZEND_CALL_VAR_NUM macro in php-src. The frame-slot count is
+           version-dependent (PHP 7.0 differs from every later version); see
+           phpspy_frame_slot, defined per-phpv in phpspy_trace_tpl.c and for
+           USE_ZEND in structs/structs.h. */
+        try_copy_proc_mem("zval", ((zval*)(remote_execute_data)) + ((int)(phpspy_frame_slot + i)), &zv, sizeof(zv));
         try(rv, sprint_zval(context, &zv, tmp, sizeof(tmp), &tmp_len));
         context->event.varpeek.entry = entry;
         context->event.varpeek.var = var;
