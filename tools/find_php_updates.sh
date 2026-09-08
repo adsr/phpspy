@@ -11,7 +11,13 @@
 #
 # Usage: tools/find_php_updates.sh [path-to-struct_dump.sh]
 
-set -euxo pipefail
+set -euo pipefail
+
+# NOTE: several lines below intentionally end in `|| true`. Under
+# pipefail, a `grep` that legitimately finds nothing (e.g. "no php-8.6.*
+# release tag exists yet") exits nonzero, and set -e would otherwise treat
+# that as a script failure rather than the valid "nothing found" result it
+# actually is.
 
 this_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && pwd)
 dump_sh="${1:-$this_dir/../struct_dump.sh}"
@@ -35,22 +41,22 @@ mapfile -t all_tags < <(
 
 for nn in "${!series[@]}"; do
     prefix="php-${series[$nn]}."
-    latest=$(printf '%s\n' "${all_tags[@]}" | grep -F "$prefix" | sort -V | tail -1)
+    latest=$(printf '%s\n' "${all_tags[@]}" | grep -F "$prefix" | sort -V | tail -1) || true
     [ -z "$latest" ] && continue
-    pinned=$(grep -oE "php-${series[$nn]//./\\.}\.[0-9]+" "$dump_sh" | head -1)
+    pinned=$(grep -oE "php-${series[$nn]//./\\.}\.[0-9]+" "$dump_sh" | head -1) || true
     if [ "$latest" != "$pinned" ]; then
         echo "$nn $latest"
     fi
 done
 
 # 8.6 is pinned to `master` (no release tag yet) -- flag it the moment one exists.
-php86tag=$(printf '%s\n' "${all_tags[@]}" | grep -E '^php-8\.6\.' | sort -V | tail -1)
+php86tag=$(printf '%s\n' "${all_tags[@]}" | grep -E '^php-8\.6\.' | sort -V | tail -1) || true
 if [ -n "$php86tag" ]; then
     echo "86 $php86tag"
 fi
 
 # Informational only: a series beyond what phpspy tracks at all.
-newest_series=$(printf '%s\n' "${all_tags[@]}" | grep -oE '^php-[0-9]+\.[0-9]+' | sed 's/^php-//' | sort -V -u | tail -1)
+newest_series=$(printf '%s\n' "${all_tags[@]}" | grep -oE '^php-[0-9]+\.[0-9]+' | sed 's/^php-//' | sort -V -u | tail -1) || true
 known_max="8.6"
 if [ "$(printf '%s\n%s\n' "$known_max" "$newest_series" | sort -V | tail -1)" != "$known_max" ]; then
     echo "note: upstream has a newer series ($newest_series) than phpspy tracks (up to $known_max) -- this needs a human to add support, not an automated struct refresh" >&2
