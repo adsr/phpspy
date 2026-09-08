@@ -22,7 +22,13 @@ declare -A series=(
 )
 
 mapfile -t all_tags < <(
-    git ls-remote --tags https://github.com/php/php-src.git 'refs/tags/php-*' \
+    # -c ...extraheader= clears any Authorization header a caller's git
+    # config may have set for github.com URLs in general (e.g. a CI
+    # checkout step's persisted credentials, scoped to a *different* repo)
+    # -- inherited into a request for an unrelated public repo like this
+    # one, such a header gets rejected outright rather than ignored.
+    git -c http.https://github.com/.extraheader= \
+        ls-remote --tags https://github.com/php/php-src.git 'refs/tags/php-*' \
         | sed 's#.*refs/tags/##' \
         | grep -E '^php-[0-9]+\.[0-9]+\.[0-9]+$'
 )
