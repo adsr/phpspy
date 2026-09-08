@@ -1,0 +1,65 @@
+name: dump_structs
+
+# One-off, manually-triggered probe: builds php-src from source for every PHP
+# version phpspy ships struct mirrors for, on both x86_64 and aarch64, and
+# uploads the raw struct_dump.gdb output as build artifacts. This is how real
+# (not guessed) aarch64 offsets get produced -- see struct_dump.sh/.gdb and
+# CLAUDE.md. Not run on push/pull_request: 12 versions x 2 arches, each a full
+# ./buildconf && ./configure && make, is far too slow for routine CI.
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  list:
+    runs-on: ubuntu-24.04
+    outputs:
+      phpvs: ${{ steps.list.outputs.phpvs }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: list
+        run: |
+          set -euo pipefail
+          json=$(tools/list_pinned_tags.sh | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "phpvs=$json" >> "$GITHUB_OUTPUT"
+
+  dump:
+    needs: list
+    strategy:
+      fail-fast: false
+      matrix:
+        runs_on: [ubuntu-24.04, ubuntu-24.04-arm]
+        phpv: ${{ fromJson(needs.list.outputs.phpvs) }}
+
+    runs-on: ${{ matrix.runs_on }}
+
+    steps:
+      - name: checkout phpspy
+        uses: actions/checkout@v4
+        with:
+          path: phpspy
+
+      - name: checkout php-src
+        uses: actions/checkout@v4
+        with:
+          repository: php/php-src
+          path: php-src
+          fetch-depth: 0
+
+      - name: deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            autoconf bison re2c pkg-config build-essential gdb \
+            libxml2-dev libsqlite3-dev libssl-dev
+
+      - name: dump
+        run: ./phpspy/struct_dump.sh "$GITHUB_WORKSPACE/php-src" "${{ matrix.phpv }}"
+
+      - name: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: struct_dump-${{ matrix.runs_on }}-${{ matrix.phpv }}
+          path: phpspy/struct_dump.${{ matrix.phpv }}.out
+          if-no-files-found: warn

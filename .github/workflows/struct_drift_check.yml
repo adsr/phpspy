@@ -1,0 +1,84 @@
+name: struct_drift_check
+
+# Monthly regression test: re-verifies that the checked-in struct mirrors
+# for every already-supported PHP version still match a fresh from-source
+# build, on both architectures. This re-dumps the exact tags already pinned
+# in struct_dump.sh, so it's not about newer releases -- see
+# check_struct_versions.yml for that. It exists to catch the rarer case:
+# an upstream patch release on an ALREADY-pinned tag quietly changing a
+# struct layout (this shouldn't happen for a fixed tag, since tags don't
+# move -- but this is also a general regression test of the mirrors
+# against reality, independent of whether anything upstream changed).
+#
+# Opens an issue, not a PR: unexpected drift here is surprising enough that
+# it deserves a human looking at the actual cause before anything is
+# auto-merged, rather than a bot quietly "fixing" it.
+
+on:
+  schedule:
+    - cron: '0 6 1 * *' # 1st of the month, 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  dump:
+    uses: ./.github/workflows/dump_structs.yml
+
+  check:
+    needs: dump
+    runs-on: ubuntu-24.04
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y gawk jq
+      - uses: actions/download-artifact@v4
+        with:
+          path: dumps
+      - name: compare
+        run: |
+          set -euo pipefail
+          mapfile -t phpvs < <(tools/list_pinned_tags.sh)
+          # Positional: must match phpspy's version dispatch order, same as
+          # struct_dump.sh's own comment says.
+          nns=(70 71 72 73 74 80 81 82 83 84 85 86)
+
+          : > drift.log
+          for i in "${!phpvs[@]}"; do
+              tag=${phpvs[$i]}
+              nn=${nns[$i]}
+              for pair in "ubuntu-24.04:x86_64" "ubuntu-24.04-arm:aarch64"; do
+                  runs_on=${pair%%:*}
+                  arch=${pair##*:}
+                  raw="dumps/struct_dump-${runs_on}-${tag}/struct_dump.${tag}.out"
+                  if [ ! -f "$raw" ]; then
+                      echo "$nn/$arch ($tag): dump artifact missing entirely -- build likely failed" >> drift.log
+                      continue
+                  fi
+                  before=$(sha256sum "structs/$arch/php_structs_$nn.h" | cut -d' ' -f1)
+                  if tools/render_struct_update.sh "$nn" "$arch" "$raw" . 2>>drift.log; then
+                      status=ok
+                  else
+                      status=needs_review
+                  fi
+                  after=$(sha256sum "structs/$arch/php_structs_$nn.h" | cut -d' ' -f1)
+                  if [ "$before" != "$after" ] || [ "$status" = needs_review ]; then
+                      echo "$nn/$arch ($tag): DRIFT ($status)" >> drift.log
+                  fi
+              done
+          done
+          # This job only checks; it never commits. Revert any in-place
+          # edits render_struct_update.sh made so the working tree stays
+          # clean for the drift.log to be the sole output.
+          git checkout -- structs/
+          cat drift.log
+          echo "drift_found=$([ -s drift.log ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+        id: compare
+      - name: open issue on drift
+        if: steps.compare.outputs.drift_found == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh issue create \
+            --title "struct_drift_check: unexpected drift in already-pinned PHP versions" \
+            --body "$(printf 'Monthly drift check found the checked-in struct mirrors no longer match a fresh from-source build of an already-pinned PHP tag.\n\n```\n%s\n```\n\nSee the workflow run for full logs: %s/%s/actions/runs/%s' "$(cat drift.log)" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
