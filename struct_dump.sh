@@ -11,6 +11,12 @@ fi
 # All PHP versions phpspy ships struct mirrors for. 8.6 has no release tag yet
 # (still dev), so it stays pinned to `master`, same as when the 8.6 structs
 # were first cut.
+#
+# Order matters: this must stay in the same order as phpspy's internal
+# version dispatch (70, 71, 72, 73, 74, 80, 81, 82, 83, 84, 85, 86) --
+# .github/workflows/struct_drift_check.yml maps entries here to structs/
+# header files positionally, by that order, not by parsing version numbers
+# out of the tag names.
 all_phpvs=(
     php-7.0.33
     php-7.1.33

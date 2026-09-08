@@ -1,0 +1,159 @@
+name: check_struct_versions
+
+# Weekly, cheap (git ls-remote only, no PHP build): checks whether any PHP
+# series phpspy already tracks has a newer release tag than what's pinned in
+# struct_dump.sh, or whether PHP 8.6 (currently pinned to `master`, no
+# release tag yet) has finally gotten one. If so, dumps just that version on
+# both architectures (tools/find_php_updates.sh already scoped this to real
+# changes, so this is normally 0 cells, occasionally 2), patches the
+# existing mirror headers with tools/render_struct_update.sh, and opens a PR
+# for a human to review -- never auto-merges.
+#
+# A genuinely new PHP series beyond what phpspy supports (e.g. a future 8.7)
+# is deliberately NOT handled here -- see find_php_updates.sh's stderr note.
+# That needs code changes beyond struct data (phpspy.c dispatch, -V help
+# text, README), which is a job for a human, not this workflow.
+
+on:
+  schedule:
+    - cron: '0 6 * * 1' # every Monday, 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  detect:
+    runs-on: ubuntu-24.04
+    outputs:
+      changes: ${{ steps.detect.outputs.changes }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: detect
+        run: |
+          set -euo pipefail
+          lines=$(./tools/find_php_updates.sh)
+          echo "$lines"
+          json=$(printf '%s\n' "$lines" | awk 'NF{printf "{\"nn\":\"%s\",\"tag\":\"%s\"}\n", $1, $2}' | jq -s -c .)
+          echo "changes=$json" >> "$GITHUB_OUTPUT"
+
+  dump:
+    needs: detect
+    if: needs.detect.outputs.changes != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        runs_on: [ubuntu-24.04, ubuntu-24.04-arm]
+        change: ${{ fromJson(needs.detect.outputs.changes) }}
+    runs-on: ${{ matrix.runs_on }}
+    steps:
+      - name: checkout phpspy
+        uses: actions/checkout@v4
+        with:
+          path: phpspy
+      - name: checkout php-src
+        uses: actions/checkout@v4
+        with:
+          repository: php/php-src
+          path: php-src
+          fetch-depth: 0
+      - name: deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            autoconf bison re2c pkg-config build-essential gdb \
+            libxml2-dev libsqlite3-dev libssl-dev
+      - name: dump
+        env:
+          TAG: ${{ matrix.change.tag }}
+        run: ./phpspy/struct_dump.sh "$GITHUB_WORKSPACE/php-src" "$TAG"
+      - name: upload
+        env:
+          TAG: ${{ matrix.change.tag }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: dump-${{ matrix.runs_on }}-${{ matrix.change.nn }}
+          path: phpspy/struct_dump.${{ matrix.change.tag }}.out
+          if-no-files-found: error
+
+  render:
+    needs: [detect, dump]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: install gawk
+        run: sudo apt-get update && sudo apt-get install -y gawk
+      - uses: actions/download-artifact@v4
+        with:
+          path: dumps
+      - name: render
+        env:
+          CHANGES: ${{ needs.detect.outputs.changes }}
+        run: |
+          set -euo pipefail
+          : > render_status.env
+          echo "$CHANGES" | jq -c '.[]' | while read -r change; do
+              nn=$(echo "$change" | jq -r .nn)
+              tag=$(echo "$change" | jq -r .tag)
+              tools/update_pinned_tag.sh "$tag" || echo "STATUS_${nn}_pin=failed" >> render_status.env
+              for pair in "ubuntu-24.04:x86_64" "ubuntu-24.04-arm:aarch64"; do
+                  runs_on=${pair%%:*}
+                  arch=${pair##*:}
+                  raw="dumps/dump-${runs_on}-${nn}/struct_dump.${tag}.out"
+                  if [ ! -f "$raw" ]; then
+                      echo "render: missing dump artifact $raw" >&2
+                      echo "STATUS_${nn}_${arch}=missing" >> render_status.env
+                      continue
+                  fi
+                  if tools/render_struct_update.sh "$nn" "$arch" "$raw" .; then
+                      echo "STATUS_${nn}_${arch}=ok" >> render_status.env
+                  else
+                      echo "STATUS_${nn}_${arch}=needs_review" >> render_status.env
+                  fi
+              done
+          done
+          cat render_status.env
+      - name: summarize
+        id: summary
+        env:
+          CHANGES: ${{ needs.detect.outputs.changes }}
+        run: |
+          {
+            echo "body<<STRUCT_PR_BODY_EOF"
+            echo "Automated: struct offsets refreshed for a newer PHP release."
+            echo
+            echo "Detected by \`tools/find_php_updates.sh\`, dumped on both"
+            echo "architectures via \`struct_dump.sh\`, and patched in place by"
+            echo "\`tools/render_struct_update.sh\` (adjusts only the fields that"
+            echo "moved plus their immediately preceding pad -- see that script's"
+            echo "header comment for the exact scope and safety rules)."
+            echo
+            echo "Versions touched:"
+            echo "$CHANGES" | jq -r '.[] | "- \(.nn) -> \(.tag)"'
+            echo
+            if grep -q needs_review render_status.env 2>/dev/null; then
+              echo "**One or more architectures needed manual review and were left"
+              echo "unchanged -- see the \`render\` job log for exactly which field"
+              echo "and why.** Do not merge until those are resolved by hand."
+            fi
+            echo "STRUCT_PR_BODY_EOF"
+          } >> "$GITHUB_OUTPUT"
+      - name: open PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_BODY: ${{ steps.summary.outputs.body }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No struct changes to open a PR for."
+            exit 0
+          fi
+          branch="bot/struct-update-$(date +%Y%m%d)"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add structs/ struct_dump.sh
+          git commit -m "Update struct offsets for newer PHP release(s)"
+          git push origin "$branch"
+          title="Update struct offsets for newer PHP release(s)"
+          if grep -q needs_review render_status.env 2>/dev/null; then
+            title="[NEEDS REVIEW] $title"
+          fi
+          gh pr create --title "$title" --body "$PR_BODY" --head "$branch"
