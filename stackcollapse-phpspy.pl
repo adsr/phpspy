@@ -28,9 +28,22 @@
 #   ...
 #
 # Example Output:
-#   <main>;ccc;bbb;aaa 1
-#   <main>;aaa 1
-#   <main>;bbb;aaa;sleep 1
+#   <main>:sample.php;ccc;bbb;aaa;sleep 1
+#   <main>:sample.php;aaa;sleep 1
+#   <main>:sample.php;bbb;aaa;sleep 1
+#
+# `<main>` frames are labelled with the file they belong to, since PHP names
+# the top-level scope of every file `<main>`. The label is the shortest
+# trailing part of the path that is unique among the `<main>` files in the
+# input: usually just the basename, or e.g. `admin/index.php` and
+# `public/index.php` when two files share one. This means the same file can
+# be labelled differently in two captures if a same-named file appears in
+# only one of them, which matters when comparing collapsed output across
+# runs (e.g. with difffolded.pl). A file included from inside a method is
+# reported by phpspy as `Class::<main>`; the class prefix is dropped so every
+# file-scope frame reads `<main>:file`. Code with no file (`php -r`, eval)
+# stays a plain `<main>`. phpspy truncates paths to 255 bytes, so very long
+# paths may yield fragments rather than filenames.
 #
 # To make a flamegraph:
 # ./stackcollapse-phpspy.pl infile | ./vendor/flamegraph.pl > svg.out
@@ -59,11 +72,27 @@ usage() if $help;
 # internals
 my %stacks;
 my @frames;
+my %main_files;
 
 while (defined(my $line = <>)) {
     next unless $line =~ /^(?:#|\d+) \S/;
 
-    my ($depth, $func) = (split ' ', $line)[0,1];
+    my ($depth, $func, $loc) = split ' ', $line, 3;
+
+    # phpspy names file-scope frames `<main>`, or `Class::<main>` when the file
+    # was included from inside a method. Label them `<main>:path` instead,
+    # with the path shortened once all input is read (see path_suffix).
+    if ($depth ne '#' && $func =~ /<main>$/) {
+        $func = '<main>'; # drop the class prefix, if any
+        if (defined $loc && $loc =~ /^(.*):-?\d+\s*$/) { # "path:lineno"
+            my $path = $1;
+            $path =~ s{/+$}{}; # ignore trailing slashes
+            # replace `;` and whitespace with `_`; both delimit folded output
+            $path =~ s/[;\s]/_/g;
+            # `<internal>` is phpspy's file for `php -r` and eval'd code
+            $func .= ":$path" if length $path && $path ne '<internal>';
+        }
+    }
 
     # decode the utf-8 bytes and make them into characters
     # and turn anything that's invalid into U+FFFD
@@ -75,6 +104,9 @@ while (defined(my $line = <>)) {
     # turn it back into a string
     $func = encode("utf-8", $func);
 
+    # remember the (now sanitised) path for the shortening pass below
+    $main_files{$1} = 1 if $depth ne '#' && $func =~ /^<main>:(.*)$/;
+
     if ($depth ne '#' && $depth == 0) {
         $stacks{join(';', reverse @frames)} += 1 if @frames;
         @frames = ();
@@ -84,6 +116,35 @@ while (defined(my $line = <>)) {
 }
 $stacks{join(';', reverse @frames)} += 1 if @frames;
 
+# Shorten each <main> path to the shortest trailing run of path components
+# that is unique among all <main> files seen.
+sub path_suffix {
+    my ($path, $n) = @_;
+    my @parts = split m{/}, $path, -1;
+    $n = @parts if $n > @parts;
+    return join('/', @parts[-$n .. -1]);
+}
+
+my %short;
+my @pending = keys %main_files;
+my $len = 0;
+while (@pending) {
+    $len++;
+    my %count;
+    $count{path_suffix($_, $len)}++ for @pending;
+    my @still_pending;
+    for my $path (@pending) {
+        my $suffix = path_suffix($path, $len);
+        if ($count{$suffix} == 1 || $suffix eq $path) {
+            $short{$path} = $suffix;
+        } else {
+            push @still_pending, $path;
+        }
+    }
+    @pending = @still_pending;
+}
+
 while ( my ($k, $v) = each %stacks ) {
+    $k =~ s{(<main>:)([^;]+)}{$1 . (exists $short{$2} ? $short{$2} : $2)}ge;
     print "$k $v\n";
 }
