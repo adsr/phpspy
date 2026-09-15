@@ -14,18 +14,25 @@
 #   1 aaa /home/mlauter/profiling/sample.php:5
 #   2 bbb /home/mlauter/profiling/sample.php:10
 #   3 <main> /home/mlauter/profiling/sample.php:25
-#   # - - -
+#   # trace_id = 0.0/1
+#
 #   0 sleep <internal>:-1
 #   1 aaa /home/mlauter/profiling/sample.php:5
 #   2 <main> /home/mlauter/profiling/sample.php:28
-#   # - - -
+#   # trace_id = 1.0/1
+#
 #   0 sleep <internal>:-1
 #   1 aaa /home/mlauter/profiling/sample.php:5
 #   2 bbb /home/mlauter/profiling/sample.php:10
 #   3 ccc /home/mlauter/profiling/sample.php:15
 #   4 <main> /home/mlauter/profiling/sample.php:22
-#   # - - -
+#   # trace_id = 2.0/1
+#
 #   ...
+#
+# A trace larger than phpspy's -b is written as several chunks, each ending in
+# its own `# trace_id = <id>.<k>/<n>` record. In -P mode chunks of different
+# traces may be interleaved in the stream; they are reassembled here by id.
 #
 # Example Output:
 #   <main>;ccc;bbb;aaa 1
@@ -58,9 +65,43 @@ usage() if $help;
 
 # internals
 my %stacks;
-my @frames;
+my @pending;      # funcs of the current, not-yet-terminated chunk
+my %open;         # trace id => [ funcs accumulated so far ]
+my %expect;       # trace id => next expected chunk index
+my %bad;          # trace id => 1 once warned
+my $seen_marker = 0;
 
 while (defined(my $line = <>)) {
+    chomp $line;
+
+    # must be tested before the generic record filter below, which a marker
+    # would otherwise match
+    if ($line =~ m{^# trace_id = (\d+)\.(\d+)/(\d+)$}) {
+        my ($id, $k, $m) = ($1, $2, $3);
+        $seen_marker = 1;
+        my $want = exists $expect{$id} ? $expect{$id} : 0;
+        if ($k != $want) {
+            warn "stackcollapse-phpspy: trace $id: expected chunk $want, got $k; discarding\n"
+                unless $bad{$id};
+            $bad{$id} = 1;
+            delete $open{$id};
+            delete $expect{$id};
+            @pending = ();
+            delete $bad{$id} if $k == $m - 1;
+            next;
+        }
+        push @{$open{$id}}, @pending;
+        @pending = ();
+        $expect{$id} = $k + 1;
+        if ($k == $m - 1) {
+            $stacks{join(';', reverse @{$open{$id}})} += 1 if @{$open{$id}};
+            delete $open{$id};
+            delete $expect{$id};
+            delete $bad{$id};
+        }
+        next;
+    }
+
     next unless $line =~ /^(?:#|\d+) \S/;
 
     my ($depth, $func) = (split ' ', $line)[0,1];
@@ -75,14 +116,17 @@ while (defined(my $line = <>)) {
     # turn it back into a string
     $func = encode("utf-8", $func);
 
-    if ($depth ne '#' && $depth == 0) {
-        $stacks{join(';', reverse @frames)} += 1 if @frames;
-        @frames = ();
+    # legacy (pre-trace_id) input: flush on each depth-0 frame
+    if (!$seen_marker && $depth ne '#' && $depth == 0) {
+        $stacks{join(';', reverse @pending)} += 1 if @pending;
+        @pending = ();
     }
 
-    push @frames, $func if $line =~ /^\d/;
+    push @pending, $func if $line =~ /^\d/;
 }
-$stacks{join(';', reverse @frames)} += 1 if @frames;
+# legacy input only: flush the tail. With markers, @pending and every
+# incomplete %open entry are partial stacks and are discarded.
+$stacks{join(';', reverse @pending)} += 1 if @pending && !$seen_marker;
 
 while ( my ($k, $v) = each %stacks ) {
     print "$k $v\n";
