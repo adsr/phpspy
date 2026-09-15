@@ -124,17 +124,18 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
                 if (opt_filter_negate == 0 && rv != 0) return PHPSPY_ERR_SKIPPED;
                 if (opt_filter_negate != 0 && rv == 0) return PHPSPY_ERR_SKIPPED;
             }
+            /* stop appending at the first record that does not fit */
             do {
                 if (opt_verbose_fields_ts) {
                     gettimeofday(&tv, NULL);
-                    try_break(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 1, "# trace_ts = %f", (double)(tv.tv_sec + tv.tv_usec / 1000000.0)));
-                    try_break(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
+                    if ((rv = event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 1, "# trace_ts = %f", (double)(tv.tv_sec + tv.tv_usec / 1000000.0))) != 0) break;
+                    if ((rv = event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim)) != 0) break;
                 }
                 if (opt_verbose_fields_pid) {
-                    try_break(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 1, "# pid = %d", context->target.pid));
-                    try_break(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
+                    if ((rv = event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 1, "# pid = %d", context->target.pid)) != 0) break;
+                    if ((rv = event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim)) != 0) break;
                 }
-                try_break(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_trace_delim));
+                rv = event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_trace_delim);
             } while (0);
             try(rv, event_handler_fout_write(udata));
             break;
