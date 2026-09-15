@@ -103,12 +103,15 @@ All with no changes to your application and minimal overhead.
           --addr-sapi-globals=<hex>      Set address of sapi_globals in hex
                                            (default: 0; 0=find dynamically)
       -1, --single-line                  Output in single-line mode
-      -b, --buffer-size=<size>           Set output buffer size to `size`.
-                                           Note: In `-P` mode, setting this
-                                           above PIPE_BUF (4096) may lead to
-                                           interlaced writes across threads
-                                           unless `-J m` is specified.
-                                           (default: 4096)
+      -b, --buffer-size=<size>           Set max bytes per write to `size`.
+                                           Traces larger than this are split into
+                                           chunks, each ending with a
+                                           `# trace_id = <id>.<k>/<n>` record.
+                                           Note: In `-P` mode, setting this above
+                                           PIPE_BUF (4096) may lead to interlaced
+                                           writes across threads unless
+                                           `--event-handler-opts m` is specified.
+                                           (min: 128; default: 4096)
       -f, --filter=<regex>               Filter output by POSIX regex
                                            (default: none)
       -F, --filter-negate=<regex>        Same as `-f` except negated
@@ -150,6 +153,22 @@ All with no changes to your application and minimal overhead.
                                            e.g., server.REQUEST_TIME
       -t, --top                          Show dynamic top-like output
 
+### Output format
+
+Each trace is a sequence of records separated by a newline (a tab with `-1`),
+followed by a blank line. Frame records are `<depth> <func> <file>:<line>`;
+metadata records start with `#`. Every trace ends with a
+`# trace_id = <id>.<k>/<n>` record: `<id>` is a per-process trace counter,
+`<k>` the 0-based index of this chunk and `<n>` the number of chunks the trace
+was split into. A trace larger than `-b` bytes is split at record boundaries
+into `<n>` chunks, each written with a single `writev(2)` so that it is atomic
+on a pipe; in `-P` mode chunks belonging to different traces may therefore be
+interleaved in the stream, and `./stackcollapse-phpspy.pl` (which reassembles
+by `trace_id`) must be used to collapse such output. A `# truncated = 1` record
+means the rest of the trace was dropped: a single record longer than `-b` minus
+64 bytes, `-1/--single-line` mode (where chunking is disabled), or a trace above
+the 4 MiB assembly cap.
+
 ### Example (variable peek)
 
     $ sudo ./phpspy -e 'i@/var/www/test/lib/test.php:12' -p $(pgrep -n httpd) | grep varpeek
@@ -167,7 +186,8 @@ All with no changes to your application and minimal overhead.
     2 run_test /home/adam/php-src/run-tests.php:1937
     3 run_all_tests /home/adam/php-src/run-tests.php:1215
     4 <main> /home/adam/php-src/run-tests.php:986
-    # - - - - -
+    # trace_id = 0.0/1
+
     ...
     ^C
     main_pgrep finished gracefully
@@ -190,7 +210,8 @@ All with no changes to your application and minimal overhead.
     12 Security_Rule_Engine::evaluateActionRules /foo/bar/lib/Security/Rule/Engine.php:116
     13 <main> /foo/bar/lib/bootstrap/api.php:49
     14 <main> /foo/bar/htdocs/v3/public.php:5
-    # - - - - -
+    # trace_id = 0.0/1
+
     ...
 
 ### Example (cli child)
@@ -198,21 +219,27 @@ All with no changes to your application and minimal overhead.
     $ ./phpspy -- php -r 'usleep(100000);'
     0 usleep <internal>:-1
     1 <main> <internal>:-1
+    # trace_id = 0.0/1
 
     0 usleep <internal>:-1
     1 <main> <internal>:-1
+    # trace_id = 1.0/1
 
     0 usleep <internal>:-1
     1 <main> <internal>:-1
+    # trace_id = 2.0/1
 
     0 usleep <internal>:-1
     1 <main> <internal>:-1
+    # trace_id = 3.0/1
 
     0 usleep <internal>:-1
     1 <main> <internal>:-1
+    # trace_id = 4.0/1
 
     0 usleep <internal>:-1
     1 <main> <internal>:-1
+    # trace_id = 5.0/1
 
     process_vm_readv: No such process
 
