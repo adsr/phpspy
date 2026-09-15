@@ -16,7 +16,7 @@ regex_t *opt_filter_re = NULL;
 int opt_filter_negate = 0;
 int opt_verbose_fields_pid = 0;
 int opt_verbose_fields_ts = 0;
-int opt_fout_buffer_size = 4096;
+int opt_fout_buffer_size = PIPE_BUF;
 char *opt_libname_awk_patt = "libphp[78]?";
 int opt_quiet = 0;
 int opt_peek_pdo = 0;
@@ -160,12 +160,15 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "      --addr-sapi-globals=<hex>      Set address of sapi_globals in hex\n");
     fprintf(fp, "                                       (default: %lu; 0=find dynamically)\n", opt_executor_globals_addr);
     fprintf(fp, "  -1, --single-line                  Output in single-line mode\n");
-    fprintf(fp, "  -b, --buffer-size=<size>           Set output buffer size to `size`.\n");
-    fprintf(fp, "                                       Note: In `-P` mode, setting this\n");
-    fprintf(fp, "                                       above PIPE_BUF (4096) may lead to\n");
-    fprintf(fp, "                                       interlaced writes across threads\n");
-    fprintf(fp, "                                       unless `-J m` is specified.\n");
-    fprintf(fp, "                                       (default: %d)\n", opt_fout_buffer_size);
+    fprintf(fp, "  -b, --buffer-size=<size>           Set max bytes per write to `size`.\n");
+    fprintf(fp, "                                       Traces larger than this are split into\n");
+    fprintf(fp, "                                       chunks, each ending with a\n");
+    fprintf(fp, "                                       `# trace_id = <id>.<k>/<n>` record.\n");
+    fprintf(fp, "                                       Note: In `-P` mode, setting this above\n");
+    fprintf(fp, "                                       PIPE_BUF (4096) may lead to interlaced\n");
+    fprintf(fp, "                                       writes across threads unless\n");
+    fprintf(fp, "                                       `--event-handler-opts m` is specified.\n");
+    fprintf(fp, "                                       (min: %d; default: %d)\n", PHPSPY_FOUT_MIN_BUFFER, opt_fout_buffer_size);
     fprintf(fp, "  -f, --filter=<regex>               Filter output by POSIX regex\n");
     fprintf(fp, "                                       (default: none)\n");
     fprintf(fp, "  -F, --filter-negate=<regex>        Same as `-f` except negated\n");
@@ -327,7 +330,7 @@ static void parse_opts(int argc, char **argv) {
             case PHPSPY_LONGOPT_ADDR_EXECUTOR_GLOBALS: opt_executor_globals_addr = strtoull(optarg, NULL, 16); break;
             case PHPSPY_LONGOPT_ADDR_SAPI_GLOBALS: opt_sapi_globals_addr = strtoull(optarg, NULL, 16); break;
             case '1': opt_frame_delim = '\t'; opt_trace_delim = '\n'; break;
-            case 'b': opt_fout_buffer_size = atoi_with_min_or_exit("-b", optarg, 1); break;
+            case 'b': opt_fout_buffer_size = atoi_with_min_or_exit("-b", optarg, PHPSPY_FOUT_MIN_BUFFER); break;
             case 'f':
             case 'F':
                 if (opt_filter_re) {
@@ -478,7 +481,7 @@ int main_pid(pid_t pid) {
         }
 
         /* maybe apply trace limit */
-        if (opt_trace_limit > 0 && rv == PHPSPY_OK) {
+        if (opt_trace_limit > 0 && PHPSPY_TRACE_COUNTED(rv)) {
             if (in_pgrep_mode) {
                 __atomic_add_fetch(&trace_count, 1, __ATOMIC_SEQ_CST);
             } else {

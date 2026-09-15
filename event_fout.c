@@ -2,21 +2,29 @@
 
 typedef struct event_handler_fout_udata_s {
     int fd;
-    char *buf;
-    char *cur;
-    size_t buf_size;
-    size_t rem;
+    char *buf;       /* assembled trace; always NUL-terminated at buf[used] */
+    size_t used;     /* payload length, not counting the NUL */
+    size_t alloc;    /* bytes allocated; always >= used + 1 */
+    int single_line; /* -1 mode; chunking is disabled */
+    int trunc;       /* this trace was truncated; reset at STACK_BEGIN */
+    int warned;      /* truncation already logged by this handler */
     int use_mutex;
 } event_handler_fout_udata_t;
 
-static int event_handler_fout_write(event_handler_fout_udata_t *udata);
-static int event_handler_fout_snprintf(char **s, size_t *n, size_t *ret_len, int repl_delim, const char *fmt, ...);
+static int event_handler_fout_flush(event_handler_fout_udata_t *udata);
+static size_t event_handler_fout_chunk_end(const char *buf, size_t used, size_t start, size_t cap, int *oversize);
+static int event_handler_fout_writev_all(int fd, struct iovec *iov, int iovcnt);
+static int event_handler_fout_reserve(event_handler_fout_udata_t *udata, size_t need, size_t limit);
+static void event_handler_fout_truncated(event_handler_fout_udata_t *udata);
+static void event_handler_fout_vrecord(event_handler_fout_udata_t *udata, size_t limit, int honor_trunc, const char *fmt, va_list vl);
+static void event_handler_fout_record(event_handler_fout_udata_t *udata, const char *fmt, ...);
+static void event_handler_fout_record_epi(event_handler_fout_udata_t *udata, const char *fmt, ...);
 static int event_handler_fout_open(int *fd);
 static pthread_mutex_t event_handler_fout_mutex = PTHREAD_MUTEX_INITIALIZER;
+static uint64_t event_handler_fout_trace_id = 0;
 
 int event_handler_fout(struct trace_context_s *context, int event_type) {
     int rv, fd;
-    size_t len;
     trace_frame *frame;
     trace_request *request;
     event_handler_fout_udata_t *udata;
@@ -26,32 +34,36 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
     if (!udata && event_type != PHPSPY_TRACE_EVENT_INIT) {
         return PHPSPY_ERR;
     }
-    len = 0;
     switch (event_type) {
         case PHPSPY_TRACE_EVENT_INIT:
             try(rv, event_handler_fout_open(&fd));
             udata = calloc(1, sizeof(event_handler_fout_udata_t));
             udata->fd = fd;
-            udata->buf_size = opt_fout_buffer_size + 1; /* + 1 for null char */
-            udata->buf = malloc(udata->buf_size);
-            udata->cur = udata->buf;
-            udata->rem = udata->buf_size;
+            udata->alloc = (size_t)opt_fout_buffer_size + 1; /* + 1 for null char */
+            udata->buf = malloc(udata->alloc);
+            if (!udata->buf) {
+                log_error("event_handler_fout: Failed to allocate %lu bytes\n", (unsigned long)udata->alloc);
+                close(fd);
+                free(udata);
+                return PHPSPY_ERR;
+            }
+            udata->used = 0;
+            udata->buf[0] = '\0';
+            udata->single_line = opt_trace_delim != opt_frame_delim ? 1 : 0;
             udata->use_mutex = context->event_handler_opts != NULL
                 && strchr(context->event_handler_opts, 'm') != NULL ? 1 : 0;
             context->event_udata = udata;
             break;
         case PHPSPY_TRACE_EVENT_STACK_BEGIN:
-            udata->cur = udata->buf;
-            udata->cur[0] = '\0';
-            udata->rem = udata->buf_size;
+            /* keep alloc; a per-thread high water mark avoids realloc churn */
+            udata->used = 0;
+            udata->buf[0] = '\0';
+            udata->trunc = 0;
             break;
         case PHPSPY_TRACE_EVENT_FRAME:
             frame = &context->event.frame;
-            try(rv, event_handler_fout_snprintf(
-                &udata->cur,
-                &udata->rem,
-                &len,
-                1,
+            event_handler_fout_record(
+                udata,
                 "%d %.*s%s%.*s %.*s:%d",
                 frame->depth,
                 (int)frame->loc.class_len, frame->loc.class,
@@ -59,63 +71,45 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
                 (int)frame->loc.func_len, frame->loc.func,
                 (int)frame->loc.file_len, frame->loc.file,
                 frame->loc.lineno
-            ));
-            try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
+            );
             break;
         case PHPSPY_TRACE_EVENT_VARPEEK:
-            try(rv, event_handler_fout_snprintf(
-                &udata->cur,
-                &udata->rem,
-                &len,
-                1,
+            event_handler_fout_record(
+                udata,
                 "# varpeek %s@%s = %.*s",
                 context->event.varpeek.var->name,
                 context->event.varpeek.entry->filename_lineno,
-                context->event.varpeek.zval_str_len,
+                (int)context->event.varpeek.zval_str_len,
                 context->event.varpeek.zval_str
-            ));
-            try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
+            );
             break;
         case PHPSPY_TRACE_EVENT_GLOPEEK:
-            try(rv, event_handler_fout_snprintf(
-                &udata->cur,
-                &udata->rem,
-                &len,
-                1,
+            event_handler_fout_record(
+                udata,
                 "# glopeek %s = %.*s",
                 context->event.glopeek.gentry->key,
-                context->event.glopeek.zval_str_len,
+                (int)context->event.glopeek.zval_str_len,
                 context->event.glopeek.zval_str
-            ));
-            try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
+            );
             break;
         case PHPSPY_TRACE_EVENT_REQUEST:
             request = &context->event.request;
-            try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 1, "# uri = %s", request->uri));
-            try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
-            try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 1, "# path = %s", request->path));
-            try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
-            try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 1, "# qstring = %s", request->qstring));
-            try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
-            try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 1, "# cookie = %s", request->cookie));
-            try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
-            try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 1, "# ts = %f", request->ts));
-            try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
+            event_handler_fout_record(udata, "# uri = %s", request->uri);
+            event_handler_fout_record(udata, "# path = %s", request->path);
+            event_handler_fout_record(udata, "# qstring = %s", request->qstring);
+            event_handler_fout_record(udata, "# cookie = %s", request->cookie);
+            event_handler_fout_record(udata, "# ts = %f", request->ts);
             break;
         case PHPSPY_TRACE_EVENT_MEM:
-            try(rv, event_handler_fout_snprintf(
-                &udata->cur,
-                &udata->rem,
-                &len,
-                1,
+            event_handler_fout_record(
+                udata,
                 "# mem %lu %lu",
                 (uint64_t)context->event.mem.size,
                 (uint64_t)context->event.mem.peak
-            ));
-            try(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
+            );
             break;
         case PHPSPY_TRACE_EVENT_STACK_END:
-            if (udata->cur == udata->buf) {
+            if (udata->used == 0) {
                 /* buffer is empty */
                 break;
             }
@@ -124,20 +118,18 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
                 if (opt_filter_negate == 0 && rv != 0) return PHPSPY_ERR_SKIPPED;
                 if (opt_filter_negate != 0 && rv == 0) return PHPSPY_ERR_SKIPPED;
             }
-            do {
-                if (opt_verbose_fields_ts) {
-                    gettimeofday(&tv, NULL);
-                    try_break(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 1, "# trace_ts = %f", (double)(tv.tv_sec + tv.tv_usec / 1000000.0)));
-                    try_break(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
-                }
-                if (opt_verbose_fields_pid) {
-                    try_break(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 1, "# pid = %d", context->target.pid));
-                    try_break(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_frame_delim));
-                }
-                try_break(rv, event_handler_fout_snprintf(&udata->cur, &udata->rem, &len, 0, "%c", opt_trace_delim));
-            } while (0);
-            try(rv, event_handler_fout_write(udata));
-            break;
+            if (opt_verbose_fields_ts) {
+                gettimeofday(&tv, NULL);
+                event_handler_fout_record_epi(udata, "# trace_ts = %f", (double)(tv.tv_sec + tv.tv_usec / 1000000.0));
+            }
+            if (opt_verbose_fields_pid) {
+                event_handler_fout_record_epi(udata, "# pid = %d", context->target.pid);
+            }
+            try(rv, event_handler_fout_flush(udata));
+            /* the trace was written, so a truncated sample still counts toward
+               `--limit` via PHPSPY_TRACE_COUNTED. A failed write returns plain
+               PHPSPY_ERR above and must not count. */
+            return udata->trunc ? PHPSPY_ERR_BUF_FULL : PHPSPY_OK;
         case PHPSPY_TRACE_EVENT_DEINIT:
             close(udata->fd);
             free(udata->buf);
@@ -147,27 +139,83 @@ int event_handler_fout(struct trace_context_s *context, int event_type) {
     return PHPSPY_OK;
 }
 
-static int event_handler_fout_write(event_handler_fout_udata_t *udata) {
-    int rv;
-    ssize_t write_len;
+/**
+ * Split the assembled trace into chunks of at most `opt_fout_buffer_size`
+ * bytes and write each with a single writev(2).
+ */
+static int event_handler_fout_flush(event_handler_fout_udata_t *udata) {
+    int rv, oversize, mlen;
+    unsigned int k, nchunks;
+    size_t cap, start, end, used;
+    uint64_t id;
+    char marker[PHPSPY_FOUT_CHUNK_RESERVE];
+    struct iovec iov[2];
 
-    rv = PHPSPY_OK;
-    write_len = (udata->cur - udata->buf);
+    cap = (size_t)opt_fout_buffer_size - (size_t)PHPSPY_FOUT_CHUNK_RESERVE;
+    used = udata->used;
+    start = 0;
+    nchunks = 0;
 
-    if (write_len < 1) {
-        /* nothing to write */
-        return rv;
+    /* pass 1: count chunks and settle truncation before the ids are taken */
+    while (start < used) {
+        end = event_handler_fout_chunk_end(udata->buf, used, start, cap, &oversize);
+        if (oversize) {
+            /* one record is longer than a chunk; cut it, keep it delimited */
+            udata->buf[end - 1] = opt_frame_delim;
+            event_handler_fout_truncated(udata);
+            nchunks += 1;
+            used = end;
+            break;
+        }
+        nchunks += 1;
+        start = end;
+        if (udata->single_line && start < used) {
+            /* a trace must stay on one line, so it cannot be chunked */
+            event_handler_fout_truncated(udata);
+            used = start;
+            break;
+        }
+    }
+    udata->buf[used] = '\0';
+    udata->used = used;
+    if (udata->trunc) {
+        event_handler_fout_record_epi(udata, "# truncated = 1");
+        used = udata->used;
     }
 
+    /* pass 2: write. The id is taken outside the lock, so ids may reach the
+       stream slightly out of order; the reader keys on them, not on order. */
+    id = __atomic_fetch_add(&event_handler_fout_trace_id, 1, __ATOMIC_RELAXED);
+    rv = PHPSPY_OK;
     if (udata->use_mutex) {
         pthread_mutex_lock(&event_handler_fout_mutex);
     }
-
-    if (write(udata->fd, udata->buf, write_len) != write_len) {
-        log_error("event_handler_fout: Write failed (%s)\n", errno != 0 ? strerror(errno) : "partial");
-        rv = PHPSPY_ERR;
+    start = 0;
+    for (k = 0; k < nchunks; k++) {
+        /* the last chunk also carries the record appended after pass 1 */
+        end = k + 1 == nchunks
+            ? used
+            : event_handler_fout_chunk_end(udata->buf, used, start, cap, &oversize);
+        mlen = snprintf(marker, sizeof(marker), "# trace_id = %llu.%u/%u%c",
+            (unsigned long long)id, k, nchunks, opt_frame_delim);
+        if (mlen < 0 || (size_t)mlen + 1 >= sizeof(marker)) {
+            log_error("event_handler_fout: Failed to format trace_id marker\n");
+            rv = PHPSPY_ERR;
+            break;
+        }
+        if (k + 1 == nchunks) {
+            marker[mlen++] = opt_trace_delim;
+        }
+        iov[0].iov_base = udata->buf + start;
+        iov[0].iov_len = end - start;
+        iov[1].iov_base = marker;
+        iov[1].iov_len = (size_t)mlen;
+        if (event_handler_fout_writev_all(udata->fd, iov, 2) != PHPSPY_OK) {
+            rv = PHPSPY_ERR;
+            break;
+        }
+        start = end;
     }
-
     if (udata->use_mutex) {
         pthread_mutex_unlock(&event_handler_fout_mutex);
     }
@@ -175,34 +223,167 @@ static int event_handler_fout_write(event_handler_fout_udata_t *udata) {
     return rv;
 }
 
-static int event_handler_fout_snprintf(char **s, size_t *n, size_t *ret_len, int repl_delim, const char *fmt, ...) {
-    int len, i;
-    va_list vl;
-    char *c;
+/**
+ * Return the end offset of the chunk starting at `start`. The buffer always
+ * ends with `opt_frame_delim`, so scanning back from the cap lands on a record
+ * boundary unless a single record is longer than `cap`.
+ */
+static size_t event_handler_fout_chunk_end(const char *buf, size_t used, size_t start, size_t cap, int *oversize) {
+    size_t end, i;
 
-    va_start(vl, fmt);
-    len = vsnprintf(*s, *n, fmt, vl);
-    va_end(vl);
-
-    if (len < 0 || (size_t)len >= *n) {
-        log_error("event_handler_fout_snprintf: Not enough space in buffer; truncating\n");
-        return PHPSPY_ERR | PHPSPY_ERR_BUF_FULL;
+    *oversize = 0;
+    end = start + cap < used ? start + cap : used;
+    if (end == used) {
+        return end;
     }
+    for (i = end; i > start; i--) {
+        if (buf[i - 1] == opt_frame_delim) {
+            return i;
+        }
+    }
+    *oversize = 1;
+    return start + cap;
+}
 
-    if (repl_delim) {
-        for (i = 0; i < len; i++) { /* TODO optimize */
-            c = *s + i;
-            if (*c == opt_trace_delim || *c == opt_frame_delim) {
-                *c = '?';
+static int event_handler_fout_writev_all(int fd, struct iovec *iov, int iovcnt) {
+    ssize_t n;
+
+    while (iovcnt > 0) {
+        n = writev(fd, iov, iovcnt);
+        if (n < 0) {
+            if (errno == EINTR) {
+                continue;
             }
+            log_error("event_handler_fout: Write failed (%s)\n", strerror(errno));
+            return PHPSPY_ERR;
+        }
+        while (iovcnt > 0 && (size_t)n >= iov->iov_len) {
+            n -= (ssize_t)iov->iov_len;
+            iov += 1;
+            iovcnt -= 1;
+        }
+        if (iovcnt > 0) {
+            iov->iov_base = (char *)iov->iov_base + n;
+            iov->iov_len -= (size_t)n;
         }
     }
 
-    *s += len;
-    *n -= len;
-    *ret_len = (size_t)len;
+    return PHPSPY_OK;
+}
+
+/**
+ * Ensure `need` bytes are available past `used`, growing the buffer up to a
+ * payload of `limit` bytes.
+ */
+static int event_handler_fout_reserve(event_handler_fout_udata_t *udata, size_t need, size_t limit) {
+    size_t alloc;
+    char *buf;
+
+    if (udata->used + need <= udata->alloc) {
+        return PHPSPY_OK;
+    }
+    if (udata->used + need > limit + 1) {
+        return PHPSPY_ERR_BUF_FULL;
+    }
+    alloc = udata->alloc;
+    while (alloc < udata->used + need) {
+        /* clamp before doubling so that `alloc` cannot overflow */
+        if (alloc > (limit + 1) / 2) {
+            alloc = limit + 1;
+            break;
+        }
+        alloc *= 2;
+    }
+    buf = realloc(udata->buf, alloc);
+    if (!buf) {
+        log_error("event_handler_fout: Failed to allocate %lu bytes\n", (unsigned long)alloc);
+        return PHPSPY_ERR;
+    }
+    udata->buf = buf;
+    udata->alloc = alloc;
 
     return PHPSPY_OK;
+}
+
+static void event_handler_fout_truncated(event_handler_fout_udata_t *udata) {
+    udata->trunc = 1;
+    if (!udata->warned) {
+        udata->warned = 1;
+        log_error(
+            "event_handler_fout: trace truncated (record exceeds -b payload, "
+            "single-line mode, or %u-byte trace cap); further truncations not reported\n",
+            PHPSPY_FOUT_MAX_TRACE
+        );
+    }
+}
+
+/**
+ * Append one record plus `opt_frame_delim` to the buffer. Body and delimiter
+ * are appended together so that the buffer always ends with a delimiter, which
+ * is what lets the chunker find record boundaries by scanning back.
+ */
+static void event_handler_fout_vrecord(event_handler_fout_udata_t *udata, size_t limit, int honor_trunc, const char *fmt, va_list vl) {
+    int len, i;
+    char *c;
+    va_list vl2;
+
+    if (honor_trunc && udata->trunc) {
+        /* never emit a later record after refusing an earlier one */
+        return;
+    }
+
+    va_copy(vl2, vl);
+    len = vsnprintf(udata->buf + udata->used, udata->alloc - udata->used, fmt, vl);
+    if (len < 0) {
+        udata->buf[udata->used] = '\0';
+        event_handler_fout_truncated(udata);
+        va_end(vl2);
+        return;
+    }
+    if ((size_t)len + 2 > udata->alloc - udata->used) {
+        /* + 2 for the delimiter and the null char */
+        if (event_handler_fout_reserve(udata, (size_t)len + 2, limit) != PHPSPY_OK) {
+            udata->buf[udata->used] = '\0';
+            event_handler_fout_truncated(udata);
+            va_end(vl2);
+            return;
+        }
+        len = vsnprintf(udata->buf + udata->used, udata->alloc - udata->used, fmt, vl2);
+        if (len < 0 || (size_t)len + 2 > udata->alloc - udata->used) {
+            udata->buf[udata->used] = '\0';
+            event_handler_fout_truncated(udata);
+            va_end(vl2);
+            return;
+        }
+    }
+    va_end(vl2);
+
+    for (i = 0; i < len; i++) { /* TODO optimize */
+        c = udata->buf + udata->used + i;
+        if (*c == opt_trace_delim || *c == opt_frame_delim) {
+            *c = '?';
+        }
+    }
+
+    udata->buf[udata->used + (size_t)len] = opt_frame_delim;
+    udata->used += (size_t)len + 1;
+    udata->buf[udata->used] = '\0';
+}
+
+static void event_handler_fout_record(event_handler_fout_udata_t *udata, const char *fmt, ...) {
+    va_list vl;
+
+    va_start(vl, fmt);
+    event_handler_fout_vrecord(udata, PHPSPY_FOUT_MAX_TRACE - PHPSPY_FOUT_EPILOGUE_RESERVE, 1, fmt, vl);
+    va_end(vl);
+}
+
+static void event_handler_fout_record_epi(event_handler_fout_udata_t *udata, const char *fmt, ...) {
+    va_list vl;
+
+    va_start(vl, fmt);
+    event_handler_fout_vrecord(udata, PHPSPY_FOUT_MAX_TRACE, 0, fmt, vl);
+    va_end(vl);
 }
 
 static int event_handler_fout_open(int *fd) {
