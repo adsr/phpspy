@@ -29,7 +29,12 @@ test_invoke() {
     declare -gA test_expected test_not_expected
     declare -ga test_phpspy_opts
 
-    local cmd_prefix=() actual exit_code testname
+    local actual exit_code testname
+
+    # global so that a `test_fn` test, which the harness does not wrap itself,
+    # can apply the same sudo/timeout prefix
+    declare -ga test_cmd_prefix
+    test_cmd_prefix=()
 
     if [ -n "$test_need_ptrace" ]; then
         local ptrace_scope
@@ -39,12 +44,12 @@ test_invoke() {
         elif getcap "$PHPSPY" 2>/dev/null | grep -q cap_sys_ptrace; then
             :
         elif sudo -n true &>/dev/null; then
-            cmd_prefix+=(sudo -n)
+            test_cmd_prefix+=(sudo -n)
         else
             test_skip='need ptrace'
         fi
     fi
-    [ -n "$test_use_timeout_s" ] && cmd_prefix+=(timeout "$test_use_timeout_s")
+    [ -n "$test_use_timeout_s" ] && test_cmd_prefix+=(timeout "$test_use_timeout_s")
 
     if [ -n "$test_skip" ]; then
         echo -e "  \x1b[33mSKIP\x1b[0m $test_skip"
@@ -52,7 +57,7 @@ test_invoke() {
         "$test_fn"
     else
         actual=$(
-            "${cmd_prefix[@]}" "$PHPSPY" \
+            "${test_cmd_prefix[@]}" "$PHPSPY" \
             --limit=1 \
             --child-stdout=/dev/null \
             --child-stderr=/dev/null \
@@ -77,7 +82,7 @@ test_invoke() {
         done
     fi
 
-    unset test_phpspy_opts test_expected test_not_expected test_need_ptrace test_use_timeout_s test_skip test_non_zero_ok test_fn
+    unset test_cmd_prefix test_phpspy_opts test_expected test_not_expected test_need_ptrace test_use_timeout_s test_skip test_non_zero_ok test_fn
 }
 
 test_init

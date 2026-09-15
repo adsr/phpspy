@@ -55,6 +55,20 @@
 #define PHPSPY_HASH_FLAG_PACKED (1 << 2)
 #define PHPSPY_MAX_STACK_WALK 1024
 
+/* event_fout: max assembled payload bytes for one trace */
+#define PHPSPY_FOUT_MAX_TRACE (4u * 1024u * 1024u)
+/* bytes kept free under the cap for the `-d` fields and the truncated record */
+#define PHPSPY_FOUT_EPILOGUE_RESERVE 256
+/* per-chunk bytes reserved for the trace_id marker, delimiters and the
+   truncated record: `# trace_id = ` (13) + 20 digits + `.` + 5 + `/` + 5 = 45,
+   + frame delim + trace delim = 47; `# truncated = 1` (15) + frame delim = 16 */
+#define PHPSPY_FOUT_CHUNK_RESERVE 64
+/* -b minimum; leaves at least PHPSPY_FOUT_CHUNK_RESERVE bytes of payload */
+#define PHPSPY_FOUT_MIN_BUFFER 128
+
+/* a truncated trace is still written, so it counts toward `--limit` */
+#define PHPSPY_TRACE_COUNTED(__rv) ((__rv) == PHPSPY_OK || ((__rv) & PHPSPY_ERR_BUF_FULL) != 0)
+
 enum {
     PHPSPY_OK           = 0,
     PHPSPY_ERR          = 1 << 0,
