@@ -27,6 +27,39 @@ test_expected[pdo_args_execute_array]="^# varpeek #pdo_args@PDOStatement::execut
 test_invoke
 rm -f "$php_file"
 
+# Long query
+peek_length=5000
+peek_max_length=6000
+peek_buffer_size=8192
+php_src="<?php
+\$long_sql_part = str_repeat('x', $peek_length);
+\$pdo = new PDO('sqlite::memory:');
+\$pdo->sqliteCreateFunction('slow', function (\$x) { sleep(1); return \$x; }, 1);
+\$stmt = \$pdo->prepare(\"SELECT slow(:value) AS r WHERE '\$long_sql_part' <> ''\");
+\$stmt->execute([':value' => 'ok']);"
+php_file=$(mktemp)
+echo "$php_src" >"$php_file"
+test_phpspy_opts=(--limit=1 --buffer-size "$peek_buffer_size" --peek-max-len "$peek_max_length" --peek-pdo -- "${PHP[@]}" "$php_file")
+declare -A test_expected
+test_expected[pdo_sql_long]="^# varpeek #pdo_sql@PDOStatement::execute = SELECT slow\(:value\) AS r WHERE 'x{$peek_length}' <> ''$"
+test_invoke
+rm -f "$php_file"
+
+# Long execute argument
+php_src="<?php
+\$long_value = str_repeat('x', $peek_length);
+\$pdo = new PDO('sqlite::memory:');
+\$pdo->sqliteCreateFunction('slow', function (\$x) { sleep(1); return \$x; }, 1);
+\$stmt = \$pdo->prepare('SELECT slow(:value) AS r');
+\$stmt->execute([':value' => \$long_value]);"
+php_file=$(mktemp)
+echo "$php_src" >"$php_file"
+test_phpspy_opts=(--limit=1 --buffer-size "$peek_buffer_size" --peek-max-len "$peek_max_length" --peek-pdo -- "${PHP[@]}" "$php_file")
+declare -A test_expected
+test_expected[pdo_args_long]="^# varpeek #pdo_args@PDOStatement::execute = :value=x{$peek_length}$"
+test_invoke
+rm -f "$php_file"
+
 # PDOStatement::execute with packed (positional) array
 read -r -d '' php_src <<'EOD'
 <?php

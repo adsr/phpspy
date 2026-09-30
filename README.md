@@ -140,6 +140,9 @@ All with no changes to your application and minimal overhead.
                                            <varname>@<path>:<lineno>
                                            <varname>@<path>:<start>-<end>
                                            e.g., xyz@/path/to.php:10-20
+          --peek-max-len=<len>           Limit each peeked value to `len` chars
+                                           (increase `-b` for longer output)
+                                           (default: 255)
       -D, --peek-pdo                     Peek at the SQL and arguments of PDO
                                            queries. Emits varpeek events.
       -g, --peek-global=<glospec>        Peek at the contents of a global var

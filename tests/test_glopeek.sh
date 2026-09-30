@@ -32,3 +32,16 @@ declare -A test_expected
 test_expected[glopeek1       ]="^# glopeek server.Ez = 1"
 test_expected[glopeek2       ]="^# glopeek server.FY = 2"
 test_invoke
+
+peek_length=5000
+peek_buffer_size=8192
+php_src="<?php
+\$GLOBALS['long_value'] = str_repeat('x', $peek_length);
+sleep(1);"
+php_file=$(mktemp)
+echo "$php_src" >"$php_file"
+test_phpspy_opts=(--limit=0 --buffer-size "$peek_buffer_size" --peek-max-len "$peek_length" --peek-global "globals.long_value" -- "${PHP[@]}" "$php_file")
+declare -A test_expected
+test_expected[glopeek_long]="^# glopeek globals.long_value = x{$peek_length}$"
+test_invoke
+rm -f "$php_file"

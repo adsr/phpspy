@@ -50,6 +50,7 @@
 #ifndef PHPSPY_STR_SIZE
 #define PHPSPY_STR_SIZE 256
 #endif
+#define PHPSPY_DEFAULT_PEEK_MAX_LEN (PHPSPY_STR_SIZE - 1)
 #define PHPSPY_MAX_ARRAY_BUCKETS 128
 #define PHPSPY_MAX_ARRAY_TABLE_SIZE 512
 #define PHPSPY_HASH_FLAG_PACKED (1 << 2)
@@ -96,6 +97,7 @@ enum {
     PHPSPY_LONGOPT_LIBNAME_AWK_PATT,
     PHPSPY_LONGOPT_EVENT_HANDLER,
     PHPSPY_LONGOPT_EVENT_HANDLER_OPTS,
+    PHPSPY_LONGOPT_PEEK_MAX_LEN,
 };
 
 typedef struct varpeek_var_s {
@@ -177,8 +179,9 @@ typedef struct trace_context_s {
     void *event_udata;
     int (*event_handler)(struct trace_context_s *context, int event_type);
     const char *event_handler_opts;
-    char buf[PHPSPY_STR_SIZE];
-    size_t buf_len;
+    char *peek_buf;
+    size_t peek_buf_size;
+    size_t peek_buf_len;
     UT_array *stack_ptrs;
 } trace_context;
 

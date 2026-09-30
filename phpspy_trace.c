@@ -292,12 +292,12 @@ static int trace_globals(trace_context *context) {
 
         /* Print the element within the array */
 
-        rv = sprint_zarray_val(context, garray, gentry->varname, context->buf, sizeof(context->buf), &context->buf_len);
+        rv = sprint_zarray_val(context, garray, gentry->varname, context->peek_buf, context->peek_buf_size, &context->peek_buf_len);
 
         if (rv == PHPSPY_OK) {
             context->event.glopeek.gentry = gentry;
-            context->event.glopeek.zval_str = context->buf;
-            context->event.glopeek.zval_str_len = context->buf_len;
+            context->event.glopeek.zval_str = context->peek_buf;
+            context->event.glopeek.zval_str_len = context->peek_buf_len;
             try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_GLOPEEK));
         }
     }
@@ -319,7 +319,7 @@ static int trace_globals(trace_context *context) {
  */
 static int trace_locals(trace_context *context, zend_op *zop, zend_execute_data *remote_execute_data, zend_op_array *op_array, char *file, int file_len) {
     int rv, i, num_vars_found, num_vars_peeking;
-    char tmp[PHPSPY_STR_SIZE];
+    char var_name[PHPSPY_STR_SIZE];
     size_t tmp_len;
     zend_string *zstrp;
     varpeek_entry *entry;
@@ -336,16 +336,16 @@ static int trace_locals(trace_context *context, zend_op *zop, zend_execute_data 
 
     for (i = 0; i < op_array->last_var; i++) {
         try_copy_proc_mem("var", op_array->vars + i, &zstrp, sizeof(zstrp));
-        try(rv, sprint_zstring(context, "var", zstrp, tmp, sizeof(tmp), &tmp_len));
-        HASH_FIND(hh, entry->varmap, tmp, tmp_len, var);
+        try(rv, sprint_zstring(context, "var", zstrp, var_name, sizeof(var_name), &tmp_len));
+        HASH_FIND(hh, entry->varmap, var_name, tmp_len, var);
         if (!var) continue;
         num_vars_found += 1;
         /* See ZEND_CALL_VAR_NUM macro in php-src */
         try_copy_proc_mem("zval", ((zval*)(remote_execute_data)) + ((int)(5 + i)), &zv, sizeof(zv));
-        try(rv, sprint_zval(context, &zv, tmp, sizeof(tmp), &tmp_len));
+        try(rv, sprint_zval(context, &zv, context->peek_buf, context->peek_buf_size, &tmp_len));
         context->event.varpeek.entry = entry;
         context->event.varpeek.var = var;
-        context->event.varpeek.zval_str = tmp;
+        context->event.varpeek.zval_str = context->peek_buf;
         context->event.varpeek.zval_str_len = tmp_len;
         try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_VARPEEK));
         if (num_vars_found >= num_vars_peeking) break;
@@ -366,7 +366,8 @@ static int trace_pdo(trace_context *context, zend_execute_data *remote_execute_d
     zend_object lobj;
     pdo_stmt_t lstmt;
     zval first_arg;
-    char buf[PHPSPY_STR_SIZE];
+    char *buf = context->peek_buf;
+    size_t buf_size = context->peek_buf_size;
     size_t buf_len;
     uint8_t this_type;
 
@@ -401,7 +402,7 @@ static int trace_pdo(trace_context *context, zend_execute_data *remote_execute_d
 
         if (lobj.properties_table[0].u1.v.type == PHPSPY_ZVAL_TYPE_STRING) {
             try(rv, sprint_zstring(context, "pdo_qs",
-                lobj.properties_table[0].value.str, buf, sizeof(buf), &buf_len));
+                lobj.properties_table[0].value.str, buf, buf_size, &buf_len));
             context->event.varpeek.entry = &entry;
             context->event.varpeek.var = &var_sql;
             context->event.varpeek.zval_str = buf;
@@ -414,7 +415,7 @@ static int trace_pdo(trace_context *context, zend_execute_data *remote_execute_d
             try_copy_proc_mem("pdo_arg0",
                 ((zval*)remote_execute_data) + 5, &first_arg, sizeof(first_arg));
             if (first_arg.u1.v.type == PHPSPY_ZVAL_TYPE_ARRAY) {
-                rv = sprint_zarray(context, first_arg.value.arr, buf, sizeof(buf), &buf_len);
+                rv = sprint_zarray(context, first_arg.value.arr, buf, buf_size, &buf_len);
                 if (rv == PHPSPY_OK && buf_len > 0) {
                     context->event.varpeek.entry = &entry;
                     context->event.varpeek.var = &var_args;
@@ -428,7 +429,7 @@ static int trace_pdo(trace_context *context, zend_execute_data *remote_execute_d
             void *rstmt = (void*)((char*)robj - offsetof(pdo_stmt_t, std));
             try_copy_proc_mem("pdo_stmt", rstmt, &lstmt, sizeof(lstmt));
             if (lstmt.bound_params) {
-                rv = sprint_pdo_binds(context, lstmt.bound_params, buf, sizeof(buf), &buf_len);
+                rv = sprint_pdo_binds(context, lstmt.bound_params, buf, buf_size, &buf_len);
                 if (rv == PHPSPY_OK && buf_len > 0) {
                     context->event.varpeek.entry = &entry;
                     context->event.varpeek.var = &var_args;
@@ -445,7 +446,7 @@ static int trace_pdo(trace_context *context, zend_execute_data *remote_execute_d
             ((zval*)remote_execute_data) + 5, &first_arg, sizeof(first_arg));
         if (first_arg.u1.v.type == PHPSPY_ZVAL_TYPE_STRING) {
             try(rv, sprint_zstring(context, "pdo_sql",
-                first_arg.value.str, buf, sizeof(buf), &buf_len));
+                first_arg.value.str, buf, buf_size, &buf_len));
             context->event.varpeek.entry = &entry;
             context->event.varpeek.var = &var_sql;
             context->event.varpeek.zval_str = buf;

@@ -39,6 +39,7 @@ static char *opt_path_child_out = "phpspy.%d.out";
 static char *opt_path_child_err = "phpspy.%d.err";
 static char *opt_phpv = "auto";
 static int opt_pause = 0;
+static int opt_peek_max_len = PHPSPY_DEFAULT_PEEK_MAX_LEN;
 static int (*opt_event_handler)(struct trace_context_s *context, int event_type) = event_handler_fout;
 static char *opt_event_handler_opts = NULL;
 static int opt_continue_on_error = 0;
@@ -197,6 +198,9 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "                                       <varname>@<path>:<lineno>\n");
     fprintf(fp, "                                       <varname>@<path>:<start>-<end>\n");
     fprintf(fp, "                                       e.g., xyz@/path/to.php:10-20\n");
+    fprintf(fp, "      --peek-max-len=<len>           Limit each peeked value to `len` chars\n");
+    fprintf(fp, "                                       (increase `-b` for longer output)\n");
+    fprintf(fp, "                                       (default: %d)\n", opt_peek_max_len);
     fprintf(fp, "  -D, --peek-pdo                     Peek at the SQL and arguments of PDO\n");
     fprintf(fp, "                                       queries. Emits varpeek events.\n");
     fprintf(fp, "  -g, --peek-global=<glospec>        Peek at the contents of a global var\n");
@@ -275,6 +279,7 @@ static void parse_opts(int argc, char **argv) {
         { "version",               no_argument,       NULL, 'v' },
         { "pause-process",         no_argument,       NULL, 'S' },
         { "peek-var",              required_argument, NULL, 'e' },
+        { "peek-max-len",          required_argument, NULL, PHPSPY_LONGOPT_PEEK_MAX_LEN },
         { "peek-global",           required_argument, NULL, 'g' },
         { "peek-pdo",              no_argument,       NULL, 'D' },
         { "top",                   no_argument,       NULL, 't' },
@@ -385,6 +390,7 @@ static void parse_opts(int argc, char **argv) {
                 exit(0);
             case 'S': opt_pause = 1; break;
             case 'e': varpeek_add(optarg); break;
+            case PHPSPY_LONGOPT_PEEK_MAX_LEN: opt_peek_max_len = atoi_with_min_or_exit("--peek-max-len", optarg, 1); break;
             case 'g': glopeek_add(optarg); break;
             case 't': opt_top_mode = 1; break;
             case PHPSPY_LONGOPT_LIBNAME_AWK_PATT: opt_libname_awk_patt = optarg; break;
@@ -447,6 +453,15 @@ int main_pid(pid_t pid) {
     }
     #endif
 
+    context.peek_buf_size = (size_t)opt_peek_max_len + 1;
+    context.peek_buf = malloc(context.peek_buf_size);
+    if (!context.peek_buf) {
+        log_perror("main_pid: malloc peek buffer");
+        if (context.stack_ptrs) utarray_free(context.stack_ptrs);
+        context.event_handler(&context, PHPSPY_TRACE_EVENT_DEINIT);
+        return PHPSPY_ERR;
+    }
+
     /* calc stop_time */
     stop_time = NULL;
     if (in_pgrep_mode) {
@@ -503,6 +518,7 @@ int main_pid(pid_t pid) {
 
     if (context.stack_ptrs) utarray_free(context.stack_ptrs);
     context.event_handler(&context, PHPSPY_TRACE_EVENT_DEINIT);
+    free(context.peek_buf);
 
     /* in pgrep mode, trigger done condition if we went over the trace limit.
        it is ok for multiple threads to call this. */
