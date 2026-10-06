@@ -25,10 +25,12 @@
 #include <sys/uio.h>
 #include <sys/wait.h>
 #include <sys/syscall.h>
+#include <inttypes.h>
 #include <time.h>
 #include <unistd.h>
 #include <termbox2.h>
 #include <regex.h>
+#include <assert.h>
 #include <structs/structs.h>
 
 #ifndef gettid
@@ -54,13 +56,14 @@
 #define PHPSPY_MAX_ARRAY_TABLE_SIZE 512
 #define PHPSPY_HASH_FLAG_PACKED (1 << 2)
 #define PHPSPY_MAX_STACK_WALK 1024
+#define PHPSPY_FOUT_MAX_BUFFER (4u * 1024u * 1024u)
 
 enum {
-    PHPSPY_OK           = 0,
-    PHPSPY_ERR          = 1 << 0,
-    PHPSPY_ERR_PID_DEAD = 1 << 1,
-    PHPSPY_ERR_BUF_FULL = 1 << 2,
-    PHPSPY_ERR_SKIPPED  = 1 << 3,
+    PHPSPY_OK            = 0,
+    PHPSPY_ERR           = 1 << 0,
+    PHPSPY_ERR_PID_DEAD  = 1 << 1,
+    PHPSPY_ERR_TRUNCATED = 1 << 2,
+    PHPSPY_ERR_SKIPPED   = 1 << 3,
 };
 
 enum {
@@ -212,7 +215,7 @@ extern long opt_time_limit_ms;
 extern char *opt_libname_awk_patt;
 extern int opt_peek_pdo;
 
-extern int main_pgrep();
+extern int main_pgrep(void);
 extern int main_pid(pid_t pid);
 extern int main_top(int argc, char **argv);
 
@@ -220,7 +223,7 @@ extern void usage(FILE *fp, int exit_code);
 extern int get_symbol_addr(addr_memo *memo, pid_t pid, const char *symbol, uint64_t *raddr);
 extern int event_handler_fout(struct trace_context_s *context, int event_type);
 extern int event_handler_callgrind(struct trace_context_s *context, int event_type);
-extern void write_done_pipe();
+extern void write_done_pipe(void);
 extern void log_error(const char *fmt, ...);
 extern void log_perror(const char *s);
 extern int shell_escape(const char *arg, char *buf, size_t buf_size, const char *what);

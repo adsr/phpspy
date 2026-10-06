@@ -16,7 +16,7 @@ regex_t *opt_filter_re = NULL;
 int opt_filter_negate = 0;
 int opt_verbose_fields_pid = 0;
 int opt_verbose_fields_ts = 0;
-int opt_fout_buffer_size = 4096;
+int opt_fout_buffer_size = PIPE_BUF;
 char *opt_libname_awk_patt = "libphp[78]?";
 int opt_quiet = 0;
 int opt_peek_pdo = 0;
@@ -51,7 +51,7 @@ static uint64_t trace_count = 0;
 
 static void parse_opts(int argc, char **argv);
 static int main_fork(int argc, char **argv);
-static void cleanup();
+static void cleanup(void);
 static int pause_pid(pid_t pid);
 static int unpause_pid(pid_t pid);
 static void redirect_child_stdio(int proc_fd, char *opt_path);
@@ -149,22 +149,30 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "  -m, --memory-usage                 Capture peak and current memory usage\n");
     fprintf(fp, "                                       with each trace (requires target PHP\n");
     fprintf(fp, "                                       process to have debug symbols)\n");
-    fprintf(fp, "  -o, --output=<path>                Write phpspy output to `path`\n");
+    fprintf(fp, "  -o, --output=<path>                Write phpspy output to `path`. If a\n");
+    fprintf(fp, "                                       `%%d` is present, replace it with a\n");
+    fprintf(fp, "                                       thread id. Useful in `-P` mode.\n");
     fprintf(fp, "                                       (default: %s; -=stdout)\n", opt_path_output);
-    fprintf(fp, "  -O, --child-stdout=<path>          Write child stdout to `path`\n");
-    fprintf(fp, "                                       (default: %s)\n", opt_path_child_out);
+    fprintf(fp, "  -O, --child-stdout=<path>          Write child stdout to `path`.\n");
+    fprintf(fp, "                                       Replace `%%d` with child pid.\n");
+    fprintf(fp, "                                       (default: %s; -=stdout)\n", opt_path_child_out);
     fprintf(fp, "  -E, --child-stderr=<path>          Write child stderr to `path`\n");
-    fprintf(fp, "                                       (default: %s)\n", opt_path_child_err);
+    fprintf(fp, "                                       Replace `%%d` with child pid.\n");
+    fprintf(fp, "                                       (default: %s; -=stderr)\n", opt_path_child_err);
     fprintf(fp, "      --addr-executor-globals=<hex>  Set address of executor_globals in hex\n");
     fprintf(fp, "                                       (default: %lu; 0=find dynamically)\n", opt_sapi_globals_addr);
     fprintf(fp, "      --addr-sapi-globals=<hex>      Set address of sapi_globals in hex\n");
     fprintf(fp, "                                       (default: %lu; 0=find dynamically)\n", opt_executor_globals_addr);
     fprintf(fp, "  -1, --single-line                  Output in single-line mode\n");
-    fprintf(fp, "  -b, --buffer-size=<size>           Set output buffer size to `size`.\n");
-    fprintf(fp, "                                       Note: In `-P` mode, setting this\n");
-    fprintf(fp, "                                       above PIPE_BUF (4096) may lead to\n");
-    fprintf(fp, "                                       interlaced writes across threads\n");
-    fprintf(fp, "                                       unless `-J m` is specified.\n");
+    fprintf(fp, "  -b, --buffer-size=<size>           Set max bytes per write to `size`.\n");
+    fprintf(fp, "                                       Traces larger than this are split\n");
+    fprintf(fp, "                                       into chunks, each ending with a\n");
+    fprintf(fp, "                                       `# trace_id = <id>.<chunk>` record.\n");
+    fprintf(fp, "                                       In `-P` mode, if writing to stdout,\n");
+    fprintf(fp, "                                       setting this above `PIPE_BUF` (4096)\n");
+    fprintf(fp, "                                       may lead to interleaved writes,\n");
+    fprintf(fp, "                                       unless `--event-handler-opts m` is\n");
+    fprintf(fp, "                                       specified.\n");
     fprintf(fp, "                                       (default: %d)\n", opt_fout_buffer_size);
     fprintf(fp, "  -f, --filter=<regex>               Filter output by POSIX regex\n");
     fprintf(fp, "                                       (default: none)\n");
@@ -477,8 +485,8 @@ int main_pid(pid_t pid) {
             break;
         }
 
-        /* maybe apply trace limit */
-        if (opt_trace_limit > 0 && rv == PHPSPY_OK) {
+        /* maybe apply trace limit. truncated records count. */
+        if (opt_trace_limit > 0 && (rv == PHPSPY_OK || rv == PHPSPY_ERR_TRUNCATED)) {
             if (in_pgrep_mode) {
                 __atomic_add_fetch(&trace_count, 1, __ATOMIC_SEQ_CST);
             } else {
@@ -561,7 +569,7 @@ static int main_fork(int argc, char **argv) {
     return rv;
 }
 
-static void cleanup() {
+static void cleanup(void) {
     varpeek_entry *entry, *entry_tmp;
     varpeek_var *var, *var_tmp;
     glopeek_entry *gentry, *gentry_tmp;
@@ -626,6 +634,7 @@ static void redirect_child_stdio(int proc_fd, char *opt_path) {
             exit(1);
         }
     }
+    /* TODO open once under mutex and dup for other threads */
     if ((redir_file = fopen(redir_path, "w")) == NULL) {
         log_error(
             "redirect_child_stdio: Failed to open '%s' for child %s (%s)\n",

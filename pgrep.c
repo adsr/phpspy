@@ -1,12 +1,12 @@
 #include "phpspy.h"
 
 static int wait_for_turn(char producer_or_consumer);
-static void pgrep_for_pids();
+static void pgrep_for_pids(void);
 static void *run_work_thread(void *arg);
 static int is_already_attached(int pid);
-static void init_work_threads();
-static void deinit_work_threads();
-static int block_all_signals();
+static void init_work_threads(void);
+static void deinit_work_threads(void);
+static int block_all_signals(void);
 static void handle_signal(int signum);
 static void *run_signal_thread(void *arg);
 
@@ -20,7 +20,7 @@ static pthread_cond_t can_produce = PTHREAD_COND_INITIALIZER;
 static pthread_cond_t can_consume = PTHREAD_COND_INITIALIZER;
 static int done_pipe[2] = { -1, -1 };
 
-int main_pgrep() {
+int main_pgrep(void) {
     long i;
 
     if (opt_num_workers < 1) {
@@ -78,7 +78,7 @@ static int wait_for_turn(char producer_or_consumer) {
     return 0;
 }
 
-static void pgrep_for_pids() {
+static void pgrep_for_pids(void) {
     FILE *pcmd;
     char *pgrep_cmd;
     char line[64];
@@ -145,7 +145,7 @@ static int is_already_attached(int pid) {
     return 0;
 }
 
-static void init_work_threads() {
+static void init_work_threads(void) {
     avail_pids = calloc(opt_num_workers, sizeof(int));
     attached_pids = calloc(opt_num_workers, sizeof(int));
     work_threads = calloc(opt_num_workers, sizeof(pthread_t));
@@ -159,7 +159,7 @@ static void init_work_threads() {
     pthread_cond_init(&can_consume, NULL);
 }
 
-static void deinit_work_threads() {
+static void deinit_work_threads(void) {
     free(avail_pids);
     free(attached_pids);
     free(work_threads);
@@ -168,7 +168,7 @@ static void deinit_work_threads() {
     pthread_cond_destroy(&can_consume);
 }
 
-static int block_all_signals() {
+static int block_all_signals(void) {
     int rv;
     sigset_t set;
     try(rv, sigfillset(&set));
@@ -176,7 +176,7 @@ static int block_all_signals() {
     return 0;
 }
 
-void write_done_pipe() {
+void write_done_pipe(void) {
     int rv, ignore;
     if (done_pipe[1] >= 0) {
         ignore = 1;
