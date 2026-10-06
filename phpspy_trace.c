@@ -820,7 +820,7 @@ static int sprint_pdo_bind(trace_context *context, zval *lzval, char *buf, size_
 #define PHPSPY_TRACE_ONCE
 static int should_stop_trace(int rv) {
     return (rv & PHPSPY_ERR_PID_DEAD) != 0
-        || (rv & PHPSPY_ERR_BUF_FULL) != 0
+        || (rv & PHPSPY_ERR_TRUNCATED) != 0
         || (rv != PHPSPY_OK && !opt_continue_on_error);
 }
 #endif

@@ -92,22 +92,30 @@ All with no changes to your application and minimal overhead.
       -m, --memory-usage                 Capture peak and current memory usage
                                            with each trace (requires target PHP
                                            process to have debug symbols)
-      -o, --output=<path>                Write phpspy output to `path`
+      -o, --output=<path>                Write phpspy output to `path`. If a
+                                           `%d` is present, replace it with a
+                                           thread id. Useful in `-P` mode.
                                            (default: -; -=stdout)
-      -O, --child-stdout=<path>          Write child stdout to `path`
-                                           (default: phpspy.%d.out)
+      -O, --child-stdout=<path>          Write child stdout to `path`.
+                                           Replace `%d` with child pid.
+                                           (default: phpspy.%d.out; -=stdout)
       -E, --child-stderr=<path>          Write child stderr to `path`
-                                           (default: phpspy.%d.err)
+                                           Replace `%d` with child pid.
+                                           (default: phpspy.%d.err; -=stderr)
           --addr-executor-globals=<hex>  Set address of executor_globals in hex
                                            (default: 0; 0=find dynamically)
           --addr-sapi-globals=<hex>      Set address of sapi_globals in hex
                                            (default: 0; 0=find dynamically)
       -1, --single-line                  Output in single-line mode
-      -b, --buffer-size=<size>           Set output buffer size to `size`.
-                                           Note: In `-P` mode, setting this
-                                           above PIPE_BUF (4096) may lead to
-                                           interlaced writes across threads
-                                           unless `-J m` is specified.
+      -b, --buffer-size=<size>           Set max bytes per write to `size`.
+                                           Traces larger than this are split
+                                           into chunks, each ending with a
+                                           `# trace_id = <id>.<chunk>` record.
+                                           In `-P` mode, if writing to stdout,
+                                           setting this above `PIPE_BUF` (4096)
+                                           may lead to interleaved writes,
+                                           unless `--event-handler-opts m` is
+                                           specified.
                                            (default: 4096)
       -f, --filter=<regex>               Filter output by POSIX regex
                                            (default: none)
@@ -150,6 +158,23 @@ All with no changes to your application and minimal overhead.
                                            e.g., server.REQUEST_TIME
       -t, --top                          Show dynamic top-like output
 
+### Output format
+
+Each trace is a sequence of records delimited by newlines (or tabs in `-1`
+mode), followed by a newline. Frame records look like
+`<depth> <func> <file>:<line>`. Metadata records start with a hash (`#`).
+
+If a trace exceeds `-b` bytes, it is split into multiple chunks at record
+boundaries. Each chunk ends with a `# trace_id = <id>.<chunk><sntl>` metadata
+record where `<id>` is a process-wide counter, `<chunk>` is a 0-based index, and
+`<sntl>` is either an exclamation point (`!`) for the last chunk, or a tilde
+(`~`) for intermediate chunks.
+
+If a single record is too large to fit in a chunk, or if a whole trace exceeds
+4 megabytes, the trace is truncated. That record and every record after it are
+dropped, and the trace ends with a final chunk containing only a
+`# truncated = 1` metadata record.
+
 ### Example (variable peek)
 
     $ sudo ./phpspy -e 'i@/var/www/test/lib/test.php:12' -p $(pgrep -n httpd) | grep varpeek
@@ -167,7 +192,7 @@ All with no changes to your application and minimal overhead.
     2 run_test /home/adam/php-src/run-tests.php:1937
     3 run_all_tests /home/adam/php-src/run-tests.php:1215
     4 <main> /home/adam/php-src/run-tests.php:986
-    # - - - - -
+
     ...
     ^C
     main_pgrep finished gracefully
@@ -190,12 +215,12 @@ All with no changes to your application and minimal overhead.
     12 Security_Rule_Engine::evaluateActionRules /foo/bar/lib/Security/Rule/Engine.php:116
     13 <main> /foo/bar/lib/bootstrap/api.php:49
     14 <main> /foo/bar/htdocs/v3/public.php:5
-    # - - - - -
+
     ...
 
 ### Example (cli child)
 
-    $ ./phpspy -- php -r 'usleep(100000);'
+    $ ./phpspy -- php -r 'usleep(1000000);'
     0 usleep <internal>:-1
     1 <main> <internal>:-1
 
@@ -213,8 +238,8 @@ All with no changes to your application and minimal overhead.
 
     0 usleep <internal>:-1
     1 <main> <internal>:-1
-
-    process_vm_readv: No such process
+    ...
+    main_pid: pid 2830271 exited
 
 ### Example (cli attach)
 
@@ -234,15 +259,16 @@ All with no changes to your application and minimal overhead.
 
 ### Known bugs
 
-* phpspy may not work with a chrooted mod_php process whose binary lives inside overlayfs. (See [#109][8].)
-* Tracing on aarch64 (arm64) will fail except for on PHP 8.4.
+* phpspy may not work with a chrooted mod_php process whose binary lives inside
+  overlayfs. (See [#109][8].)
+* Tracing on aarch64 (arm64) will fail for PHP 8.2 and below.
 
 ### See also
 
 * [rbspy][0] for Ruby, the original inspiration for phpspy
 * [py-spy][1] for Python
 * [Xdebug profiler][2], instrumented profiler
-* [php-profiler][3], similar to phpspy but pure PHP
+* [reli-prof][3], similar to phpspy but pure PHP
 * [sample_prof][4]
 * [php-trace][5]
 * [Blackfire][6], commercial
@@ -256,7 +282,7 @@ All with no changes to your application and minimal overhead.
 [0]: https://github.com/rbspy/rbspy
 [1]: https://github.com/benfred/py-spy
 [2]: http://www.xdebug.org/docs/profiler
-[3]: https://github.com/sj-i/php-profiler
+[3]: https://github.com/reliforp/reli-prof
 [4]: https://github.com/nikic/sample_prof
 [5]: https://github.com/krakjoe/trace
 [6]: https://blackfire.io/

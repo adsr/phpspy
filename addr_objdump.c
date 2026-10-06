@@ -1,5 +1,4 @@
 #include "phpspy.h"
-#include <assert.h>
 
 static int get_php_bin_path(pid_t pid, char *path_root, char *path);
 static int get_php_base_addr(pid_t pid, char *path_root, char *path, uint64_t *raddr);
