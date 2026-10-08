@@ -19,7 +19,7 @@ static void read_child_out(int fd);
 static void read_child_err(int fd);
 static void handle_line(char *line, int line_len);
 static void handle_event(struct tb_event *event);
-static void display();
+static void display(void);
 
 static func_entry_t *func_map = NULL;
 static func_entry_t **func_list = NULL;
@@ -283,7 +283,7 @@ static int func_list_compare(const void *a, const void *b) {
     return fb->count_excl > fa->count_excl ? 1 : -1;
 }
 
-static void display() {
+static void display(void) {
     int y, w, h;
     func_entry_t *el;
     size_t i;
