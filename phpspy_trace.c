@@ -124,8 +124,9 @@ static int stack_emit_frame(trace_context *context, zend_execute_data *remote, i
     if (zfunc.type == 2) {
         try(rv, sprint_zstring(context, "filename", zfunc.op_array.filename, frame->loc.file, sizeof(frame->loc.file), &frame->loc.file_len));
         frame->loc.lineno = zfunc.op_array.line_start;
-        if (HASH_CNT(hh, varpeek_map) > 0) {
-            if (copy_proc_mem(target->pid, "opline", (void*)execute_data.opline, &zop, sizeof(zop)) == PHPSPY_OK) {
+        if (copy_proc_mem(target->pid, "opline", (void*)execute_data.opline, &zop, sizeof(zop)) == PHPSPY_OK) {
+            frame->loc.lineno = zop.lineno;
+            if (HASH_CNT(hh, varpeek_map) > 0) {
                 trace_locals(context, &zop, remote, &zfunc.op_array, frame->loc.file, frame->loc.file_len);
             }
         }
