@@ -10,6 +10,8 @@ prefix?=/usr/local
 
 php_cmd?=php -n
 
+test_name?=
+
 sinclude config.mk
 
 has_phpconf := $(shell command -v php-config >/dev/null 2>&1 && echo :)
@@ -39,6 +41,7 @@ test: phpspy $(phpspy_tests)
 	@total=0; \
 	pass=0; \
 	for t in $(phpspy_tests); do \
+		test -n "$(test_name)" && test "$$t" != "$(test_name)" && continue; \
 		tput bold; echo TEST $$t; tput sgr0; \
 		PHPSPY=./phpspy PHP="$(php_cmd)" TEST_SH=$$(dirname $$t)/test.sh ./$$t; ec=$$?; echo; \
 		[ $$ec -eq 0 ] && pass=$$((pass+1)); \
