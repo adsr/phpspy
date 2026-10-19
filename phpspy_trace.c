@@ -340,8 +340,11 @@ static int trace_locals(trace_context *context, zend_op *zop, zend_execute_data 
         HASH_FIND(hh, entry->varmap, var_name, tmp_len, var);
         if (!var) continue;
         num_vars_found += 1;
-        /* See ZEND_CALL_VAR_NUM macro in php-src */
-        try_copy_proc_mem("zval", ((zval*)(remote_execute_data)) + ((int)(5 + i)), &zv, sizeof(zv));
+        /* See ZEND_CALL_VAR_NUM macro in php-src. The frame-slot count is
+           version-dependent (PHP 7.0 differs from every later version); see
+           phpspy_frame_slot, defined per-phpv in phpspy_trace_tpl.c and for
+           USE_ZEND in structs/structs.h. */
+        try_copy_proc_mem("zval", ((zval*)(remote_execute_data)) + ((int)(phpspy_frame_slot + i)), &zv, sizeof(zv));
         try(rv, sprint_zval(context, &zv, context->peek_buf, context->peek_buf_size, &tmp_len));
         context->event.varpeek.entry = entry;
         context->event.varpeek.var = var;
@@ -821,7 +824,7 @@ static int sprint_pdo_bind(trace_context *context, zval *lzval, char *buf, size_
 #define PHPSPY_TRACE_ONCE
 static int should_stop_trace(int rv) {
     return (rv & PHPSPY_ERR_PID_DEAD) != 0
-        || (rv & PHPSPY_ERR_BUF_FULL) != 0
+        || (rv & PHPSPY_ERR_TRUNCATED) != 0
         || (rv != PHPSPY_OK && !opt_continue_on_error);
 }
 #endif

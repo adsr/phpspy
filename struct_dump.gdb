@@ -95,6 +95,13 @@ whatis zval
        fieldof zval u2.next
 printf "\n"
 
+# Cross-check for phpspy_frame_slot (phpspy_trace_tpl.c / structs/structs.h):
+# ZEND_CALL_FRAME_SLOT = ceil(sizeof(zend_execute_data) / sizeof(zval)).
+printf "frame_slot\n"
+printf "  sizeof(zend_execute_data) %lu\n", sizeof(zend_execute_data)
+printf "  sizeof(zval) %lu\n", sizeof(zval)
+printf "\n"
+
 printf "Bucket\n"
 whatis Bucket
        fieldof Bucket val
