@@ -736,7 +736,7 @@ static void varpeek_add(char *varspec) {
     /*   -or-   var@/path/file.php:start-end */
     at_sign = strchr(varspec, '@');
     colon = strrchr(varspec, ':');
-    dash = strrchr(varspec, '-');
+    dash = colon ? strrchr(colon, '-') : NULL;
     if (!at_sign || !colon) {
         log_error("varpeek_add: Malformed varspec: %s\n\n", varspec);
         usage(stderr, 1);
