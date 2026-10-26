@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+
+usage() {
+    local exitcode=0
+    [[ -n $1 ]] && exitcode="$1"
+
+    execname="$(basename "$0")"
+    cat << EOF
+Usage: $execname [OPTIONS]
+
+Generates a flamegraph svg from traces created with phpspy.
+
+Example:
+$execname -t traces
+$execname -t phpspy.traces -f myphpapp
+
+Options:
+  -t    the traces file
+  -f    svg flamegraph output file (will automatically get .svg extension)
+EOF
+    exit "$exitcode"
+}
+
+libfolder="$(dirname "$(realpath "$0")")"
+traces=''
+flamegraph='phpspy-flamegraph'
+
+# process options
+while getopts ":t:f:h" arg; do
+	case "$arg" in
+		t) traces="$OPTARG" ;;
+		f) flamegraph="$OPTARG" ;;
+		h) usage ;;
+        *) usage 1 ;;
+	esac
+done
+
+if [[ -z "$traces" ]]; then
+    echo "E= please select a traces file"
+    echo
+    usage 1
+fi
+
+[[ -z $1 ]] && echo "please give traces" && exit 1
+
+"$libfolder"/stackcollapse-phpspy.pl < "$traces" \
+    | "$libfolder"/vendor/flamegraph.pl > "$flamegraph.svg"
