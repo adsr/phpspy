@@ -129,6 +129,7 @@ All with no changes to your application and minimal overhead.
       -q, --quiet                        Suppress errors and warnings on stderr
           --libname-awk-patt=<patt>      Awk pattern to match name of PHP lib
                                            (default: libphp[78]?)
+          --stats                        Print stats and diagnostics to stderr
       -#, --comment=<any>                Ignored; intended for self-documenting
                                            commands
       -@, --nothing                      Ignored

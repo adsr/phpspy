@@ -55,6 +55,7 @@ do_trace_end:
     if (rv == PHPSPY_OK || opt_continue_on_error) {
         try(rv, context->event_handler(context, PHPSPY_TRACE_EVENT_STACK_END));
     }
+    if (depth < 1) rv |= PHPSPY_ERR_EMPTY;
 
     return rv;
 }

@@ -162,6 +162,7 @@ static void filter_child_args(int argc, char **argv) {
          || strncmp(argv[i], "--single-line", sizeof("--single-line")-1) == 0
          || strncmp(argv[i], "-t",            sizeof("-t")-1)            == 0
          || strncmp(argv[i], "--top",         sizeof("--top")-1)         == 0
+         || strncmp(argv[i], "--stats",       sizeof("--stats")-1)       == 0
         ) {
             argv[i][1] = '@';
             argv[i][2] = '\0';

@@ -48,6 +48,11 @@ static glopeek_entry *glopeek_map = NULL;
 static regex_t filter_re;
 static int in_pgrep_mode = 0;
 static uint64_t trace_count = 0;
+static int opt_stats = 0;
+static trace_stats stats;
+static pthread_mutex_t stats_mutex = PTHREAD_MUTEX_INITIALIZER;
+static uint64_t stats_pid_count = 0;
+static struct timespec stats_start_time;
 
 static void parse_opts(int argc, char **argv);
 static int main_fork(int argc, char **argv);
@@ -64,6 +69,11 @@ static void varpeek_add(char *varspec);
 static void glopeek_add(char *glospec);
 static int copy_proc_mem(pid_t pid, const char *what, void *raddr, void *laddr, size_t size);
 static uint64_t phpspy_zend_inline_hash_func(const char *str, size_t len);
+static uint64_t clock_diff_ns(struct timespec *start, struct timespec *end);
+static void stats_record(trace_stats *stats_pid, int rv, uint64_t ns);
+static void stats_fold_pid(trace_stats *stats_pid);
+static void stats_log_report(void);
+static void stats_log_target(trace_target *target);
 
 #ifdef USE_ZEND
 static int do_trace(trace_context *context);
@@ -87,6 +97,8 @@ int main(int argc, char **argv) {
     int rv;
     parse_opts(argc, argv);
 
+    if (opt_stats) clock_get(&stats_start_time);
+
     if (opt_top_mode != 0) {
         rv = main_top(argc, argv);
     } else if (opt_pid != -1) {
@@ -101,6 +113,7 @@ int main(int argc, char **argv) {
         usage(stderr, 1);
         rv = 1;
     }
+    stats_log_report();
     cleanup();
     return rv;
 }
@@ -186,6 +199,7 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "  -q, --quiet                        Suppress errors and warnings on stderr\n");
     fprintf(fp, "      --libname-awk-patt=<patt>      Awk pattern to match name of PHP lib\n");
     fprintf(fp, "                                       (default: %s)\n", opt_libname_awk_patt);
+    fprintf(fp, "      --stats                        Print stats and diagnostics to stderr\n");
     fprintf(fp, "  -#, --comment=<any>                Ignored; intended for self-documenting\n");
     fprintf(fp, "                                       commands\n");
     fprintf(fp, "  -@, --nothing                      Ignored\n");
@@ -287,6 +301,7 @@ static void parse_opts(int argc, char **argv) {
         { "peek-pdo",              no_argument,       NULL, 'D' },
         { "top",                   no_argument,       NULL, 't' },
         { "libname-awk-patt",      required_argument, NULL, PHPSPY_LONGOPT_LIBNAME_AWK_PATT },
+        { "stats",                 no_argument,       NULL, PHPSPY_LONGOPT_STATS },
         { 0,                       0,                 0,    0   }
     };
     /* Parse options until the first non-option argument is reached. Effectively
@@ -397,6 +412,7 @@ static void parse_opts(int argc, char **argv) {
             case 't': opt_top_mode = 1; break;
             case PHPSPY_LONGOPT_LIBNAME_AWK_PATT: opt_libname_awk_patt = optarg; break;
             case 'D': opt_peek_pdo = 1; break;
+            case PHPSPY_LONGOPT_STATS: opt_stats = 1; break;
         }
     }
 }
@@ -404,10 +420,12 @@ static void parse_opts(int argc, char **argv) {
 int main_pid(pid_t pid) {
     int rv;
     trace_context context;
-    struct timespec start_time, end_time, sleep_time, _stop_time, limit_time;
+    trace_stats stats_pid;
+    struct timespec start_time, end_time, sleep_time, _stop_time, limit_time, stats_end_time;
     struct timespec *stop_time;
 
     memset(&context, 0, sizeof(trace_context));
+    memset(&stats_pid, 0, sizeof(trace_stats));
     context.target.pid = pid;
     context.event_handler = opt_event_handler;
     context.event_handler_opts = opt_event_handler_opts;
@@ -455,6 +473,8 @@ int main_pid(pid_t pid) {
     }
     #endif
 
+    stats_log_target(&context.target);
+
     /* calc stop_time */
     stop_time = NULL;
     if (in_pgrep_mode) {
@@ -476,6 +496,7 @@ int main_pid(pid_t pid) {
         if (opt_pause) rv |= pause_pid(pid);
         rv |= do_trace_ptr(&context);
         if (opt_pause) rv |= unpause_pid(pid);
+        if (opt_stats) clock_get(&stats_end_time);
 
         /* bail if pid died */
         if ((rv & PHPSPY_ERR_PID_DEAD) != 0) {
@@ -484,6 +505,9 @@ int main_pid(pid_t pid) {
             }
             break;
         }
+
+        /* record stats */
+        stats_record(&stats_pid, rv, clock_diff_ns(&start_time, &stats_end_time));
 
         /* maybe apply trace limit. truncated records count. */
         if (opt_trace_limit > 0 && (rv == PHPSPY_OK || rv == PHPSPY_ERR_TRUNCATED)) {
@@ -511,6 +535,7 @@ int main_pid(pid_t pid) {
 
     if (context.stack_ptrs) utarray_free(context.stack_ptrs);
     context.event_handler(&context, PHPSPY_TRACE_EVENT_DEINIT);
+    stats_fold_pid(&stats_pid);
 
     /* in pgrep mode, trigger done condition if we went over the trace limit.
        it is ok for multiple threads to call this. */
@@ -677,6 +702,70 @@ static int find_addresses(trace_target *target) {
     return PHPSPY_OK;
 }
 
+static void stats_log_target(trace_target *target) {
+    if (!opt_stats) return;
+    log_error(
+        "stats_log_target: pid=%d version=%s executor_globals=0x%lx\n",
+        (int)target->pid,
+        opt_phpv,
+        (unsigned long)target->executor_globals_addr
+    );
+}
+
+static void stats_record(trace_stats *stats_pid, int rv, uint64_t ns) {
+    stats_pid->attempted += 1;
+    stats_pid->elapsed_ns += ns;
+    if ((rv & PHPSPY_ERR_SKIPPED) != 0) {
+        stats_pid->filtered += 1;
+    } else if ((rv & ~(PHPSPY_ERR_TRUNCATED | PHPSPY_ERR_EMPTY)) != 0) {
+        stats_pid->errored += 1;
+    } else if ((rv & PHPSPY_ERR_EMPTY) != 0) {
+        stats_pid->empty += 1;
+    } else {
+        stats_pid->written += 1;
+    }
+}
+
+static void stats_fold_pid(trace_stats *stats_pid) {
+    pthread_mutex_lock(&stats_mutex);
+    stats.attempted  += stats_pid->attempted;
+    stats.written    += stats_pid->written;
+    stats.empty      += stats_pid->empty;
+    stats.filtered   += stats_pid->filtered;
+    stats.errored    += stats_pid->errored;
+    stats.elapsed_ns += stats_pid->elapsed_ns;
+    stats_pid_count += 1;
+    pthread_mutex_unlock(&stats_mutex);
+}
+
+static void stats_log_report(void) {
+    struct timespec now;
+    double dur_s, ms_per_sample;
+
+    if (!opt_stats || stats_pid_count <= 0) return;
+
+    clock_get(&now);
+    dur_s = clock_diff_ns(&stats_start_time, &now) / 1e9;
+
+    ms_per_sample = stats.attempted > 0
+        ? (stats.elapsed_ns / 1e6) / stats.attempted
+        : 0.0;
+
+    log_error(
+        "stats_log_report: %lu samples in %.2fs across %lu pid(s): "
+        "%lu written, %lu empty, %lu filtered, %lu errored "
+        "(%.2f ms/sample)\n",
+        (unsigned long)stats.attempted,
+        dur_s,
+        (unsigned long)stats_pid_count,
+        (unsigned long)stats.written,
+        (unsigned long)stats.empty,
+        (unsigned long)stats.filtered,
+        (unsigned long)stats.errored,
+        ms_per_sample
+    );
+}
+
 static void clock_get(struct timespec *ts) {
     if (clock_gettime(CLOCK_MONOTONIC_RAW, ts) == -1) {
         log_perror("clock_gettime");
@@ -704,15 +793,15 @@ static int clock_diff(struct timespec *a, struct timespec *b) {
     return a->tv_sec > b->tv_sec ? 1 : -1;
 }
 
+static uint64_t clock_diff_ns(struct timespec *start, struct timespec *end) {
+    if (clock_diff(end, start) < 0) return 0;
+    return (uint64_t)(end->tv_sec - start->tv_sec) * 1000000000UL
+        + (uint64_t)end->tv_nsec - (uint64_t)start->tv_nsec;
+}
+
 static void calc_sleep_time(struct timespec *end, struct timespec *start, struct timespec *sleep) {
-    long end_ns, start_ns, sleep_ns;
-    if (end->tv_sec == start->tv_sec) {
-        sleep_ns = opt_sleep_ns - (end->tv_nsec - start->tv_nsec);
-    } else {
-        end_ns = (end->tv_sec * 1000000000UL) + (end->tv_nsec * 1UL);
-        start_ns = (start->tv_sec * 1000000000UL) + (start->tv_nsec * 1UL);
-        sleep_ns = opt_sleep_ns - (end_ns - start_ns);
-    }
+    long sleep_ns;
+    sleep_ns = opt_sleep_ns - (long)clock_diff_ns(start, end);
     if (sleep_ns < 0) {
         log_error("calc_sleep_time: Expected sleep_ns>0; decrease sample rate\n");
         sleep_ns = 0;
