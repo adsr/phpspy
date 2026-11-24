@@ -64,6 +64,7 @@ enum {
     PHPSPY_ERR_PID_DEAD  = 1 << 1,
     PHPSPY_ERR_TRUNCATED = 1 << 2,
     PHPSPY_ERR_SKIPPED   = 1 << 3,
+    PHPSPY_ERR_EMPTY     = 1 << 4,
 };
 
 enum {
@@ -99,6 +100,7 @@ enum {
     PHPSPY_LONGOPT_LIBNAME_AWK_PATT,
     PHPSPY_LONGOPT_EVENT_HANDLER,
     PHPSPY_LONGOPT_EVENT_HANDLER_OPTS,
+    PHPSPY_LONGOPT_STATS,
 };
 
 typedef struct varpeek_var_s {
@@ -167,6 +169,15 @@ typedef struct trace_target_s {
     uint64_t alloc_globals_addr;
     uint64_t basic_functions_module_addr;
 } trace_target;
+
+typedef struct trace_stats_s {
+    uint64_t attempted;
+    uint64_t written;
+    uint64_t empty;
+    uint64_t filtered;
+    uint64_t errored;
+    uint64_t elapsed_ns;
+} trace_stats;
 
 typedef struct trace_context_s {
     trace_target target;
