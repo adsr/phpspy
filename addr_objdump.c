@@ -1,9 +1,9 @@
 #include "phpspy.h"
 
-static int get_php_bin_path(pid_t pid, char *path_root, char *path);
-static int get_php_base_addr(pid_t pid, char *path_root, char *path, uint64_t *raddr);
-static int get_symbol_offset(char *path_root, const char *symbol, uint64_t *raddr);
-static int popen_read_line(char *buf, size_t buf_size, char *cmd_fmt, ...);
+static int get_php_bin_path(pid_t pid, char *path_root, char *path, int quiet);
+static int get_php_base_addr(pid_t pid, char *path_root, char *path, uint64_t *raddr, int quiet);
+static int get_symbol_offset(char *path_root, const char *symbol, uint64_t *raddr, int quiet);
+static int popen_read_line(char *buf, size_t buf_size, int quiet, char *cmd_fmt, ...);
 
 int shell_escape(const char *arg, char *buf, size_t buf_size, const char *what) {
     int rv = 0;
@@ -50,25 +50,25 @@ shell_escape_end:
     return rv;
 }
 
-int get_symbol_addr(addr_memo *memo, pid_t pid, const char *symbol, uint64_t *raddr) {
+int get_symbol_addr(addr_memo *memo, pid_t pid, const char *symbol, uint64_t *raddr, int quiet) {
     char *php_bin_path, *php_bin_path_root;
     uint64_t *php_base_addr;
     uint64_t addr_offset;
     php_bin_path = memo->php_bin_path;
     php_bin_path_root = memo->php_bin_path_root;
     php_base_addr = &memo->php_base_addr;
-    if (*php_bin_path == '\0' && get_php_bin_path(pid, php_bin_path_root, php_bin_path) != 0) {
+    if (*php_bin_path == '\0' && get_php_bin_path(pid, php_bin_path_root, php_bin_path, quiet) != 0) {
         return 1;
-    } else if (*php_base_addr == 0 && get_php_base_addr(pid, php_bin_path_root, php_bin_path, php_base_addr) != 0) {
+    } else if (*php_base_addr == 0 && get_php_base_addr(pid, php_bin_path_root, php_bin_path, php_base_addr, quiet) != 0) {
         return 1;
-    } else if (get_symbol_offset(php_bin_path_root, symbol, &addr_offset) != 0) {
+    } else if (get_symbol_offset(php_bin_path_root, symbol, &addr_offset, quiet) != 0) {
         return 1;
     }
     *raddr = *php_base_addr + addr_offset;
     return 0;
 }
 
-static int get_php_bin_path(pid_t pid, char *path_root, char *path) {
+static int get_php_bin_path(pid_t pid, char *path_root, char *path, int quiet) {
     char buf[PHPSPY_STR_SIZE];
     char libname[PHPSPY_STR_SIZE];
     if (shell_escape(opt_libname_awk_patt, libname, sizeof(libname), "opt_libname_awk_patt")) {
@@ -76,8 +76,8 @@ static int get_php_bin_path(pid_t pid, char *path_root, char *path) {
     }
     char *cmd_fmt = "awk -ve=1 -vp=%s '$0~p{print $NF; e=0; exit} END{exit e}' /proc/%d/maps"
         " || readlink /proc/%d/exe";
-    if (popen_read_line(buf, sizeof(buf), cmd_fmt, libname, (int)pid, (int)pid) != 0) {
-        log_error("get_php_bin_path: Failed\n");
+    if (popen_read_line(buf, sizeof(buf), quiet, cmd_fmt, libname, (int)pid, (int)pid) != 0) {
+        if (!quiet) log_error("get_php_bin_path: Failed\n");
         return 1;
     }
     int n = snprintf(path_root, PHPSPY_STR_SIZE, "/proc/%d/root/%s", (int)pid, buf);
@@ -92,7 +92,7 @@ static int get_php_bin_path(pid_t pid, char *path_root, char *path) {
     return 0;
 }
 
-static int get_php_base_addr(pid_t pid, char *path_root, char *path, uint64_t *raddr) {
+static int get_php_base_addr(pid_t pid, char *path_root, char *path, uint64_t *raddr, int quiet) {
     /* Note: This may be incomplete. It seems to work on x86_64 and aarch64.
      *       It may not work if the PHP binary has multiple executable segments
      *       for some reason. */
@@ -106,8 +106,8 @@ static int get_php_base_addr(pid_t pid, char *path_root, char *path, uint64_t *r
     if (shell_escape(path, arg_buf, sizeof(arg_buf), "path")) {
         return 1;
     }
-    if (popen_read_line(buf, sizeof(buf), cmd_fmt, arg_buf, (int)pid) != 0) {
-        log_error("get_php_base_addr: Failed to get start_addr\n");
+    if (popen_read_line(buf, sizeof(buf), quiet, cmd_fmt, arg_buf, (int)pid) != 0) {
+        if (!quiet) log_error("get_php_base_addr: Failed to get start_addr\n");
         return 1;
     }
     start_addr = strtoull(buf, NULL, 16);
@@ -117,8 +117,8 @@ static int get_php_base_addr(pid_t pid, char *path_root, char *path, uint64_t *r
     if (shell_escape(path_root, arg_buf, sizeof(arg_buf), "path_root")) {
         return 1;
     }
-    if (popen_read_line(buf, sizeof(buf), cmd_fmt, arg_buf) != 0) {
-        log_error("get_php_base_addr: Failed to get virt_addr\n");
+    if (popen_read_line(buf, sizeof(buf), quiet, cmd_fmt, arg_buf) != 0) {
+        if (!quiet) log_error("get_php_base_addr: Failed to get virt_addr\n");
         return 1;
     }
     virt_addr = strtoull(buf, NULL, 16);
@@ -127,22 +127,22 @@ static int get_php_base_addr(pid_t pid, char *path_root, char *path, uint64_t *r
     return 0;
 }
 
-static int get_symbol_offset(char *path_root, const char *symbol, uint64_t *raddr) {
+static int get_symbol_offset(char *path_root, const char *symbol, uint64_t *raddr, int quiet) {
     char buf[PHPSPY_STR_SIZE];
     char arg_buf[PHPSPY_STR_SIZE];
     char *cmd_fmt = "objdump -Tt %s | awk '/ %s$/{print $1; exit}'";
     if (shell_escape(path_root, arg_buf, sizeof(arg_buf), "path_root")) {
         return 1;
     }
-    if (popen_read_line(buf, sizeof(buf), cmd_fmt, arg_buf, symbol) != 0) {
-        log_error("get_symbol_offset: Failed\n");
+    if (popen_read_line(buf, sizeof(buf), quiet, cmd_fmt, arg_buf, symbol) != 0) {
+        if (!quiet) log_error("get_symbol_offset: Failed\n");
         return 1;
     }
     *raddr = strtoull(buf, NULL, 16);
     return 0;
 }
 
-static int popen_read_line(char *buf, size_t buf_size, char *cmd_fmt, ...) {
+static int popen_read_line(char *buf, size_t buf_size, int quiet, char *cmd_fmt, ...) {
     FILE *fp;
     char cmd[PHPSPY_STR_SIZE];
     char cmd_quiet[PHPSPY_STR_SIZE];
@@ -157,7 +157,7 @@ static int popen_read_line(char *buf, size_t buf_size, char *cmd_fmt, ...) {
         return PHPSPY_ERR;
     }
     cmd_actual = cmd;
-    if (opt_quiet) {
+    if (quiet || opt_quiet) {
         rv = snprintf(cmd_quiet, sizeof(cmd_quiet), "{ %s; } 2>/dev/null", cmd);
         if (rv < 0 || rv >= (int)sizeof(cmd_quiet)) {
             log_error("popen_read_line: snprintf overflow\n");
@@ -170,7 +170,7 @@ static int popen_read_line(char *buf, size_t buf_size, char *cmd_fmt, ...) {
         return 1;
     }
     if (fgets(buf, buf_size-1, fp) == NULL) {
-        log_error("popen_read_line: No stdout; cmd=%s\n", cmd);
+        if (!quiet) log_error("popen_read_line: No stdout; cmd=%s\n", cmd);
         pclose(fp);
         return 1;
     }
@@ -180,7 +180,7 @@ static int popen_read_line(char *buf, size_t buf_size, char *cmd_fmt, ...) {
         --buf_len;
     }
     if (buf_len < 1) {
-        log_error("popen_read_line: Expected strlen(buf)>0; cmd=%s\n", cmd);
+        if (!quiet) log_error("popen_read_line: Expected strlen(buf)>0; cmd=%s\n", cmd);
         return 1;
     }
     buf[buf_len] = '\0';
