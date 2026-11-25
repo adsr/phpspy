@@ -154,6 +154,7 @@ static void filter_child_args(int argc, char **argv) {
     for (i = 0; i < argc; i++) {
         if (strncmp(argv[i], "-o",            sizeof("-o")-1)            == 0
          || strncmp(argv[i], "--output",      sizeof("--output")-1)      == 0
+         || strncmp(argv[i], "--stats-warn-no-trace-s", sizeof("--stats-warn-no-trace-s")-1) == 0
         ) {
             argv[i][1] = '#';
             argv[i][2] = '\0';

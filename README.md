@@ -130,6 +130,9 @@ All with no changes to your application and minimal overhead.
           --libname-awk-patt=<patt>      Awk pattern to match name of PHP lib
                                            (default: libphp[78]?)
           --stats                        Print stats and diagnostics to stderr
+          --stats-warn-no-trace-s=<sec>  With `--stats`, warn if no traces have
+                                           been captured after `sec` seconds
+                                           (default: 0; 0=never warn)
       -#, --comment=<any>                Ignored; intended for self-documenting
                                            commands
       -@, --nothing                      Ignored
