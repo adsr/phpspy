@@ -684,21 +684,19 @@ static int find_addresses(trace_target *target) {
     if (opt_executor_globals_addr != 0) {
         target->executor_globals_addr = opt_executor_globals_addr;
     } else {
-        try(rv, get_symbol_addr(&memo, target->pid, "executor_globals", &target->executor_globals_addr));
+        try(rv, get_symbol_addr(&memo, target->pid, "executor_globals", &target->executor_globals_addr, 0));
     }
     if (opt_sapi_globals_addr != 0) {
         target->sapi_globals_addr = opt_sapi_globals_addr;
     } else if (opt_capture_req) {
-        try(rv, get_symbol_addr(&memo, target->pid, "sapi_globals", &target->sapi_globals_addr));
+        try(rv, get_symbol_addr(&memo, target->pid, "sapi_globals", &target->sapi_globals_addr, 0));
     }
     if (opt_capture_mem) {
-        try(rv, get_symbol_addr(&memo, target->pid, "alloc_globals", &target->alloc_globals_addr));
+        try(rv, get_symbol_addr(&memo, target->pid, "alloc_globals", &target->alloc_globals_addr, 0));
     }
-    ++opt_quiet;
-    if (get_symbol_addr(&memo, target->pid, "basic_functions_module", &target->basic_functions_module_addr) != 0) {
+    if (get_symbol_addr(&memo, target->pid, "basic_functions_module", &target->basic_functions_module_addr, 1) != 0) {
         target->basic_functions_module_addr = 0;
     }
-    --opt_quiet;
     return PHPSPY_OK;
 }
 
