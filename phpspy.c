@@ -49,10 +49,13 @@ static regex_t filter_re;
 static int in_pgrep_mode = 0;
 static uint64_t trace_count = 0;
 static int opt_stats = 0;
+static long opt_stats_warn_no_trace_s = 0;
 static trace_stats stats;
 static pthread_mutex_t stats_mutex = PTHREAD_MUTEX_INITIALIZER;
 static uint64_t stats_pid_count = 0;
 static struct timespec stats_start_time;
+static int stats_no_traces_warned = 0;
+static uint64_t stats_no_traces_suppressed = 0;
 
 static void parse_opts(int argc, char **argv);
 static int main_fork(int argc, char **argv);
@@ -74,6 +77,7 @@ static void stats_record(trace_stats *stats_pid, int rv, uint64_t ns);
 static void stats_fold_pid(trace_stats *stats_pid);
 static void stats_log_report(void);
 static void stats_log_target(trace_target *target);
+static void stats_log_no_traces(pid_t pid, trace_stats *stats_pid, struct timespec *now, struct timespec **deadline);
 
 #ifdef USE_ZEND
 static int do_trace(trace_context *context);
@@ -200,6 +204,9 @@ void usage(FILE *fp, int exit_code) {
     fprintf(fp, "      --libname-awk-patt=<patt>      Awk pattern to match name of PHP lib\n");
     fprintf(fp, "                                       (default: %s)\n", opt_libname_awk_patt);
     fprintf(fp, "      --stats                        Print stats and diagnostics to stderr\n");
+    fprintf(fp, "      --stats-warn-no-trace-s=<sec>  With `--stats`, warn if no traces have\n");
+    fprintf(fp, "                                       been captured after `sec` seconds\n");
+    fprintf(fp, "                                       (default: %ld; 0=never warn)\n", opt_stats_warn_no_trace_s);
     fprintf(fp, "  -#, --comment=<any>                Ignored; intended for self-documenting\n");
     fprintf(fp, "                                       commands\n");
     fprintf(fp, "  -@, --nothing                      Ignored\n");
@@ -302,6 +309,7 @@ static void parse_opts(int argc, char **argv) {
         { "top",                   no_argument,       NULL, 't' },
         { "libname-awk-patt",      required_argument, NULL, PHPSPY_LONGOPT_LIBNAME_AWK_PATT },
         { "stats",                 no_argument,       NULL, PHPSPY_LONGOPT_STATS },
+        { "stats-warn-no-trace-s", required_argument, NULL, PHPSPY_LONGOPT_STATS_WARN_NO_TRACE_S },
         { 0,                       0,                 0,    0   }
     };
     /* Parse options until the first non-option argument is reached. Effectively
@@ -413,6 +421,7 @@ static void parse_opts(int argc, char **argv) {
             case PHPSPY_LONGOPT_LIBNAME_AWK_PATT: opt_libname_awk_patt = optarg; break;
             case 'D': opt_peek_pdo = 1; break;
             case PHPSPY_LONGOPT_STATS: opt_stats = 1; break;
+            case PHPSPY_LONGOPT_STATS_WARN_NO_TRACE_S: opt_stats_warn_no_trace_s = strtol_with_min_or_exit("--stats-warn-no-trace-s", optarg, 0); break;
         }
     }
 }
@@ -421,8 +430,8 @@ int main_pid(pid_t pid) {
     int rv;
     trace_context context;
     trace_stats stats_pid;
-    struct timespec start_time, end_time, sleep_time, _stop_time, limit_time, stats_end_time;
-    struct timespec *stop_time;
+    struct timespec start_time, end_time, sleep_time, _stop_time, limit_time, stats_end_time, _warn_time;
+    struct timespec *stop_time, *warn_time;
 
     memset(&context, 0, sizeof(trace_context));
     memset(&stats_pid, 0, sizeof(trace_stats));
@@ -487,6 +496,16 @@ int main_pid(pid_t pid) {
         clock_add(stop_time, &limit_time, stop_time);
     }
 
+    /* calc warn_time */
+    warn_time = NULL;
+    if (opt_stats && opt_stats_warn_no_trace_s > 0) {
+        warn_time = &_warn_time;
+        limit_time.tv_sec = opt_stats_warn_no_trace_s;
+        limit_time.tv_nsec = 0;
+        clock_get(warn_time);
+        clock_add(warn_time, &limit_time, warn_time);
+    }
+
     while (!done) {
         /* record start_time */
         clock_get(&start_time);
@@ -506,8 +525,11 @@ int main_pid(pid_t pid) {
             break;
         }
 
-        /* record stats */
-        stats_record(&stats_pid, rv, clock_diff_ns(&start_time, &stats_end_time));
+        /* record stats; maybe warn once that no traces have been captured */
+        if (opt_stats) {
+            stats_record(&stats_pid, rv, clock_diff_ns(&start_time, &stats_end_time));
+            stats_log_no_traces(pid, &stats_pid, &start_time, &warn_time);
+        }
 
         /* maybe apply trace limit. truncated records count. */
         if (opt_trace_limit > 0 && (rv == PHPSPY_OK || rv == PHPSPY_ERR_TRUNCATED)) {
@@ -535,7 +557,7 @@ int main_pid(pid_t pid) {
 
     if (context.stack_ptrs) utarray_free(context.stack_ptrs);
     context.event_handler(&context, PHPSPY_TRACE_EVENT_DEINIT);
-    stats_fold_pid(&stats_pid);
+    if (opt_stats) stats_fold_pid(&stats_pid);
 
     /* in pgrep mode, trigger done condition if we went over the trace limit.
        it is ok for multiple threads to call this. */
@@ -710,6 +732,22 @@ static void stats_log_target(trace_target *target) {
     );
 }
 
+static void stats_log_no_traces(pid_t pid, trace_stats *stats_pid, struct timespec *now, struct timespec **deadline) {
+    int expect = 0;
+    if (!*deadline || clock_diff(now, *deadline) < 1) return;
+    *deadline = NULL;
+    if (stats_pid->written + stats_pid->filtered > 0) return;
+    if (!__atomic_compare_exchange_n(&stats_no_traces_warned, &expect, 1, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+        __atomic_add_fetch(&stats_no_traces_suppressed, 1, __ATOMIC_RELAXED);
+        return;
+    }
+    log_error(
+        "stats_log_no_traces: pid=%d captured 0 traces in %lds (is it a PHP process)?\n",
+        (int)pid,
+        opt_stats_warn_no_trace_s
+    );
+}
+
 static void stats_record(trace_stats *stats_pid, int rv, uint64_t ns) {
     stats_pid->attempted += 1;
     stats_pid->elapsed_ns += ns;
@@ -762,6 +800,13 @@ static void stats_log_report(void) {
         (unsigned long)stats.errored,
         ms_per_sample
     );
+
+    if (stats_no_traces_suppressed > 0) {
+        log_error(
+            "stats_log_report: %lu more pid(s) captured 0 traces\n",
+            (unsigned long)stats_no_traces_suppressed
+        );
+    }
 }
 
 static void clock_get(struct timespec *ts) {
