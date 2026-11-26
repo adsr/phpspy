@@ -261,6 +261,21 @@ dropped, and the trace ends with a final chunk containing only a
     1 <main> <internal>:-1
     ...
 
+### Example (Buggregator Trap)
+
+[Buggregator Trap][9] is a local debug server with a web UI. It receives
+phpspy traces over HTTP, aggregates the samples into a profile, and shows it
+as a call graph, a flame chart and a list of top functions.
+
+    $ wget https://github.com/buggregator/trap/releases/latest/download/trap.phar
+    $ php trap.phar --ui                  # web UI at http://127.0.0.1:8000
+    ...
+    $ sudo ./phpspy --limit=1000 -p $(pgrep -n httpd) -o traces
+    $ curl --data-binary @traces 'http://127.0.0.1:8000/api/profiler/phpspy?period=0.0101'
+
+`period` is the sampling period in seconds (`1/rate`, 0.0101 at the default
+99 Hz); with it, Trap shows wall time next to the sample counts.
+
 ### Known bugs
 
 * phpspy may not work with a chrooted mod_php process whose binary lives inside
@@ -292,4 +307,5 @@ dropped, and the trace ends with a final chunk containing only a
 [6]: https://blackfire.io/
 [7]: https://tideways.io/
 [8]: https://github.com/adsr/phpspy/issues/109
+[9]: https://github.com/buggregator/trap
 [^9]: Currently the aarch64 structs are only valid for PHP 8.3+.
