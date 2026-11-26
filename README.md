@@ -267,8 +267,10 @@ dropped, and the trace ends with a final chunk containing only a
 phpspy traces over HTTP, aggregates the samples into a profile, and shows it
 as a call graph, a flame chart and a list of top functions.
 
-    $ wget https://github.com/buggregator/trap/releases/latest/download/trap.phar
-    $ php trap.phar --ui                  # web UI at http://127.0.0.1:8000
+Get Trap as a standalone binary (no PHP needed), a phar or a Composer package
+(see [installation][10]), run it with `--ui`, and send it a trace:
+
+    $ trap --ui                           # web UI at http://127.0.0.1:8000
     ...
     $ sudo ./phpspy --limit=1000 -p $(pgrep -n httpd) -o traces
     $ curl --data-binary @traces 'http://127.0.0.1:8000/api/profiler/phpspy?period=0.0101'
@@ -308,4 +310,5 @@ as a call graph, a flame chart and a list of top functions.
 [7]: https://tideways.io/
 [8]: https://github.com/adsr/phpspy/issues/109
 [9]: https://github.com/buggregator/trap
+[10]: https://github.com/buggregator/trap/blob/master/docs/installation.md
 [^9]: Currently the aarch64 structs are only valid for PHP 8.3+.
